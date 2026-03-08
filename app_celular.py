@@ -37,8 +37,8 @@ try:
         for r in registros:
             id_comp, data, hora, cliente, atividade, local = r
 
-            # Converte a data do banco para comparar com hoje
-            data_comp = pd.to_datetime(data).date()
+            # CORREÇÃO AQUI: dayfirst=True avisa que o padrão é BR (Dia/Mês)
+            data_comp = pd.to_datetime(data, dayfirst=True).date()
 
             if data_comp < hoje:
                 qtd_atrasados += 1
@@ -54,7 +54,7 @@ try:
                 'hora': hora,
                 'atividade': atividade,
                 'local': local,
-                'data_obj': data_comp # Guardamos a data convertida para usar depois
+                'data_obj': data_comp 
             })
 
         # --- MOSTRAR AVISOS NO TOPO ---
@@ -73,7 +73,8 @@ try:
                 st.markdown(f"### 👤 {cliente}")
 
                 for comp in lista_compromissos:
-                    data_br = pd.to_datetime(comp['data']).strftime('%d/%m/%Y')
+                    # CORREÇÃO AQUI TAMBÉM: dayfirst=True
+                    data_br = pd.to_datetime(comp['data'], dayfirst=True).strftime('%d/%m/%Y')
 
                     # Define a etiqueta de alarme
                     alerta = ""
