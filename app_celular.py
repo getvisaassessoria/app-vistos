@@ -3,10 +3,8 @@ import psycopg2
 import pandas as pd
 from datetime import datetime, timedelta
 
-# Configuração para ficar bonito no celular
 st.set_page_config(page_title="Agenda Vistos", page_icon="📱", layout="centered")
 
-# A MESMA CHAVE DO MAC
 DATABASE_URL = "postgresql://postgres.hlxobwdezofdpitsugxp:Getvisa061066@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 
 def conectar():
@@ -17,7 +15,6 @@ st.title("📱 Agenda na Mão")
 try:
     conn = conectar()
     cursor = conn.cursor()
-    # Busca apenas os pendentes, ordenados por data
     cursor.execute("SELECT id, data, hora, cliente, atividade, local FROM compromissos WHERE concluido = 0 ORDER BY data, hora")
     registros = cursor.fetchall()
     conn.close()
@@ -25,19 +22,17 @@ try:
     if not registros:
         st.success("🎉 Tudo limpo! Nenhum compromisso pendente.")
     else:
-        # --- LÓGICA DE ALARMES / DATAS ---
         hoje = datetime.now().date()
         amanha = hoje + timedelta(days=1)
 
         qtd_atrasados = 0
         qtd_hoje = 0
 
-        # 1. AGRUPAR OS COMPROMISSOS E CONTAR ALARMES
         clientes_agrupados = {}
         for r in registros:
             id_comp, data, hora, cliente, atividade, local = r
 
-            # CORREÇÃO AQUI: dayfirst=True avisa que o padrão é BR (Dia/Mês)
+            # A MÁGICA ESTÁ AQUI: dayfirst=True força a leitura BR
             data_comp = pd.to_datetime(data, dayfirst=True).date()
 
             if data_comp < hoje:
@@ -57,7 +52,6 @@ try:
                 'data_obj': data_comp 
             })
 
-        # --- MOSTRAR AVISOS NO TOPO ---
         if qtd_atrasados > 0:
             st.error(f"⚠️ ATENÇÃO: Você tem {qtd_atrasados} compromisso(s) ATRASADO(S)!")
         if qtd_hoje > 0:
@@ -66,17 +60,14 @@ try:
         st.write("---")
         st.write("Seus compromissos pendentes:")
 
-        # 2. MOSTRAR NA TELA EM FORMATO DE "CARTÕES"
         for cliente, lista_compromissos in clientes_agrupados.items():
-
             with st.container(border=True):
                 st.markdown(f"### 👤 {cliente}")
 
                 for comp in lista_compromissos:
-                    # CORREÇÃO AQUI TAMBÉM: dayfirst=True
+                    # A MÁGICA ESTÁ AQUI TAMBÉM: dayfirst=True
                     data_br = pd.to_datetime(comp['data'], dayfirst=True).strftime('%d/%m/%Y')
 
-                    # Define a etiqueta de alarme
                     alerta = ""
                     if comp['data_obj'] < hoje:
                         alerta = "🔴 **ATRASADO**"
@@ -87,7 +78,6 @@ try:
 
                     st.markdown(f"**{comp['atividade']}** em {comp['local']}")
 
-                    # Mostra a data com ou sem o alerta
                     if alerta:
                         st.markdown(f"📅 {data_br} às ⏰ {comp['hora']} {alerta}")
                     else:
@@ -100,7 +90,6 @@ try:
                         conn.commit()
                         conn.close()
                         st.rerun() 
-
                     st.write("") 
 
 except Exception as e:
