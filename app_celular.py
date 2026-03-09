@@ -10,7 +10,8 @@ DATABASE_URL = "postgresql://postgres.hlxobwdezofdpitsugxp:Getvisa061066@aws-1-s
 def conectar():
     return psycopg2.connect(DATABASE_URL)
 
-st.title("📱 Agenda na Mão")
+# 👇 SE O STREAMLIT ATUALIZAR, ESSE TÍTULO NOVO VAI APARECER
+st.title("📱 Agenda na Mão (V2)") 
 
 try:
     conn = conectar()
@@ -32,7 +33,7 @@ try:
         for r in registros:
             id_comp, data, hora, cliente, atividade, local = r
 
-            # A MÁGICA ESTÁ AQUI: dayfirst=True força a leitura BR
+            # FORÇANDO O PADRÃO BRASILEIRO
             data_comp = pd.to_datetime(data, dayfirst=True).date()
 
             if data_comp < hoje:
@@ -65,7 +66,7 @@ try:
                 st.markdown(f"### 👤 {cliente}")
 
                 for comp in lista_compromissos:
-                    # A MÁGICA ESTÁ AQUI TAMBÉM: dayfirst=True
+                    # FORÇANDO O PADRÃO BRASILEIRO NA TELA
                     data_br = pd.to_datetime(comp['data'], dayfirst=True).strftime('%d/%m/%Y')
 
                     alerta = ""
