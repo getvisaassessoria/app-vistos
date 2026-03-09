@@ -10,7 +10,7 @@ def conectar():
     return psycopg2.connect(DATABASE_URL)
 
 # TÍTULO V3 PARA CONFIRMARMOS A ATUALIZAÇÃO
-st.title("📱 Agenda na Mão (V3)") 
+st.title("📱 Agenda na Mão") 
 
 # FUNÇÃO BLINDADA PARA LER A DATA (SEM PANDAS)
 def converter_para_data_obj(data_str):
