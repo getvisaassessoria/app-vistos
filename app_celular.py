@@ -1,6 +1,5 @@
 import streamlit as st
 import psycopg2
-import pandas as pd
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Agenda Vistos", page_icon="📱", layout="centered")
@@ -10,8 +9,32 @@ DATABASE_URL = "postgresql://postgres.hlxobwdezofdpitsugxp:Getvisa061066@aws-1-s
 def conectar():
     return psycopg2.connect(DATABASE_URL)
 
-# 👇 SE O STREAMLIT ATUALIZAR, ESSE TÍTULO NOVO VAI APARECER
-st.title("📱 Agenda na Mão (V2)") 
+# TÍTULO V3 PARA CONFIRMARMOS A ATUALIZAÇÃO
+st.title("📱 Agenda na Mão (V3)") 
+
+# FUNÇÃO BLINDADA PARA LER A DATA (SEM PANDAS)
+def converter_para_data_obj(data_str):
+    if not isinstance(data_str, str):
+        data_str = str(data_str)
+    try:
+        if "-" in data_str:
+            return datetime.strptime(data_str, "%Y-%m-%d").date()
+        elif "/" in data_str:
+            return datetime.strptime(data_str, "%d/%m/%Y").date()
+    except:
+        pass
+    return datetime.now().date()
+
+# FUNÇÃO BLINDADA PARA MOSTRAR NA TELA
+def formatar_para_tela(data_str):
+    if not isinstance(data_str, str):
+        data_str = str(data_str)
+    if "-" in data_str:
+        try:
+            return datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except:
+            return data_str
+    return data_str
 
 try:
     conn = conectar()
@@ -33,8 +56,7 @@ try:
         for r in registros:
             id_comp, data, hora, cliente, atividade, local = r
 
-            # FORÇANDO O PADRÃO BRASILEIRO
-            data_comp = pd.to_datetime(data, dayfirst=True).date()
+            data_comp = converter_para_data_obj(data)
 
             if data_comp < hoje:
                 qtd_atrasados += 1
@@ -66,8 +88,7 @@ try:
                 st.markdown(f"### 👤 {cliente}")
 
                 for comp in lista_compromissos:
-                    # FORÇANDO O PADRÃO BRASILEIRO NA TELA
-                    data_br = pd.to_datetime(comp['data'], dayfirst=True).strftime('%d/%m/%Y')
+                    data_br = formatar_para_tela(comp['data'])
 
                     alerta = ""
                     if comp['data_obj'] < hoje:
