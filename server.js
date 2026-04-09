@@ -52,7 +52,7 @@ app.post('/api/submit-eta', async (req, res) => {
         // Envio via API do Resend (Sem erros de timeout!)
         await resend.emails.send({
             from: 'GetVisa <onboarding@resend.dev>',
-            to: ['contato@getvisa.com.br', data.email], // Envia para você e para o cliente
+            to: ['getvisa.assessoria@gmail.com', data.email], // Envia para você e para o cliente
             subject: `🍁 Novo Lead eTA: ${data.firstName}`,
             html: `<h3>Nova solicitação recebida!</h3>
                    <p><b>Cliente:</b> ${data.firstName} ${data.lastName}</p>
