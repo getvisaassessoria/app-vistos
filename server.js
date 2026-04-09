@@ -10,7 +10,11 @@ const app = express();
 const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL'); 
 const PORT = process.env.PORT || 10000;
 
-app.use(cors());
+app.use(cors({
+    origin: ['https://getvisa.com.br', 'https://www.getvisa.com.br'],
+    methods: ['POST', 'GET'],
+    allowedHeaders: ['Content-Type']
+}));
 app.use(express.json());
 
 // Rota de saúde (Vital para o Render saber que o app está vivo)
