@@ -6,7 +6,8 @@ const PDFDocument = require('pdfkit');
 const app = express();
 
 // --- CONFIGURAÇÃO ---
-const resend = new Resend('re_VoWevW7g_CiA9zS4qTrRxznKoKstm6oTw'); 
+// Sua chave API atualizada
+const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL'); 
 const PORT = process.env.PORT || 10000;
 
 app.use(cors());
@@ -19,11 +20,11 @@ app.post('/api/submit-eta', async (req, res) => {
     const data = req.body;
     console.log('📥 Novo formulário recebido de:', data.email);
     
-    // Responde ao site na hora para o cliente não ficar esperando
+    // Responde ao site imediatamente para não travar o formulário
     res.status(200).json({ success: true, message: 'Processando...' });
 
     try {
-        // Gerador de PDF
+        // --- GERADOR DE PDF ---
         const generatePDF = () => {
             return new Promise((resolve) => {
                 const doc = new PDFDocument();
@@ -36,7 +37,7 @@ app.post('/api/submit-eta', async (req, res) => {
                 doc.fontSize(12).text(`Data: ${new Date().toLocaleString('pt-BR')}`);
                 doc.text('-----------------------------------');
                 doc.text(`Nome Completo: ${data.firstName} ${data.lastName}`);
-                doc.text(`E-mail: ${data.email}`);
+                doc.text(`E-mail do Cliente: ${data.email}`);
                 doc.text(`WhatsApp: ${data.phone}`);
                 doc.text(`Passaporte: ${data.passportNumber}`);
                 doc.text(`País do Passaporte: ${data.passportIssueCountry}`);
@@ -49,15 +50,18 @@ app.post('/api/submit-eta', async (req, res) => {
         const pdfBuffer = await generatePDF();
         console.log('📄 PDF construído.');
 
-        // Envio via API do Resend (Sem erros de timeout!)
-        await resend.emails.send({
-            from: 'GetVisa <contato@getvisa.com.br>',
-            to: ['getvisa.assessoria@gmail.com', data.email], // Envia para você e para o cliente
-            subject: `🍁 Novo Lead eTA: ${data.firstName}`,
+        // --- ENVIO VIA RESEND (REVISADO) ---
+        const response = await resend.emails.send({
+            // Agora usamos seu domínio oficial verificado
+            from: 'GetVisa <contato@getvisa.com.br>', 
+            // Destinatário principal para você receber o lead
+            to: ['getvisa.assessoria@gmail.com'], 
+            subject: `🍁 Novo Lead eTA: ${data.firstName} ${data.lastName}`,
             html: `<h3>Nova solicitação recebida!</h3>
                    <p><b>Cliente:</b> ${data.firstName} ${data.lastName}</p>
                    <p><b>WhatsApp:</b> ${data.phone}</p>
-                   <p>O rascunho completo está em anexo no PDF.</p>`,
+                   <p><b>E-mail do Cliente:</b> ${data.email}</p>
+                   <p>O rascunho completo com todos os dados está em anexo no PDF.</p>`,
             attachments: [
                 {
                     filename: `Solicitacao_${data.firstName}.pdf`,
@@ -66,10 +70,14 @@ app.post('/api/submit-eta', async (req, res) => {
             ],
         });
 
-        console.log('✅ Emails enviados com sucesso!');
+        if (response.error) {
+            console.error('❌ Resend retornou erro:', response.error);
+        } else {
+            console.log('✅ Email enviado com sucesso! ID:', response.data.id);
+        }
 
     } catch (error) {
-        console.error('❌ Erro no processamento:', error.message);
+        console.error('❌ Erro crítico no servidor:', error);
     }
 });
 
