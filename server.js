@@ -4,7 +4,7 @@ const cors = require('cors');
 const PDFDocument = require('pdfkit');
 
 const app = express();
-const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL'); // sua chave
+const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL');
 const PORT = process.env.PORT || 10000;
 
 app.use(cors());
@@ -12,193 +12,94 @@ app.use(express.json({ limit: '50mb' }));
 
 // Mapeamento de valores de rádio para textos legíveis
 const radioMapping = {
-  // Sim/Não genérico
   'one': 'Sim',
   'two': 'Não',
-  // Propósito da viagem (radio-28)
-  'radio-28': {
-    'one': 'Turismo/negócio (B1/B2)',
-    'two': 'Estudos',
-    'Outros': 'Outros'
-  },
-  // Sexo (radio-3)
-  'radio-3': {
-    'one': 'Masculino',
-    'two': 'Feminino'
-  },
-  // Estado civil (select-4) – embora seja select, mapeamos os valores
-  'select-4': {
-    'one': 'Casado(a)',
-    'two': 'Solteiro(a)',
-    'União-estável': 'União estável',
-    'Viúvo(a)': 'Viúvo(a)',
-    'Divorciado(a)': 'Divorciado(a)'
-  },
-  // Quem paga (radio-6)
-  'radio-6': {
-    'one': 'Eu mesmo',
-    'two': 'Outra pessoa'
-  },
-  // Acompanhantes (radio-7)
-  'radio-7': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Já esteve nos EUA (radio-8)
-  'radio-8': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Já teve visto (radio-23)
-  'radio-23': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Mesmo tipo de visto (radio-29)
-  'radio-29': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Mesmo país (radio-30)
-  'radio-30': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Impressões digitais (radio-33)
-  'radio-33': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Ocupação principal (radio-27)
-  'radio-27': {
-    'Profissional': 'Profissional',
-    'Estudante': 'Estudante',
-    'Aposentado': 'Aposentado'
-  },
-  // Teve empregos anteriores (radio-17)
-  'radio-17': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Escolaridade (radio-18)
-  'radio-18': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Fala outros idiomas (radio-19)
-  'radio-19': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Viajou outros países (radio-20)
-  'radio-20': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Pai nos EUA (radio-14)
-  'radio-14': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Mãe nos EUA (radio-15)
-  'radio-15': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Parentes imediatos (radio-16)
-  'radio-16': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Indicado por agência (radio-26)
-  'radio-26': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Planos específicos (radio-planos)
-  'radio-planos': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Endereço correspondência (radio-9)
-  'radio-9': {
-    'one': 'Sim',
-    'two': 'Não, é diferente'
-  },
-  // Usou outros números (radio-10)
-  'radio-10': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Usou outros e-mails (radio-11)
-  'radio-11': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Possui mídias sociais (radio-12)
-  'radio-12': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Possui outra nacionalidade (radio-outra-nac)
-  'radio-outra-nac': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Residente permanente (radio-residente)
-  'radio-residente': {
-    'one': 'Sim',
-    'two': 'Não'
-  },
-  // Endereço do cônjuge (spouse-address-same, ex-address-same, falecido-address-same)
-  'spouse-address-same': {
-    'one': 'Mesmo que o meu',
-    'two': 'Diferente'
-  },
-  'ex-address-same': {
-    'one': 'Mesmo que o meu',
-    'two': 'Diferente'
-  },
-  'falecido-address-same': {
-    'one': 'Mesmo que o meu',
-    'two': 'Diferente'
-  }
+  'radio-28': { 'one': 'Turismo/negócio (B1/B2)', 'two': 'Estudos', 'Outros': 'Outros' },
+  'radio-3': { 'one': 'Masculino', 'two': 'Feminino' },
+  'select-4': { 'one': 'Casado(a)', 'two': 'Solteiro(a)', 'União-estável': 'União estável', 'Viúvo(a)': 'Viúvo(a)', 'Divorciado(a)': 'Divorciado(a)' },
+  'radio-6': { 'one': 'Eu mesmo', 'two': 'Outra pessoa' },
+  'radio-7': { 'one': 'Sim', 'two': 'Não' },
+  'radio-8': { 'one': 'Sim', 'two': 'Não' },
+  'radio-23': { 'one': 'Sim', 'two': 'Não' },
+  'radio-29': { 'one': 'Sim', 'two': 'Não' },
+  'radio-30': { 'one': 'Sim', 'two': 'Não' },
+  'radio-33': { 'one': 'Sim', 'two': 'Não' },
+  'radio-27': { 'Profissional': 'Profissional', 'Estudante': 'Estudante', 'Aposentado': 'Aposentado' },
+  'radio-17': { 'one': 'Sim', 'two': 'Não' },
+  'radio-18': { 'one': 'Sim', 'two': 'Não' },
+  'radio-19': { 'one': 'Sim', 'two': 'Não' },
+  'radio-20': { 'one': 'Sim', 'two': 'Não' },
+  'radio-14': { 'one': 'Sim', 'two': 'Não' },
+  'radio-15': { 'one': 'Sim', 'two': 'Não' },
+  'radio-16': { 'one': 'Sim', 'two': 'Não' },
+  'radio-26': { 'one': 'Sim', 'two': 'Não' },
+  'radio-planos': { 'one': 'Sim', 'two': 'Não' },
+  'radio-9': { 'one': 'Sim', 'two': 'Não, é diferente' },
+  'radio-10': { 'one': 'Sim', 'two': 'Não' },
+  'radio-11': { 'one': 'Sim', 'two': 'Não' },
+  'radio-12': { 'one': 'Sim', 'two': 'Não' },
+  'radio-outra-nac': { 'one': 'Sim', 'two': 'Não' },
+  'radio-residente': { 'one': 'Sim', 'two': 'Não' },
+  'spouse-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' },
+  'ex-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' },
+  'falecido-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' }
 };
 
-// Função para formatar valor, aplicando mapeamento quando necessário
 function formatValue(fieldName, value) {
-  if (value === undefined || value === null || value === '') return '(não informado)';
-  
-  // Se for array, junta com vírgula
+  if (value === undefined || value === null || value === '') return null;
   if (Array.isArray(value)) {
-    if (value.length === 0) return '(nenhum)';
-    // Mapeia cada item se necessário (para arrays de radios/checkboxes)
+    if (value.length === 0) return null;
+    // Se for array de strings, aplica mapeamento individual
     const mapped = value.map(v => {
       if (radioMapping[fieldName] && radioMapping[fieldName][v]) return radioMapping[fieldName][v];
+      if (radioMapping[v]) return radioMapping[v];
       return v;
     });
     return mapped.join(', ');
   }
-  
-  // Verifica se há mapeamento específico para este campo
-  if (radioMapping[fieldName] && radioMapping[fieldName][value]) {
-    return radioMapping[fieldName][value];
-  }
-  // Verifica mapeamento genérico (one/two)
+  if (radioMapping[fieldName] && radioMapping[fieldName][value]) return radioMapping[fieldName][value];
   if (radioMapping[value]) return radioMapping[value];
-  
   return value;
 }
 
-// Mapeamento dos campos (label + name)
-const fieldMapping = [
-  // INFORMAÇÕES INICIAIS
+// Função para agrupar arrays paralelos (ex: acompanhantes)
+function groupParallelArrays(data, nameField, relField) {
+  const names = data[nameField] || [];
+  const rels = data[relField] || [];
+  const maxLen = Math.max(names.length, rels.length);
+  const result = [];
+  for (let i = 0; i < maxLen; i++) {
+    let nome = names[i] || '';
+    let rel = rels[i] || '';
+    if (nome || rel) {
+      result.push(`${nome}${nome && rel ? ' - ' : ''}${rel}`);
+    }
+  }
+  return result;
+}
+
+// Agrupa viagens (data e duração)
+function groupTravels(data) {
+  const datas = data['viagem_data[]'] || [];
+  const duracao = data['viagem_duracao[]'] || [];
+  const maxLen = Math.max(datas.length, duracao.length);
+  const result = [];
+  for (let i = 0; i < maxLen; i++) {
+    let d = datas[i] || '';
+    let dur = duracao[i] || '';
+    if (d || dur) {
+      result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
+    }
+  }
+  return result;
+}
+
+// Mapeamento de campos simples (não agrupados)
+const simpleFields = [
   { name: 'consulado_cidade', label: 'Cidade do Consulado' },
   { name: 'radio-26', label: 'Indicado por agência/agente?' },
   { name: 'text-1', label: 'Nome da agência/agente' },
   { name: 'text-64', label: 'Idioma usado para preencher' },
-
-  // DADOS PESSOAIS
   { name: 'full_name', label: 'Nome completo' },
   { name: 'radio-2', label: 'Já teve outro nome?' },
   { name: 'text-87', label: 'Nome anterior' },
@@ -214,8 +115,6 @@ const fieldMapping = [
   { name: 'text-86', label: 'CPF' },
   { name: 'text-17', label: 'Número do Seguro Social (SSN)' },
   { name: 'text-18', label: 'Número do contribuinte dos EUA (TIN)' },
-
-  // VIAGEM
   { name: 'radio-28', label: 'Propósito da viagem' },
   { name: 'radio-planos', label: 'Planos específicos?' },
   { name: 'text-21', label: 'Data de chegada prevista' },
@@ -234,16 +133,8 @@ const fieldMapping = [
   { name: 'text-96', label: 'UF do pagador' },
   { name: 'text-29', label: 'CEP do pagador' },
   { name: 'text-30', label: 'País do pagador' },
-
-  // ACOMPANHANTES
-  { name: 'radio-7', label: 'Acompanhantes?' },
-  { name: 'acompanhante_nome[]', label: 'Nome do acompanhante' },
-  { name: 'acompanhante_rel[]', label: 'Parentesco' },
-
-  // VIAGENS ANTERIORES AOS EUA
+  { name: 'radio-7', label: 'Há acompanhantes?' },
   { name: 'radio-8', label: 'Já esteve nos EUA?' },
-  { name: 'viagem_data[]', label: 'Data da viagem (EUA)' },
-  { name: 'viagem_duracao[]', label: 'Duração (dias)' },
   { name: 'radio-23', label: 'Já teve visto americano?' },
   { name: 'text-35', label: 'Data de emissão do visto' },
   { name: 'text-68', label: 'Número do visto' },
@@ -251,8 +142,6 @@ const fieldMapping = [
   { name: 'radio-33', label: 'Impressões digitais coletadas?' },
   { name: 'radio-29', label: 'Mesmo tipo de visto?' },
   { name: 'radio-30', label: 'Mesmo país de emissão?' },
-
-  // ENDEREÇO E TELEFONE
   { name: 'text-71', label: 'Logradouro' },
   { name: 'text-72', label: 'Complemento' },
   { name: 'text-73', label: 'CEP' },
@@ -269,15 +158,9 @@ const fieldMapping = [
   { name: 'text-77', label: 'Telefone principal' },
   { name: 'text-78', label: 'Telefone comercial' },
   { name: 'radio-10', label: 'Usou outros números?' },
-  { name: 'telefones_anteriores[]', label: 'Telefones anteriores' },
   { name: 'email-1', label: 'E-mail principal' },
   { name: 'radio-11', label: 'Usou outros e-mails?' },
-  { name: 'emails_anteriores[]', label: 'E-mails anteriores' },
   { name: 'radio-12', label: 'Presença em mídias sociais?' },
-  { name: 'midia_plataforma[]', label: 'Plataforma' },
-  { name: 'midia_identificador[]', label: 'Identificador' },
-
-  // PASSAPORTE
   { name: 'text-38', label: 'Número do passaporte' },
   { name: 'text-40', label: 'País que emitiu' },
   { name: 'text-39', label: 'Cidade de emissão' },
@@ -285,8 +168,6 @@ const fieldMapping = [
   { name: 'text-66', label: 'Data de emissão' },
   { name: 'text-67', label: 'Data de validade' },
   { name: 'radio-13', label: 'Passaporte perdido/roubado?' },
-
-  // CONTATO NOS EUA
   { name: 'name-2', label: 'Contato nos EUA (nome)' },
   { name: 'text-41_contato', label: 'Endereço (EUA)' },
   { name: 'text-42_contato', label: 'Cidade (EUA)' },
@@ -295,8 +176,6 @@ const fieldMapping = [
   { name: 'checkbox-15[]', label: 'Relacionamento com contato' },
   { name: 'email-5', label: 'Telefone do contato (EUA)' },
   { name: 'email-3', label: 'E-mail do contato (EUA)' },
-
-  // FAMILIARES
   { name: 'nome_pai', label: 'Nome do pai' },
   { name: 'text-44', label: 'Data de nascimento do pai' },
   { name: 'radio-14', label: 'Pai nos EUA?' },
@@ -306,24 +185,17 @@ const fieldMapping = [
   { name: 'radio-15', label: 'Mãe nos EUA?' },
   { name: 'checkbox-17[]', label: 'Status da mãe' },
   { name: 'radio-16', label: 'Parentes imediatos nos EUA?' },
-  { name: 'parente_nome[]', label: 'Nome do parente' },
-  { name: 'parente_relacao[]', label: 'Parentesco' },
-  { name: 'parente_status[]', label: 'Status do parente' },
-
-  // CÔNJUGE (casado)
   { name: 'spouse_fullname', label: 'Nome do cônjuge' },
   { name: 'spouse-dob', label: 'Data de nascimento do cônjuge' },
   { name: 'spouse-nationality', label: 'Nacionalidade do cônjuge' },
   { name: 'spouse-city', label: 'Cidade de nascimento do cônjuge' },
   { name: 'spouse-country', label: 'País de nascimento do cônjuge' },
   { name: 'spouse-address-same', label: 'Endereço do cônjuge' },
-  { name: 'spouse_endereco', label: 'Endereço do cônjuge (diferente)' },
-  { name: 'spouse_cidade', label: 'Cidade do cônjuge' },
-  { name: 'spouse_estado', label: 'Estado do cônjuge' },
-  { name: 'spouse_cep', label: 'CEP do cônjuge' },
-  { name: 'spouse_pais', label: 'País do cônjuge' },
-
-  // DIVORCIADO
+  { name: 'spouse_endereco', label: 'Endereço (diferente)' },
+  { name: 'spouse_cidade', label: 'Cidade' },
+  { name: 'spouse_estado', label: 'Estado' },
+  { name: 'spouse_cep', label: 'CEP' },
+  { name: 'spouse_pais', label: 'País' },
   { name: 'ex_fullname', label: 'Nome do ex‑cônjuge' },
   { name: 'ex_dob', label: 'Data de nascimento' },
   { name: 'ex_nationality', label: 'Nacionalidade' },
@@ -333,8 +205,6 @@ const fieldMapping = [
   { name: 'data_divorcio', label: 'Data do Divórcio' },
   { name: 'cidade_divorcio', label: 'Cidade do Divórcio' },
   { name: 'como_divorcio', label: 'Como se deu o Divórcio' },
-
-  // VIÚVO
   { name: 'falecido_fullname', label: 'Nome do cônjuge falecido' },
   { name: 'falecido_dob', label: 'Data de nascimento' },
   { name: 'falecido_nationality', label: 'Nacionalidade' },
@@ -342,8 +212,6 @@ const fieldMapping = [
   { name: 'falecido_country', label: 'País de nascimento' },
   { name: 'data_casamento_viuvo', label: 'Data do Casamento' },
   { name: 'data_falecimento', label: 'Data do Falecimento' },
-
-  // TRABALHO/EDUCAÇÃO
   { name: 'radio-27', label: 'Ocupação principal' },
   { name: 'text-49', label: 'Empregador / escola' },
   { name: 'text-101', label: 'Endereço' },
@@ -355,10 +223,6 @@ const fieldMapping = [
   { name: 'text-51', label: 'Renda mensal (R$)' },
   { name: 'text-52', label: 'Descrição das funções' },
   { name: 'radio-17', label: 'Teve empregos anteriores?' },
-  { name: 'emprego_anterior_nome[]', label: 'Empregador anterior' },
-  { name: 'emprego_anterior_cargo[]', label: 'Cargo anterior' },
-  { name: 'emprego_anterior_inicio[]', label: 'Data início (emprego anterior)' },
-  { name: 'emprego_anterior_fim[]', label: 'Data saída' },
   { name: 'radio-18', label: 'Escolaridade secundário/superior?' },
   { name: 'text-59', label: 'Instituição de ensino' },
   { name: 'text-60', label: 'Curso' },
@@ -369,9 +233,7 @@ const fieldMapping = [
   { name: 'text-61', label: 'Data início' },
   { name: 'text-62', label: 'Data conclusão' },
   { name: 'radio-19', label: 'Fala outros idiomas?' },
-  { name: 'idiomas[]', label: 'Outros idiomas' },
-  { name: 'radio-20', label: 'Viajou para outros países?' },
-  { name: 'paises_visitados[]', label: 'Países visitados' }
+  { name: 'radio-20', label: 'Viajou para outros países?' }
 ];
 
 app.post('/api/submit-ds160', async (req, res) => {
@@ -396,15 +258,12 @@ app.post('/api/submit-ds160', async (req, res) => {
       doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
       doc.moveDown(1);
 
-      for (const field of fieldMapping) {
+      // 1. Campos simples
+      for (const field of simpleFields) {
         let value = data[field.name];
-        if (field.name.includes('[]')) {
-          const base = field.name.replace('[]', '');
-          value = data[field.name] || data[base] || null;
-        }
         if (value !== undefined && value !== null && value !== '') {
           const formatted = formatValue(field.name, value);
-          if (formatted !== '(não informado)') {
+          if (formatted && formatted !== '(não informado)') {
             doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
             doc.font('Helvetica').text(formatted);
             doc.moveDown(0.6);
@@ -412,12 +271,113 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
       }
 
+      // 2. Telefones anteriores
+      const telefones = data['telefones_anteriores[]'] || [];
+      if (telefones.length > 0) {
+        doc.font('Helvetica-Bold').text('Telefones anteriores: ', { continued: true });
+        doc.font('Helvetica').text(telefones.join(', '));
+        doc.moveDown(0.6);
+      }
+
+      // 3. E-mails anteriores
+      const emails = data['emails_anteriores[]'] || [];
+      if (emails.length > 0) {
+        doc.font('Helvetica-Bold').text('E-mails anteriores: ', { continued: true });
+        doc.font('Helvetica').text(emails.join(', '));
+        doc.moveDown(0.6);
+      }
+
+      // 4. Mídias sociais
+      const plataformas = data['midia_plataforma[]'] || [];
+      const identificadores = data['midia_identificador[]'] || [];
+      const midias = [];
+      for (let i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
+        if (plataformas[i] || identificadores[i]) {
+          midias.push(`${plataformas[i] || ''}${plataformas[i] && identificadores[i] ? ': ' : ''}${identificadores[i] || ''}`);
+        }
+      }
+      if (midias.length > 0) {
+        doc.font('Helvetica-Bold').text('Mídias sociais: ', { continued: true });
+        doc.font('Helvetica').text(midias.join('; '));
+        doc.moveDown(0.6);
+      }
+
+      // 5. Acompanhantes (agrupados)
+      const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
+      if (acompanhantes.length > 0) {
+        doc.font('Helvetica-Bold').text('Acompanhantes:');
+        acompanhantes.forEach(acc => {
+          doc.font('Helvetica').text(`  - ${acc}`);
+        });
+        doc.moveDown(0.6);
+      }
+
+      // 6. Viagens anteriores aos EUA
+      const viagens = groupTravels(data);
+      if (viagens.length > 0) {
+        doc.font('Helvetica-Bold').text('Viagens anteriores aos EUA:');
+        viagens.forEach(viagem => {
+          doc.font('Helvetica').text(`  - ${viagem}`);
+        });
+        doc.moveDown(0.6);
+      }
+
+      // 7. Parentes nos EUA
+      const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
+      if (parentes.length > 0) {
+        doc.font('Helvetica-Bold').text('Parentes nos EUA:');
+        parentes.forEach(p => {
+          doc.font('Helvetica').text(`  - ${p}`);
+        });
+        doc.moveDown(0.6);
+      }
+
+      // 8. Idiomas adicionais
+      const idiomas = data['idiomas[]'] || [];
+      if (idiomas.length > 0) {
+        doc.font('Helvetica-Bold').text('Outros idiomas: ', { continued: true });
+        doc.font('Helvetica').text(idiomas.join(', '));
+        doc.moveDown(0.6);
+      }
+
+      // 9. Países visitados
+      const paises = data['paises_visitados[]'] || [];
+      if (paises.length > 0) {
+        doc.font('Helvetica-Bold').text('Países visitados (últimos 5 anos): ', { continued: true });
+        doc.font('Helvetica').text(paises.join(', '));
+        doc.moveDown(0.6);
+      }
+
+      // 10. Empregos anteriores (detalhados)
+      const empregos = [];
+      const empNomes = data['emprego_anterior_nome[]'] || [];
+      const empCargos = data['emprego_anterior_cargo[]'] || [];
+      const empInicios = data['emprego_anterior_inicio[]'] || [];
+      const empFins = data['emprego_anterior_fim[]'] || [];
+      const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
+      for (let i = 0; i < maxEmp; i++) {
+        if (empNomes[i] || empCargos[i]) {
+          let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
+          if (empInicios[i] || empFins[i]) {
+            linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
+          }
+          empregos.push(linha);
+        }
+      }
+      if (empregos.length > 0) {
+        doc.font('Helvetica-Bold').text('Empregos anteriores:');
+        empregos.forEach(emp => {
+          doc.font('Helvetica').text(`  - ${emp}`);
+        });
+        doc.moveDown(0.6);
+      }
+
       doc.moveDown(2);
       doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
       doc.end();
     });
 
-    // 1. Enviar e-mail para a equipe (sempre)
+    // Enviar e-mail para a equipe
     const { error: errorEquipe } = await resend.emails.send({
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
@@ -428,7 +388,7 @@ app.post('/api/submit-ds160', async (req, res) => {
     if (errorEquipe) console.error('❌ Erro no envio para equipe:', errorEquipe);
     else console.log('✅ E-mail enviado para a equipe');
 
-    // 2. Enviar e-mail para o cliente (se o e-mail foi informado)
+    // Enviar e-mail para o cliente
     if (emailCliente && emailCliente.trim() !== '') {
       const { error: errorCliente } = await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
@@ -439,8 +399,6 @@ app.post('/api/submit-ds160', async (req, res) => {
       });
       if (errorCliente) console.error('❌ Erro no envio para o cliente:', errorCliente);
       else console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
-    } else {
-      console.log('⚠️ Cliente não informou e-mail, não foi possível enviar cópia.');
     }
 
   } catch (err) {
