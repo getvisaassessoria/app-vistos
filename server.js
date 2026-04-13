@@ -10,7 +10,187 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Mapeamento completo (compatível com o functions.php atual)
+// Mapeamento de valores de rádio para textos legíveis
+const radioMapping = {
+  // Sim/Não genérico
+  'one': 'Sim',
+  'two': 'Não',
+  // Propósito da viagem (radio-28)
+  'radio-28': {
+    'one': 'Turismo/negócio (B1/B2)',
+    'two': 'Estudos',
+    'Outros': 'Outros'
+  },
+  // Sexo (radio-3)
+  'radio-3': {
+    'one': 'Masculino',
+    'two': 'Feminino'
+  },
+  // Estado civil (select-4) – embora seja select, mapeamos os valores
+  'select-4': {
+    'one': 'Casado(a)',
+    'two': 'Solteiro(a)',
+    'União-estável': 'União estável',
+    'Viúvo(a)': 'Viúvo(a)',
+    'Divorciado(a)': 'Divorciado(a)'
+  },
+  // Quem paga (radio-6)
+  'radio-6': {
+    'one': 'Eu mesmo',
+    'two': 'Outra pessoa'
+  },
+  // Acompanhantes (radio-7)
+  'radio-7': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Já esteve nos EUA (radio-8)
+  'radio-8': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Já teve visto (radio-23)
+  'radio-23': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Mesmo tipo de visto (radio-29)
+  'radio-29': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Mesmo país (radio-30)
+  'radio-30': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Impressões digitais (radio-33)
+  'radio-33': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Ocupação principal (radio-27)
+  'radio-27': {
+    'Profissional': 'Profissional',
+    'Estudante': 'Estudante',
+    'Aposentado': 'Aposentado'
+  },
+  // Teve empregos anteriores (radio-17)
+  'radio-17': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Escolaridade (radio-18)
+  'radio-18': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Fala outros idiomas (radio-19)
+  'radio-19': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Viajou outros países (radio-20)
+  'radio-20': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Pai nos EUA (radio-14)
+  'radio-14': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Mãe nos EUA (radio-15)
+  'radio-15': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Parentes imediatos (radio-16)
+  'radio-16': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Indicado por agência (radio-26)
+  'radio-26': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Planos específicos (radio-planos)
+  'radio-planos': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Endereço correspondência (radio-9)
+  'radio-9': {
+    'one': 'Sim',
+    'two': 'Não, é diferente'
+  },
+  // Usou outros números (radio-10)
+  'radio-10': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Usou outros e-mails (radio-11)
+  'radio-11': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Possui mídias sociais (radio-12)
+  'radio-12': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Possui outra nacionalidade (radio-outra-nac)
+  'radio-outra-nac': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Residente permanente (radio-residente)
+  'radio-residente': {
+    'one': 'Sim',
+    'two': 'Não'
+  },
+  // Endereço do cônjuge (spouse-address-same, ex-address-same, falecido-address-same)
+  'spouse-address-same': {
+    'one': 'Mesmo que o meu',
+    'two': 'Diferente'
+  },
+  'ex-address-same': {
+    'one': 'Mesmo que o meu',
+    'two': 'Diferente'
+  },
+  'falecido-address-same': {
+    'one': 'Mesmo que o meu',
+    'two': 'Diferente'
+  }
+};
+
+// Função para formatar valor, aplicando mapeamento quando necessário
+function formatValue(fieldName, value) {
+  if (value === undefined || value === null || value === '') return '(não informado)';
+  
+  // Se for array, junta com vírgula
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '(nenhum)';
+    // Mapeia cada item se necessário (para arrays de radios/checkboxes)
+    const mapped = value.map(v => {
+      if (radioMapping[fieldName] && radioMapping[fieldName][v]) return radioMapping[fieldName][v];
+      return v;
+    });
+    return mapped.join(', ');
+  }
+  
+  // Verifica se há mapeamento específico para este campo
+  if (radioMapping[fieldName] && radioMapping[fieldName][value]) {
+    return radioMapping[fieldName][value];
+  }
+  // Verifica mapeamento genérico (one/two)
+  if (radioMapping[value]) return radioMapping[value];
+  
+  return value;
+}
+
+// Mapeamento dos campos (label + name)
 const fieldMapping = [
   // INFORMAÇÕES INICIAIS
   { name: 'consulado_cidade', label: 'Cidade do Consulado' },
@@ -136,7 +316,7 @@ const fieldMapping = [
   { name: 'spouse-nationality', label: 'Nacionalidade do cônjuge' },
   { name: 'spouse-city', label: 'Cidade de nascimento do cônjuge' },
   { name: 'spouse-country', label: 'País de nascimento do cônjuge' },
-  { name: 'spouse-address-same', label: 'Endereço do cônjuge (mesmo que o meu?)' },
+  { name: 'spouse-address-same', label: 'Endereço do cônjuge' },
   { name: 'spouse_endereco', label: 'Endereço do cônjuge (diferente)' },
   { name: 'spouse_cidade', label: 'Cidade do cônjuge' },
   { name: 'spouse_estado', label: 'Estado do cônjuge' },
@@ -194,11 +374,6 @@ const fieldMapping = [
   { name: 'paises_visitados[]', label: 'Países visitados' }
 ];
 
-function formatValue(value) {
-  if (Array.isArray(value)) return value.length ? value.join(', ') : '(nenhum)';
-  return value || '(não informado)';
-}
-
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos');
@@ -206,21 +381,21 @@ app.post('/api/submit-ds160', async (req, res) => {
 
   try {
     const nome = data['full_name'] || 'Cliente_Sem_Nome';
+    const emailCliente = data['email-1'] || null;
 
+    // Gerar PDF
     const pdfBuffer = await new Promise((resolve) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-      // Cabeçalho
       doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE VISTO DS-160', { align: 'center' });
       doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
       doc.moveDown(2);
       doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-      doc.moveDown(1); // Espaço após a linha
+      doc.moveDown(1);
 
-      // Percorre os campos
       for (const field of fieldMapping) {
         let value = data[field.name];
         if (field.name.includes('[]')) {
@@ -228,33 +403,46 @@ app.post('/api/submit-ds160', async (req, res) => {
           value = data[field.name] || data[base] || null;
         }
         if (value !== undefined && value !== null && value !== '') {
-          const formatted = formatValue(value);
+          const formatted = formatValue(field.name, value);
           if (formatted !== '(não informado)') {
-            // Label em negrito, valor normal, ambos na mesma linha
             doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
             doc.font('Helvetica').text(formatted);
-            doc.moveDown(0.6); // Espaçamento vertical adequado (antes era 0.4)
+            doc.moveDown(0.6);
           }
         }
       }
 
-      // Rodapé simples (opcional)
       doc.moveDown(2);
       doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
-
       doc.end();
     });
 
-    const { error } = await resend.emails.send({
+    // 1. Enviar e-mail para a equipe (sempre)
+    const { error: errorEquipe } = await resend.emails.send({
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
       subject: `🇺🇸 DS-160: ${nome}`,
       html: `<strong>Formulário DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
       attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
     });
+    if (errorEquipe) console.error('❌ Erro no envio para equipe:', errorEquipe);
+    else console.log('✅ E-mail enviado para a equipe');
 
-    if (error) console.error('❌ Erro no Resend:', error);
-    else console.log('✅ E-mail enviado com sucesso!');
+    // 2. Enviar e-mail para o cliente (se o e-mail foi informado)
+    if (emailCliente && emailCliente.trim() !== '') {
+      const { error: errorCliente } = await resend.emails.send({
+        from: 'GetVisa <contato@getvisa.com.br>',
+        to: [emailCliente],
+        subject: `Seu formulário DS-160 foi recebido - ${nome}`,
+        html: `<strong>Olá ${nome},</strong><br><p>Recebemos seu formulário DS-160. Em breve nossa equipe entrará em contato.</p><p>Segue em anexo uma cópia do seu pré-cadastro para sua conferência.</p><p>Atenciosamente,<br>Equipe GetVisa</p>`,
+        attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
+      });
+      if (errorCliente) console.error('❌ Erro no envio para o cliente:', errorCliente);
+      else console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
+    } else {
+      console.log('⚠️ Cliente não informou e-mail, não foi possível enviar cópia.');
+    }
+
   } catch (err) {
     console.error('❌ Erro geral:', err);
   }
