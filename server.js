@@ -213,12 +213,14 @@ app.post('/api/submit-ds160', async (req, res) => {
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
 
+      // Cabeçalho
       doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE VISTO DS-160', { align: 'center' });
       doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
       doc.moveDown(2);
       doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-      doc.moveDown();
+      doc.moveDown(1); // Espaço após a linha
 
+      // Percorre os campos
       for (const field of fieldMapping) {
         let value = data[field.name];
         if (field.name.includes('[]')) {
@@ -228,12 +230,18 @@ app.post('/api/submit-ds160', async (req, res) => {
         if (value !== undefined && value !== null && value !== '') {
           const formatted = formatValue(value);
           if (formatted !== '(não informado)') {
-            doc.fillColor('#003366').fontSize(10).font('Helvetica-Bold').text(`${field.label}: `, { continued: true });
-            doc.fillColor('#333333').font('Helvetica').text(formatted);
-            doc.moveDown(0.4);
+            // Label em negrito, valor normal, ambos na mesma linha
+            doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
+            doc.font('Helvetica').text(formatted);
+            doc.moveDown(0.6); // Espaçamento vertical adequado (antes era 0.4)
           }
         }
       }
+
+      // Rodapé simples (opcional)
+      doc.moveDown(2);
+      doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+
       doc.end();
     });
 
