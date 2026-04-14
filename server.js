@@ -701,3 +701,46 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
 
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+
+// GET /api/compromissos - listar todos
+app.get('/api/compromissos', validateApiKey, async (req, res) => {
+  const { data, error } = await supabase.from('compromissos').select('*').order('data', { ascending: true }).order('hora', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/compromissos - criar novo (para criação manual via calendário)
+app.post('/api/compromissos', validateApiKey, async (req, res) => {
+  const { cliente, atividade, data, hora, local, concluido } = req.body;
+  if (!cliente || !atividade || !data || !hora) {
+    return res.status(400).json({ error: 'Cliente, atividade, data e hora são obrigatórios' });
+  }
+  const { data: inserted, error } = await supabase
+    .from('compromissos')
+    .insert({ cliente, atividade, data, hora, local, concluido: concluido || 0 })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(inserted);
+});
+
+// PUT /api/compromissos/:id - atualizar (concluido, data, hora, local)
+app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const { data, error } = await supabase
+    .from('compromissos')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/compromissos/:id - excluir
+app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
+  const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
