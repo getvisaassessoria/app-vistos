@@ -700,7 +700,6 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 // GET /api/compromissos - listar todos
 app.get('/api/compromissos', validateApiKey, async (req, res) => {
@@ -744,3 +743,6 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
+
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+
