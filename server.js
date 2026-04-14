@@ -425,4 +425,119 @@ app.post('/api/submit-ds160', async (req, res) => {
   }
 });
 
+// ==================== ROTA PASSAPORTE ====================
+app.post('/api/submit-passaporte', async (req, res) => {
+  const data = req.body;
+  console.log('📥 Dados de passaporte recebidos');
+  res.status(200).json({ success: true });
+
+  try {
+    const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
+    const emailCliente = data['passaporte_email'] || null;
+
+    const pdfBuffer = await new Promise((resolve) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+      doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE PASSAPORTE', { align: 'center' });
+      doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
+      doc.moveDown(2);
+      doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Mapeamento completo dos campos
+      const fields = [
+        // Dados pessoais
+        { label: 'Nome completo', name: 'passaporte_nome' },
+        { label: 'Sexo', name: 'passaporte_sexo' },
+        { label: 'Data de nascimento', name: 'passaporte_data_nasc' },
+        { label: 'Raça/Cor', name: 'passaporte_raca' },
+        { label: 'Estado civil', name: 'passaporte_estado_civil' },
+        { label: 'País de nascimento', name: 'passaporte_pais_nasc' },
+        { label: 'UF de nascimento', name: 'passaporte_uf_nasc' },
+        { label: 'Cidade de nascimento', name: 'passaporte_cidade_nasc' },
+        { label: 'Alteração de nome?', name: 'passaporte_alterou_nome' },
+        { label: 'Nome(s) anterior(es)', name: 'passaporte_nome_anterior' },
+        // Documentos
+        { label: 'Tipo de documento', name: 'passaporte_tipo_doc' },
+        { label: 'Número do documento', name: 'passaporte_numero_doc' },
+        { label: 'Data de emissão do documento', name: 'passaporte_data_emissao_doc' },
+        { label: 'Órgão emissor e UF', name: 'passaporte_orgao_emissor' },
+        { label: 'CPF', name: 'passaporte_cpf' },
+        { label: 'Possui certidão?', name: 'passaporte_certidao' },
+        { label: 'Certidão - Número da matrícula', name: 'passaporte_certidao_numero' },
+        { label: 'Certidão - Cartório', name: 'passaporte_certidao_cartorio' },
+        { label: 'Certidão - Livro', name: 'passaporte_certidao_livro' },
+        { label: 'Certidão - Folha', name: 'passaporte_certidao_folha' },
+        // Complementares
+        { label: 'Profissão', name: 'passaporte_profissao' },
+        { label: 'E-mail', name: 'passaporte_email' },
+        { label: 'Telefone de contato', name: 'passaporte_telefone' },
+        { label: 'Endereço residencial', name: 'passaporte_endereco' },
+        { label: 'Cidade', name: 'passaporte_cidade' },
+        { label: 'UF', name: 'passaporte_uf' },
+        { label: 'CEP', name: 'passaporte_cep' },
+        // Eleitoral / Militar
+        { label: 'Possui título de eleitor?', name: 'passaporte_titulo_eleitor' },
+        { label: 'Título - Número', name: 'passaporte_titulo_numero' },
+        { label: 'Título - Zona', name: 'passaporte_titulo_zona' },
+        { label: 'Título - Seção', name: 'passaporte_titulo_secao' },
+        { label: 'Situação militar', name: 'passaporte_situacao_militar' },
+        { label: 'Certificado de reservista', name: 'passaporte_reservista_numero' },
+        // Passaporte anterior
+        { label: 'Situação do passaporte anterior', name: 'passaporte_situacao' },
+        { label: 'Número do passaporte anterior', name: 'passaporte_anterior_numero' },
+        { label: 'Data de expedição anterior', name: 'passaporte_anterior_data_exp' },
+        { label: 'Data de validade anterior', name: 'passaporte_anterior_validade' }
+      ];
+
+      let lastGroup = null;
+      for (const field of fields) {
+        let value = data[field.name];
+        if (value && value !== '') {
+          if (lastGroup !== null) {
+            doc.moveDown(0.3);
+            doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+            doc.moveDown(0.3);
+          }
+          doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
+          doc.font('Helvetica').text(value);
+          doc.moveDown(0.6);
+          lastGroup = field.name;
+        }
+      }
+
+      doc.moveDown(2);
+      doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+      doc.end();
+    });
+
+    // Enviar para equipe
+    await resend.emails.send({
+      from: 'GetVisa <contato@getvisa.com.br>',
+      to: ['getvisa.assessoria@gmail.com'],
+      subject: `📘 Passaporte: ${nome}`,
+      html: `<strong>Solicitação de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
+      attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
+    });
+    console.log('✅ E-mail enviado para a equipe (passaporte)');
+
+    // Enviar para o cliente
+    if (emailCliente && emailCliente.trim() !== '') {
+      await resend.emails.send({
+        from: 'GetVisa <contato@getvisa.com.br>',
+        to: [emailCliente],
+        subject: `Sua solicitação de passaporte foi recebida - ${nome}`,
+        html: `<strong>Olá ${nome},</strong><br><p>Recebemos sua solicitação de passaporte. Em breve nossa equipe entrará em contato.</p><p>Segue em anexo uma cópia do seu pré-cadastro.</p><p>Atenciosamente,<br>Equipe GetVisa</p>`,
+        attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
+      });
+      console.log(`✅ E-mail enviado para o cliente (passaporte): ${emailCliente}`);
+    }
+  } catch (err) {
+    console.error('❌ Erro no processamento do passaporte:', err);
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
