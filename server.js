@@ -6,22 +6,20 @@ const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
-const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL'); // sua chave
+const resend = new Resend('re_EDi3taB6_9UAiyMMCoHs7bdtWoxibFKWL');
 const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Inicializa cliente Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
+// ==================== MAPEAMENTOS (mantido igual ao seu original) ====================
 const radioMapping = {
-  'one': 'Sim',
-  'two': 'Não',
+  'one': 'Sim', 'two': 'Não',
   'radio-28': { 'one': 'Turismo/negócio (B1/B2)', 'two': 'Estudos', 'Outros': 'Outros' },
   'radio-3': { 'one': 'Masculino', 'two': 'Feminino' },
   'select-4': { 'one': 'Casado(a)', 'two': 'Solteiro(a)', 'União-estável': 'União estável', 'Viúvo(a)': 'Viúvo(a)', 'Divorciado(a)': 'Divorciado(a)' },
@@ -77,9 +75,7 @@ function groupParallelArrays(data, nameField, relField) {
   for (let i = 0; i < maxLen; i++) {
     let nome = names[i] || '';
     let rel = rels[i] || '';
-    if (nome || rel) {
-      result.push(`${nome}${nome && rel ? ' - ' : ''}${rel}`);
-    }
+    if (nome || rel) result.push(`${nome}${nome && rel ? ' - ' : ''}${rel}`);
   }
   return result;
 }
@@ -92,9 +88,7 @@ function groupTravels(data) {
   for (let i = 0; i < maxLen; i++) {
     let d = datas[i] || '';
     let dur = duracao[i] || '';
-    if (d || dur) {
-      result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
-    }
+    if (d || dur) result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
   }
   return result;
 }
@@ -249,12 +243,9 @@ const simpleFields = [
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos (DS-160)');
-
   try {
     let clienteId = null;
     let solicitacaoId = null;
-    let erroPersistencia = null;
-
     try {
       const { data: cliente, error: clienteError } = await supabase
         .from('clientes')
@@ -280,38 +271,27 @@ app.post('/api/submit-ds160', async (req, res) => {
         .single();
       if (solError) throw solError;
       solicitacaoId = solicitacao.id;
-      console.log(`✅ DS-160 salvo. Cliente ID: ${clienteId}, Solicitação ID: ${solicitacaoId}`);
+      console.log(`✅ DS-160 salvo. IDs: cliente=${clienteId}, solicitacao=${solicitacaoId}`);
+      res.status(200).json({ success: true, cliente_id: clienteId, solicitacao_id: solicitacaoId });
     } catch (supabaseErr) {
       console.error('⚠️ Erro ao salvar no Supabase:', supabaseErr.message);
-      erroPersistencia = supabaseErr.message;
+      res.status(200).json({ success: true, error: supabaseErr.message });
     }
 
-    // Resposta imediata com os IDs (mesmo se houve erro na persistência, retorna sucesso parcial)
-    res.status(200).json({
-      success: true,
-      cliente_id: clienteId,
-      solicitacao_id: solicitacaoId,
-      error: erroPersistencia || null
-    });
-
-    // Se houve erro, não continua para gerar PDF e enviar e-mails?
-    // Vamos continuar mesmo assim para não perder o envio.
     const nome = data['full_name'] || 'Cliente_Sem_Nome';
     const emailCliente = data['email-1'] || null;
 
-    // Geração do PDF
+    // Geração do PDF (mantido igual)
     const pdfBuffer = await new Promise((resolve) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
-
       doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE VISTO DS-160', { align: 'center' });
       doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
       doc.moveDown(2);
       doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
       doc.moveDown(1);
-
       let lastGroup = null;
       for (const field of simpleFields) {
         let value = data[field.name];
@@ -326,8 +306,6 @@ app.post('/api/submit-ds160', async (req, res) => {
           }
         }
       }
-
-      // Telefones anteriores
       const telefones = data['telefones_anteriores[]'] || [];
       if (telefones.length > 0) {
         if (lastGroup !== null && lastGroup !== 'telefones') drawSeparator(doc);
@@ -336,8 +314,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.6);
         lastGroup = 'telefones';
       }
-
-      // E-mails anteriores
       const emails = data['emails_anteriores[]'] || [];
       if (emails.length > 0) {
         if (lastGroup !== null && lastGroup !== 'emails') drawSeparator(doc);
@@ -346,8 +322,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.6);
         lastGroup = 'emails';
       }
-
-      // Mídias sociais
       const plataformas = data['midia_plataforma[]'] || [];
       const identificadores = data['midia_identificador[]'] || [];
       const midias = [];
@@ -363,44 +337,30 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.6);
         lastGroup = 'midias';
       }
-
-      // Acompanhantes
       const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
       if (acompanhantes.length > 0) {
         if (lastGroup !== null && lastGroup !== 'acompanhantes') drawSeparator(doc);
         doc.font('Helvetica-Bold').text('Acompanhantes:');
-        acompanhantes.forEach(acc => {
-          doc.font('Helvetica').text(`  - ${acc}`);
-        });
+        acompanhantes.forEach(acc => { doc.font('Helvetica').text(`  - ${acc}`); });
         doc.moveDown(0.6);
         lastGroup = 'acompanhantes';
       }
-
-      // Viagens anteriores aos EUA
       const viagens = groupTravels(data);
       if (viagens.length > 0) {
         if (lastGroup !== null && lastGroup !== 'previousTravel') drawSeparator(doc);
         doc.font('Helvetica-Bold').text('Viagens anteriores aos EUA:');
-        viagens.forEach(viagem => {
-          doc.font('Helvetica').text(`  - ${viagem}`);
-        });
+        viagens.forEach(viagem => { doc.font('Helvetica').text(`  - ${viagem}`); });
         doc.moveDown(0.6);
         lastGroup = 'previousTravel';
       }
-
-      // Parentes nos EUA
       const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
       if (parentes.length > 0) {
         if (lastGroup !== null && lastGroup !== 'familiares') drawSeparator(doc);
         doc.font('Helvetica-Bold').text('Parentes nos EUA:');
-        parentes.forEach(p => {
-          doc.font('Helvetica').text(`  - ${p}`);
-        });
+        parentes.forEach(p => { doc.font('Helvetica').text(`  - ${p}`); });
         doc.moveDown(0.6);
         lastGroup = 'familiares';
       }
-
-      // Idiomas adicionais
       const idiomas = data['idiomas[]'] || [];
       if (idiomas.length > 0) {
         if (lastGroup !== null && lastGroup !== 'idiomas') drawSeparator(doc);
@@ -409,8 +369,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.6);
         lastGroup = 'idiomas';
       }
-
-      // Países visitados
       const paises = data['paises_visitados[]'] || [];
       if (paises.length > 0) {
         if (lastGroup !== null && lastGroup !== 'paises') drawSeparator(doc);
@@ -419,8 +377,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.6);
         lastGroup = 'paises';
       }
-
-      // Empregos anteriores
       const empregos = [];
       const empNomes = data['emprego_anterior_nome[]'] || [];
       const empCargos = data['emprego_anterior_cargo[]'] || [];
@@ -430,36 +386,26 @@ app.post('/api/submit-ds160', async (req, res) => {
       for (let i = 0; i < maxEmp; i++) {
         if (empNomes[i] || empCargos[i]) {
           let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
-          if (empInicios[i] || empFins[i]) {
-            linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
-          }
+          if (empInicios[i] || empFins[i]) linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
           empregos.push(linha);
         }
       }
       if (empregos.length > 0) {
         if (lastGroup !== null && lastGroup !== 'empregosAnteriores') drawSeparator(doc);
         doc.font('Helvetica-Bold').text('Empregos anteriores:');
-        empregos.forEach(emp => {
-          doc.font('Helvetica').text(`  - ${emp}`);
-        });
+        empregos.forEach(emp => { doc.font('Helvetica').text(`  - ${emp}`); });
         doc.moveDown(0.6);
       }
-
       doc.moveDown(2);
       doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
       doc.end();
     });
 
-    // Envio de e-mails
     await resend.emails.send({
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
       subject: `🇺🇸 DS-160: ${nome}`,
-      html: `<strong>Formulário DS-160 recebido.</strong><br>
-             <p><strong>Cliente:</strong> ${nome}</p>
-             <p><strong>Cliente ID:</strong> ${clienteId || 'não vinculado'}</p>
-             <p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não gerado'}</p>
-             <p>PDF em anexo.</p>`,
+      html: `<strong>Formulário DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p><strong>Cliente ID:</strong> ${clienteId || 'não salvo'}</p><p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não salvo'}</p><p>PDF em anexo.</p>`,
       attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
     });
     console.log('✅ E-mail enviado para a equipe');
@@ -476,9 +422,6 @@ app.post('/api/submit-ds160', async (req, res) => {
     }
   } catch (err) {
     console.error('❌ Erro geral no DS-160:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, error: err.message });
-    }
   }
 });
 
@@ -486,12 +429,9 @@ app.post('/api/submit-ds160', async (req, res) => {
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de passaporte recebidos');
-
   try {
     let clienteId = null;
     let solicitacaoId = null;
-    let erroPersistencia = null;
-
     try {
       const { data: cliente, error: clienteError } = await supabase
         .from('clientes')
@@ -517,18 +457,12 @@ app.post('/api/submit-passaporte', async (req, res) => {
         .single();
       if (solError) throw solError;
       solicitacaoId = solicitacao.id;
-      console.log(`✅ Passaporte salvo. Cliente ID: ${clienteId}, Solicitação ID: ${solicitacaoId}`);
+      console.log(`✅ Passaporte salvo. IDs: cliente=${clienteId}, solicitacao=${solicitacaoId}`);
+      res.status(200).json({ success: true, cliente_id: clienteId, solicitacao_id: solicitacaoId });
     } catch (supabaseErr) {
       console.error('⚠️ Erro ao salvar passaporte:', supabaseErr.message);
-      erroPersistencia = supabaseErr.message;
+      res.status(200).json({ success: true, error: supabaseErr.message });
     }
-
-    res.status(200).json({
-      success: true,
-      cliente_id: clienteId,
-      solicitacao_id: solicitacaoId,
-      error: erroPersistencia || null
-    });
 
     const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
     const emailCliente = data['passaporte_email'] || null;
@@ -544,53 +478,31 @@ app.post('/api/submit-passaporte', async (req, res) => {
       doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
       doc.moveDown(1);
       const fields = [
-        { label: 'Nome completo', name: 'passaporte_nome' },
-        { label: 'Sexo', name: 'passaporte_sexo' },
-        { label: 'Data de nascimento', name: 'passaporte_data_nasc' },
-        { label: 'Raça/Cor', name: 'passaporte_raca' },
-        { label: 'Estado civil', name: 'passaporte_estado_civil' },
-        { label: 'País de nascimento', name: 'passaporte_pais_nasc' },
-        { label: 'UF de nascimento', name: 'passaporte_uf_nasc' },
-        { label: 'Cidade de nascimento', name: 'passaporte_cidade_nasc' },
-        { label: 'Alteração de nome?', name: 'passaporte_alterou_nome' },
-        { label: 'Nome(s) anterior(es)', name: 'passaporte_nome_anterior' },
-        { label: 'Tipo de documento', name: 'passaporte_tipo_doc' },
-        { label: 'Número do documento', name: 'passaporte_numero_doc' },
-        { label: 'Data de emissão do documento', name: 'passaporte_data_emissao_doc' },
-        { label: 'Órgão emissor e UF', name: 'passaporte_orgao_emissor' },
-        { label: 'CPF', name: 'passaporte_cpf' },
-        { label: 'Possui certidão?', name: 'passaporte_certidao' },
-        { label: 'Certidão - Número da matrícula', name: 'passaporte_certidao_numero' },
-        { label: 'Certidão - Cartório', name: 'passaporte_certidao_cartorio' },
-        { label: 'Certidão - Livro', name: 'passaporte_certidao_livro' },
-        { label: 'Certidão - Folha', name: 'passaporte_certidao_folha' },
-        { label: 'Profissão', name: 'passaporte_profissao' },
-        { label: 'E-mail', name: 'passaporte_email' },
-        { label: 'Telefone de contato', name: 'passaporte_telefone' },
-        { label: 'Endereço residencial', name: 'passaporte_endereco' },
-        { label: 'Cidade', name: 'passaporte_cidade' },
-        { label: 'UF', name: 'passaporte_uf' },
-        { label: 'CEP', name: 'passaporte_cep' },
-        { label: 'Possui título de eleitor?', name: 'passaporte_titulo_eleitor' },
-        { label: 'Título - Número', name: 'passaporte_titulo_numero' },
-        { label: 'Título - Zona', name: 'passaporte_titulo_zona' },
-        { label: 'Título - Seção', name: 'passaporte_titulo_secao' },
-        { label: 'Situação militar', name: 'passaporte_situacao_militar' },
-        { label: 'Certificado de reservista', name: 'passaporte_reservista_numero' },
-        { label: 'Situação do passaporte anterior', name: 'passaporte_situacao' },
-        { label: 'Número do passaporte anterior', name: 'passaporte_anterior_numero' },
-        { label: 'Data de expedição anterior', name: 'passaporte_anterior_data_exp' },
+        { label: 'Nome completo', name: 'passaporte_nome' }, { label: 'Sexo', name: 'passaporte_sexo' },
+        { label: 'Data de nascimento', name: 'passaporte_data_nasc' }, { label: 'Raça/Cor', name: 'passaporte_raca' },
+        { label: 'Estado civil', name: 'passaporte_estado_civil' }, { label: 'País de nascimento', name: 'passaporte_pais_nasc' },
+        { label: 'UF de nascimento', name: 'passaporte_uf_nasc' }, { label: 'Cidade de nascimento', name: 'passaporte_cidade_nasc' },
+        { label: 'Alteração de nome?', name: 'passaporte_alterou_nome' }, { label: 'Nome(s) anterior(es)', name: 'passaporte_nome_anterior' },
+        { label: 'Tipo de documento', name: 'passaporte_tipo_doc' }, { label: 'Número do documento', name: 'passaporte_numero_doc' },
+        { label: 'Data de emissão do documento', name: 'passaporte_data_emissao_doc' }, { label: 'Órgão emissor e UF', name: 'passaporte_orgao_emissor' },
+        { label: 'CPF', name: 'passaporte_cpf' }, { label: 'Possui certidão?', name: 'passaporte_certidao' },
+        { label: 'Certidão - Número da matrícula', name: 'passaporte_certidao_numero' }, { label: 'Certidão - Cartório', name: 'passaporte_certidao_cartorio' },
+        { label: 'Certidão - Livro', name: 'passaporte_certidao_livro' }, { label: 'Certidão - Folha', name: 'passaporte_certidao_folha' },
+        { label: 'Profissão', name: 'passaporte_profissao' }, { label: 'E-mail', name: 'passaporte_email' },
+        { label: 'Telefone de contato', name: 'passaporte_telefone' }, { label: 'Endereço residencial', name: 'passaporte_endereco' },
+        { label: 'Cidade', name: 'passaporte_cidade' }, { label: 'UF', name: 'passaporte_uf' },
+        { label: 'CEP', name: 'passaporte_cep' }, { label: 'Possui título de eleitor?', name: 'passaporte_titulo_eleitor' },
+        { label: 'Título - Número', name: 'passaporte_titulo_numero' }, { label: 'Título - Zona', name: 'passaporte_titulo_zona' },
+        { label: 'Título - Seção', name: 'passaporte_titulo_secao' }, { label: 'Situação militar', name: 'passaporte_situacao_militar' },
+        { label: 'Certificado de reservista', name: 'passaporte_reservista_numero' }, { label: 'Situação do passaporte anterior', name: 'passaporte_situacao' },
+        { label: 'Número do passaporte anterior', name: 'passaporte_anterior_numero' }, { label: 'Data de expedição anterior', name: 'passaporte_anterior_data_exp' },
         { label: 'Data de validade anterior', name: 'passaporte_anterior_validade' }
       ];
       let lastGroup = null;
       for (const field of fields) {
         let value = data[field.name];
         if (value && value !== '') {
-          if (lastGroup !== null) {
-            doc.moveDown(0.3);
-            doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-            doc.moveDown(0.3);
-          }
+          if (lastGroup !== null) { doc.moveDown(0.3); doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke(); doc.moveDown(0.3); }
           doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
           doc.font('Helvetica').text(value);
           doc.moveDown(0.6);
@@ -606,11 +518,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
       subject: `📘 Passaporte: ${nome}`,
-      html: `<strong>Solicitação de passaporte recebida.</strong><br>
-             <p><strong>Cliente:</strong> ${nome}</p>
-             <p><strong>Cliente ID:</strong> ${clienteId || 'não vinculado'}</p>
-             <p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não gerado'}</p>
-             <p>PDF em anexo.</p>`,
+      html: `<strong>Solicitação de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p><strong>Cliente ID:</strong> ${clienteId || 'não salvo'}</p><p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não salvo'}</p><p>PDF em anexo.</p>`,
       attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
     });
     console.log('✅ E-mail enviado para a equipe (passaporte)');
@@ -627,26 +535,18 @@ app.post('/api/submit-passaporte', async (req, res) => {
     }
   } catch (err) {
     console.error('❌ Erro no processamento do passaporte:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, error: err.message });
-    }
   }
 });
 
 // ==================== PROTEÇÃO DA AGENDA ====================
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'minha-chave-secreta-123';
-
 function validateApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'];
-  if (!apiKey || apiKey !== ADMIN_API_KEY) {
-    return res.status(403).json({ error: 'Acesso negado' });
-  }
+  if (!apiKey || apiKey !== ADMIN_API_KEY) return res.status(403).json({ error: 'Acesso negado' });
   next();
 }
 
-// ==================== ENDPOINTS DE AGENDA (PROTEGIDOS) ====================
-
-// Listar agendamentos (tabela agendamentos)
+// ==================== ENDPOINTS DE AGENDA ====================
 app.get('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id } = req.query;
   let query = supabase.from('agendamentos').select('*');
@@ -656,108 +556,62 @@ app.get('/api/agendamentos', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// Criar novo agendamento
 app.post('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
-  if (!solicitacao_id || !tipo || !data_hora) {
-    return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
-  }
-  const { data, error } = await supabase
-    .from('agendamentos')
-    .insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' })
-    .select()
-    .single();
+  if (!solicitacao_id || !tipo || !data_hora) return res.status(400).json({ error: 'Campos obrigatórios' });
+  const { data, error } = await supabase.from('agendamentos').insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
 });
 
-// Atualizar agendamento
 app.put('/api/agendamentos/:id', validateApiKey, async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
-  delete updates.id;
-  delete updates.created_at;
-  const { data, error } = await supabase
-    .from('agendamentos')
-    .update({ ...updates, updated_at: new Date() })
-    .eq('id', id)
-    .select()
-    .single();
+  delete updates.id; delete updates.created_at;
+  const { data, error } = await supabase.from('agendamentos').update({ ...updates, updated_at: new Date() }).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// Deletar agendamento
 app.delete('/api/agendamentos/:id', validateApiKey, async (req, res) => {
-  const { error } = await supabase
-    .from('agendamentos')
-    .delete()
-    .eq('id', req.params.id);
+  const { error } = await supabase.from('agendamentos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
 
-// Listar solicitações (dropdown)
 app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
-  const { data, error } = await supabase
-    .from('solicitacoes')
-    .select('id, tipo, clientes(nome_completo, email)')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('solicitacoes').select('id, tipo, clientes(nome_completo, email)').order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// ==================== ENDPOINTS PARA TABELA COMPROMISSOS ====================
-
-// GET /api/compromissos - listar todos
+// ==================== ENDPOINTS COMPROMISSOS ====================
 app.get('/api/compromissos', validateApiKey, async (req, res) => {
-  const { data, error } = await supabase
-    .from('compromissos')
-    .select('*')
-    .order('data', { ascending: true })
-    .order('hora', { ascending: true });
+  const { data, error } = await supabase.from('compromissos').select('*').order('data', { ascending: true }).order('hora', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// POST /api/compromissos - criar novo (manual via calendário)
 app.post('/api/compromissos', validateApiKey, async (req, res) => {
   const { cliente, atividade, data, hora, local, concluido } = req.body;
-  if (!cliente || !atividade || !data || !hora) {
-    return res.status(400).json({ error: 'Cliente, atividade, data e hora são obrigatórios' });
-  }
-  const { data: inserted, error } = await supabase
-    .from('compromissos')
-    .insert({ cliente, atividade, data, hora, local, concluido: concluido || 0 })
-    .select()
-    .single();
+  if (!cliente || !atividade || !data || !hora) return res.status(400).json({ error: 'Cliente, atividade, data e hora são obrigatórios' });
+  const { data: inserted, error } = await supabase.from('compromissos').insert({ cliente, atividade, data, hora, local, concluido: concluido || 0 }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(inserted);
 });
 
-// PUT /api/compromissos/:id - atualizar (concluido, data, hora, local)
 app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
-  const { data, error } = await supabase
-    .from('compromissos')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await supabase.from('compromissos').update(updates).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// DELETE /api/compromissos/:id - excluir
 app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
-  const { error } = await supabase
-    .from('compromissos')
-    .delete()
-    .eq('id', req.params.id);
+  const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
 
-// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
