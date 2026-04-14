@@ -671,6 +671,16 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
 
 // Listar solicitações (para dropdown)
 app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
+    const { data, error } = await supabase
+        .from('solicitacoes')
+        .select('id, tipo, clientes(nome_completo, email)')
+        .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+});
+
+// Listar solicitações (para dropdown)
+app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   const { data, error } = await supabase
     .from('solicitacoes')
     .select('id, tipo, clientes(nome_completo, email)')
