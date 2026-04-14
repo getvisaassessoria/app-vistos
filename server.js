@@ -610,53 +610,63 @@ function validateApiKey(req, res, next) {
 
 // Listar agendamentos
 app.get('/api/agendamentos', validateApiKey, async (req, res) => {
-    const { solicitacao_id } = req.query;
-    let query = supabase.from('agendamentos').select('*');
-    if (solicitacao_id) query = query.eq('solicitacao_id', solicitacao_id);
-    const { data, error } = await query.order('data_hora', { ascending: true });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+  const { solicitacao_id } = req.query;
+  let query = supabase.from('agendamentos').select('*');
+  if (solicitacao_id) query = query.eq('solicitacao_id', solicitacao_id);
+  const { data, error } = await query.order('data_hora', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // Criar novo agendamento
 app.post('/api/agendamentos', validateApiKey, async (req, res) => {
-    const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
-    if (!solicitacao_id || !tipo || !data_hora) {
-        return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
-    }
-    const { data, error } = await supabase
-        .from('agendamentos')
-        .insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' })
-        .select()
-        .single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(201).json(data);
+  const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
+  if (!solicitacao_id || !tipo || !data_hora) {
+    return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
+  }
+  const { data, error } = await supabase
+    .from('agendamentos')
+    .insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
 });
 
 // Atualizar agendamento
 app.put('/api/agendamentos/:id', validateApiKey, async (req, res) => {
-    const { id } = req.params;
-    const updates = req.body;
-    delete updates.id;
-    delete updates.created_at;
-    const { data, error } = await supabase
-        .from('agendamentos')
-        .update({ ...updates, updated_at: new Date() })
-        .eq('id', id)
-        .select()
-        .single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+  const { id } = req.params;
+  const updates = req.body;
+  delete updates.id;
+  delete updates.created_at;
+  const { data, error } = await supabase
+    .from('agendamentos')
+    .update({ ...updates, updated_at: new Date() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // Deletar agendamento
 app.delete('/api/agendamentos/:id', validateApiKey, async (req, res) => {
-    const { error } = await supabase
-        .from('agendamentos')
-        .delete()
-        .eq('id', req.params.id);
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(204).send();
+  const { error } = await supabase
+    .from('agendamentos')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
+// Listar solicitações (para dropdown no painel)
+app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
+  const { data, error } = await supabase
+    .from('solicitacoes')
+    .select('id, tipo, clientes(nome_completo, email)')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // Listar solicitações (para dropdown)
