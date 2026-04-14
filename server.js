@@ -249,11 +249,12 @@ const simpleFields = [
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos (DS-160)');
-  res.status(200).json({ success: true });
 
   try {
-    // Persistência Supabase
+    let clienteId = null;
     let solicitacaoId = null;
+    let erroPersistencia = null;
+
     try {
       const { data: cliente, error: clienteError } = await supabase
         .from('clientes')
@@ -265,6 +266,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         .select()
         .single();
       if (clienteError) throw clienteError;
+      clienteId = cliente.id;
 
       const { data: solicitacao, error: solError } = await supabase
         .from('solicitacoes')
@@ -278,11 +280,22 @@ app.post('/api/submit-ds160', async (req, res) => {
         .single();
       if (solError) throw solError;
       solicitacaoId = solicitacao.id;
-      console.log(`✅ DS-160 salvo. ID: ${solicitacaoId}`);
+      console.log(`✅ DS-160 salvo. Cliente ID: ${clienteId}, Solicitação ID: ${solicitacaoId}`);
     } catch (supabaseErr) {
       console.error('⚠️ Erro ao salvar no Supabase:', supabaseErr.message);
+      erroPersistencia = supabaseErr.message;
     }
 
+    // Resposta imediata com os IDs (mesmo se houve erro na persistência, retorna sucesso parcial)
+    res.status(200).json({
+      success: true,
+      cliente_id: clienteId,
+      solicitacao_id: solicitacaoId,
+      error: erroPersistencia || null
+    });
+
+    // Se houve erro, não continua para gerar PDF e enviar e-mails?
+    // Vamos continuar mesmo assim para não perder o envio.
     const nome = data['full_name'] || 'Cliente_Sem_Nome';
     const emailCliente = data['email-1'] || null;
 
@@ -442,7 +455,11 @@ app.post('/api/submit-ds160', async (req, res) => {
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
       subject: `🇺🇸 DS-160: ${nome}`,
-      html: `<strong>Formulário DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
+      html: `<strong>Formulário DS-160 recebido.</strong><br>
+             <p><strong>Cliente:</strong> ${nome}</p>
+             <p><strong>Cliente ID:</strong> ${clienteId || 'não vinculado'}</p>
+             <p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não gerado'}</p>
+             <p>PDF em anexo.</p>`,
       attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
     });
     console.log('✅ E-mail enviado para a equipe');
@@ -459,6 +476,9 @@ app.post('/api/submit-ds160', async (req, res) => {
     }
   } catch (err) {
     console.error('❌ Erro geral no DS-160:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 });
 
@@ -466,10 +486,12 @@ app.post('/api/submit-ds160', async (req, res) => {
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de passaporte recebidos');
-  res.status(200).json({ success: true });
 
   try {
+    let clienteId = null;
     let solicitacaoId = null;
+    let erroPersistencia = null;
+
     try {
       const { data: cliente, error: clienteError } = await supabase
         .from('clientes')
@@ -481,6 +503,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
         .select()
         .single();
       if (clienteError) throw clienteError;
+      clienteId = cliente.id;
 
       const { data: solicitacao, error: solError } = await supabase
         .from('solicitacoes')
@@ -494,10 +517,18 @@ app.post('/api/submit-passaporte', async (req, res) => {
         .single();
       if (solError) throw solError;
       solicitacaoId = solicitacao.id;
-      console.log(`✅ Passaporte salvo. ID: ${solicitacaoId}`);
+      console.log(`✅ Passaporte salvo. Cliente ID: ${clienteId}, Solicitação ID: ${solicitacaoId}`);
     } catch (supabaseErr) {
       console.error('⚠️ Erro ao salvar passaporte:', supabaseErr.message);
+      erroPersistencia = supabaseErr.message;
     }
+
+    res.status(200).json({
+      success: true,
+      cliente_id: clienteId,
+      solicitacao_id: solicitacaoId,
+      error: erroPersistencia || null
+    });
 
     const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
     const emailCliente = data['passaporte_email'] || null;
@@ -575,7 +606,11 @@ app.post('/api/submit-passaporte', async (req, res) => {
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
       subject: `📘 Passaporte: ${nome}`,
-      html: `<strong>Solicitação de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
+      html: `<strong>Solicitação de passaporte recebida.</strong><br>
+             <p><strong>Cliente:</strong> ${nome}</p>
+             <p><strong>Cliente ID:</strong> ${clienteId || 'não vinculado'}</p>
+             <p><strong>Solicitação ID:</strong> ${solicitacaoId || 'não gerado'}</p>
+             <p>PDF em anexo.</p>`,
       attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
     });
     console.log('✅ E-mail enviado para a equipe (passaporte)');
@@ -592,6 +627,9 @@ app.post('/api/submit-passaporte', async (req, res) => {
     }
   } catch (err) {
     console.error('❌ Erro no processamento do passaporte:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 });
 
@@ -599,16 +637,16 @@ app.post('/api/submit-passaporte', async (req, res) => {
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'minha-chave-secreta-123';
 
 function validateApiKey(req, res, next) {
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) {
-        return res.status(403).json({ error: 'Acesso negado' });
-    }
-    next();
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== ADMIN_API_KEY) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  next();
 }
 
 // ==================== ENDPOINTS DE AGENDA (PROTEGIDOS) ====================
 
-// Listar agendamentos
+// Listar agendamentos (tabela agendamentos)
 app.get('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id } = req.query;
   let query = supabase.from('agendamentos').select('*');
@@ -659,7 +697,7 @@ app.delete('/api/agendamentos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
-// Listar solicitações (para dropdown no painel)
+// Listar solicitações (dropdown)
 app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   const { data, error } = await supabase
     .from('solicitacoes')
@@ -669,46 +707,20 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// Listar solicitações (para dropdown)
-app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
-    const { data, error } = await supabase
-        .from('solicitacoes')
-        .select('id, tipo, clientes(nome_completo, email)')
-        .order('created_at', { ascending: false });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-});
-
-// Listar solicitações (para dropdown)
-app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
-    const { data, error } = await supabase
-        .from('solicitacoes')
-        .select('id, tipo, clientes(nome_completo, email)')
-        .order('created_at', { ascending: false });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-});
-
-// Listar solicitações (para dropdown)
-app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
-  const { data, error } = await supabase
-    .from('solicitacoes')
-    .select('id, tipo, clientes(nome_completo, email)')
-    .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// Iniciar servidor
+// ==================== ENDPOINTS PARA TABELA COMPROMISSOS ====================
 
 // GET /api/compromissos - listar todos
 app.get('/api/compromissos', validateApiKey, async (req, res) => {
-  const { data, error } = await supabase.from('compromissos').select('*').order('data', { ascending: true }).order('hora', { ascending: true });
+  const { data, error } = await supabase
+    .from('compromissos')
+    .select('*')
+    .order('data', { ascending: true })
+    .order('hora', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// POST /api/compromissos - criar novo (para criação manual via calendário)
+// POST /api/compromissos - criar novo (manual via calendário)
 app.post('/api/compromissos', validateApiKey, async (req, res) => {
   const { cliente, atividade, data, hora, local, concluido } = req.body;
   if (!cliente || !atividade || !data || !hora) {
@@ -739,10 +751,13 @@ app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
 
 // DELETE /api/compromissos/:id - excluir
 app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
-  const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
+  const { error } = await supabase
+    .from('compromissos')
+    .delete()
+    .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
 
+// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
-
