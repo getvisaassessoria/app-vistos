@@ -18,7 +18,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ==================== Mapeamentos e funções auxiliares (inalterados) ====================
+// ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
 const radioMapping = {
   'one': 'Sim',
   'two': 'Não',
@@ -99,8 +99,13 @@ function groupTravels(data) {
   return result;
 }
 
-const simpleFields = [
+function drawSeparator(doc) {
+  doc.moveDown(0.5);
+  doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+  doc.moveDown(0.5);
+}
 
+const simpleFields = [
   { name: 'consulado_cidade', label: 'Cidade do Consulado', group: 'iniciais' },
   { name: 'radio-26', label: 'Indicado por agência/agente?', group: 'iniciais' },
   { name: 'text-1', label: 'Nome da agência/agente', group: 'iniciais' },
@@ -240,27 +245,16 @@ const simpleFields = [
   { name: 'radio-20', label: 'Viajou para outros países?', group: 'paises' }
 ];
 
-
-// ATENÇÃO: Você precisa copiar o array `simpleFields` completo do seu código original (o que eu havia mostrado antes).
-// Ele é enorme, por isso não o repliquei aqui. Por favor, mantenha o seu.
-
-function drawSeparator(doc) {
-  doc.moveDown(0.5);
-  doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-  doc.moveDown(0.5);
-}
-
-// ==================== ROTA DS-160 COM PERSISTÊNCIA ====================
+// ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos (DS-160)');
   res.status(200).json({ success: true });
 
   try {
-    // ----- PERSISTÊNCIA NO SUPABASE -----
+    // Persistência Supabase
     let solicitacaoId = null;
     try {
-      // 1. Upsert cliente
       const { data: cliente, error: clienteError } = await supabase
         .from('clientes')
         .upsert({
@@ -270,10 +264,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         }, { onConflict: 'email' })
         .select()
         .single();
-
       if (clienteError) throw clienteError;
 
-      // 2. Inserir solicitação
       const { data: solicitacao, error: solError } = await supabase
         .from('solicitacoes')
         .insert({
@@ -284,20 +276,17 @@ app.post('/api/submit-ds160', async (req, res) => {
         })
         .select()
         .single();
-
       if (solError) throw solError;
-
       solicitacaoId = solicitacao.id;
-      console.log(`✅ DS-160 salvo no Supabase. Solicitação ID: ${solicitacaoId}`);
+      console.log(`✅ DS-160 salvo. ID: ${solicitacaoId}`);
     } catch (supabaseErr) {
-      console.error('⚠️ Erro ao salvar no Supabase (mas o envio de e-mail continua):', supabaseErr.message);
+      console.error('⚠️ Erro ao salvar no Supabase:', supabaseErr.message);
     }
-    // -----------------------------------
 
     const nome = data['full_name'] || 'Cliente_Sem_Nome';
     const emailCliente = data['email-1'] || null;
 
-    // Geração do PDF (mesmo código original)
+    // Geração do PDF
     const pdfBuffer = await new Promise((resolve) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
@@ -324,15 +313,131 @@ app.post('/api/submit-ds160', async (req, res) => {
           }
         }
       }
-      // ... (todo o resto da geração do PDF, igual ao original)
-      // Por brevidade, estou omitindo as seções de telefones, emails, etc., mas você deve mantê-las.
-      // O código original é muito longo; sugiro que você copie a parte do PDF do seu arquivo atual.
+
+      // Telefones anteriores
+      const telefones = data['telefones_anteriores[]'] || [];
+      if (telefones.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'telefones') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Telefones anteriores: ', { continued: true });
+        doc.font('Helvetica').text(telefones.join(', '));
+        doc.moveDown(0.6);
+        lastGroup = 'telefones';
+      }
+
+      // E-mails anteriores
+      const emails = data['emails_anteriores[]'] || [];
+      if (emails.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'emails') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('E-mails anteriores: ', { continued: true });
+        doc.font('Helvetica').text(emails.join(', '));
+        doc.moveDown(0.6);
+        lastGroup = 'emails';
+      }
+
+      // Mídias sociais
+      const plataformas = data['midia_plataforma[]'] || [];
+      const identificadores = data['midia_identificador[]'] || [];
+      const midias = [];
+      for (let i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
+        if (plataformas[i] || identificadores[i]) {
+          midias.push(`${plataformas[i] || ''}${plataformas[i] && identificadores[i] ? ': ' : ''}${identificadores[i] || ''}`);
+        }
+      }
+      if (midias.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'midias') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Mídias sociais: ', { continued: true });
+        doc.font('Helvetica').text(midias.join('; '));
+        doc.moveDown(0.6);
+        lastGroup = 'midias';
+      }
+
+      // Acompanhantes
+      const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
+      if (acompanhantes.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'acompanhantes') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Acompanhantes:');
+        acompanhantes.forEach(acc => {
+          doc.font('Helvetica').text(`  - ${acc}`);
+        });
+        doc.moveDown(0.6);
+        lastGroup = 'acompanhantes';
+      }
+
+      // Viagens anteriores aos EUA
+      const viagens = groupTravels(data);
+      if (viagens.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'previousTravel') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Viagens anteriores aos EUA:');
+        viagens.forEach(viagem => {
+          doc.font('Helvetica').text(`  - ${viagem}`);
+        });
+        doc.moveDown(0.6);
+        lastGroup = 'previousTravel';
+      }
+
+      // Parentes nos EUA
+      const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
+      if (parentes.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'familiares') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Parentes nos EUA:');
+        parentes.forEach(p => {
+          doc.font('Helvetica').text(`  - ${p}`);
+        });
+        doc.moveDown(0.6);
+        lastGroup = 'familiares';
+      }
+
+      // Idiomas adicionais
+      const idiomas = data['idiomas[]'] || [];
+      if (idiomas.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'idiomas') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Outros idiomas: ', { continued: true });
+        doc.font('Helvetica').text(idiomas.join(', '));
+        doc.moveDown(0.6);
+        lastGroup = 'idiomas';
+      }
+
+      // Países visitados
+      const paises = data['paises_visitados[]'] || [];
+      if (paises.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'paises') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Países visitados (últimos 5 anos): ', { continued: true });
+        doc.font('Helvetica').text(paises.join(', '));
+        doc.moveDown(0.6);
+        lastGroup = 'paises';
+      }
+
+      // Empregos anteriores
+      const empregos = [];
+      const empNomes = data['emprego_anterior_nome[]'] || [];
+      const empCargos = data['emprego_anterior_cargo[]'] || [];
+      const empInicios = data['emprego_anterior_inicio[]'] || [];
+      const empFins = data['emprego_anterior_fim[]'] || [];
+      const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
+      for (let i = 0; i < maxEmp; i++) {
+        if (empNomes[i] || empCargos[i]) {
+          let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
+          if (empInicios[i] || empFins[i]) {
+            linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
+          }
+          empregos.push(linha);
+        }
+      }
+      if (empregos.length > 0) {
+        if (lastGroup !== null && lastGroup !== 'empregosAnteriores') drawSeparator(doc);
+        doc.font('Helvetica-Bold').text('Empregos anteriores:');
+        empregos.forEach(emp => {
+          doc.font('Helvetica').text(`  - ${emp}`);
+        });
+        doc.moveDown(0.6);
+      }
+
       doc.moveDown(2);
       doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
       doc.end();
     });
 
-    // Envio de e-mails (original)
+    // Envio de e-mails
     await resend.emails.send({
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
@@ -357,14 +462,13 @@ app.post('/api/submit-ds160', async (req, res) => {
   }
 });
 
-// ==================== ROTA PASSAPORTE COM PERSISTÊNCIA ====================
+// ==================== ROTA PASSAPORTE ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de passaporte recebidos');
   res.status(200).json({ success: true });
 
   try {
-    // Persistência no Supabase
     let solicitacaoId = null;
     try {
       const { data: cliente, error: clienteError } = await supabase
@@ -390,15 +494,14 @@ app.post('/api/submit-passaporte', async (req, res) => {
         .single();
       if (solError) throw solError;
       solicitacaoId = solicitacao.id;
-      console.log(`✅ Passaporte salvo no Supabase. Solicitação ID: ${solicitacaoId}`);
+      console.log(`✅ Passaporte salvo. ID: ${solicitacaoId}`);
     } catch (supabaseErr) {
-      console.error('⚠️ Erro ao salvar passaporte no Supabase (mas e-mail continua):', supabaseErr.message);
+      console.error('⚠️ Erro ao salvar passaporte:', supabaseErr.message);
     }
 
     const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
     const emailCliente = data['passaporte_email'] || null;
 
-    // Geração do PDF (igual ao original)
     const pdfBuffer = await new Promise((resolve) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
@@ -468,7 +571,6 @@ app.post('/api/submit-passaporte', async (req, res) => {
       doc.end();
     });
 
-    // Envio de e-mails (original)
     await resend.emails.send({
       from: 'GetVisa <contato@getvisa.com.br>',
       to: ['getvisa.assessoria@gmail.com'],
@@ -493,60 +595,82 @@ app.post('/api/submit-passaporte', async (req, res) => {
   }
 });
 
-// ==================== ENDPOINTS DE AGENDA ====================
-// Listar agendamentos (opcional: filtrar por solicitacao_id)
-app.get('/api/agendamentos', async (req, res) => {
-  const { solicitacao_id } = req.query;
-  let query = supabase.from('agendamentos').select('*');
-  if (solicitacao_id) query = query.eq('solicitacao_id', solicitacao_id);
-  const { data, error } = await query.order('data_hora', { ascending: true });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+// ==================== PROTEÇÃO DA AGENDA ====================
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'minha-chave-secreta-123';
+
+function validateApiKey(req, res, next) {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== ADMIN_API_KEY) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    next();
+}
+
+// ==================== ENDPOINTS DE AGENDA (PROTEGIDOS) ====================
+
+// Listar agendamentos
+app.get('/api/agendamentos', validateApiKey, async (req, res) => {
+    const { solicitacao_id } = req.query;
+    let query = supabase.from('agendamentos').select('*');
+    if (solicitacao_id) query = query.eq('solicitacao_id', solicitacao_id);
+    const { data, error } = await query.order('data_hora', { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
 });
 
 // Criar novo agendamento
-app.post('/api/agendamentos', async (req, res) => {
-  const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
-  if (!solicitacao_id || !tipo || !data_hora) {
-    return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
-  }
-  const { data, error } = await supabase
-    .from('agendamentos')
-    .insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' })
-    .select()
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json(data);
+app.post('/api/agendamentos', validateApiKey, async (req, res) => {
+    const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
+    if (!solicitacao_id || !tipo || !data_hora) {
+        return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
+    }
+    const { data, error } = await supabase
+        .from('agendamentos')
+        .insert({ solicitacao_id, tipo, data_hora, local, observacoes, status: 'agendado' })
+        .select()
+        .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json(data);
 });
 
 // Atualizar agendamento
-app.put('/api/agendamentos/:id', async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  delete updates.id;
-  delete updates.created_at;
-  const { data, error } = await supabase
-    .from('agendamentos')
-    .update({ ...updates, updated_at: new Date() })
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+app.put('/api/agendamentos/:id', validateApiKey, async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    delete updates.id;
+    delete updates.created_at;
+    const { data, error } = await supabase
+        .from('agendamentos')
+        .update({ ...updates, updated_at: new Date() })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
 });
 
 // Deletar agendamento
-app.delete('/api/agendamentos/:id', async (req, res) => {
-  const { error } = await supabase
-    .from('agendamentos')
-    .delete()
-    .eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(204).send();
+app.delete('/api/agendamentos/:id', validateApiKey, async (req, res) => {
+    const { error } = await supabase
+        .from('agendamentos')
+        .delete()
+        .eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(204).send();
 });
 
-// Listar solicitações (para popular dropdown no painel)
-app.get('/api/solicitacoes', async (req, res) => {
+// Listar solicitações (para dropdown)
+app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
+    const { data, error } = await supabase
+        .from('solicitacoes')
+        .select('id, tipo, clientes(nome_completo, email)')
+        .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+});
+
+// Listar solicitações (para dropdown)
+app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   const { data, error } = await supabase
     .from('solicitacoes')
     .select('id, tipo, clientes(nome_completo, email)')
