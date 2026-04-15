@@ -119,6 +119,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
 });
 
 // ==================== ROTA VISTO NEGADO (CORRIGIDA) ====================
+// ==================== ROTA VISTO NEGADO (COM RESULTADO NO E-MAIL) ====================
 app.post('/api/submit-visto-negado', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de Visto Negado recebidos:', data);
@@ -238,45 +239,6 @@ app.post('/api/submit-visto-negado', async (req, res) => {
     }
   } catch (err) {
     console.error('❌ Erro no processamento do visto negado:', err);
-  }
-});
-    
-    // Envio do e-mail com anexo
-    console.log('📧 Enviando e-mail via Resend...');
-    try {
-      const emailResult = await resend.emails.send({
-        from: 'GetVisa <contato@getvisa.com.br>',
-        to: ['getvisa.assessoria@gmail.com'],
-        subject: `⚠️ Visto Negado: ${nome}`,
-        html: `<strong>Avaliação de visto negado recebida.</strong><br>
-               <p><strong>Cliente:</strong> ${nome}</p>
-               <p><strong>E-mail:</strong> ${data['email'] || 'não informado'}</p>
-               <p><strong>Telefone:</strong> ${data['telefone'] || 'não informado'}</p>
-               <p>PDF em anexo.</p>`,
-        attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
-      });
-      console.log('✅ E-mail enviado para equipe, ID:', emailResult?.id);
-    } catch (emailErr) {
-      console.error('❌ Erro ao enviar e-mail para equipe:', emailErr);
-    }
-    
-    if (emailCliente && emailCliente.trim() !== '') {
-      try {
-        await resend.emails.send({
-          from: 'GetVisa <contato@getvisa.com.br>',
-          to: [emailCliente],
-          subject: `Recebemos sua avaliação de visto negado - ${nome}`,
-          html: `<strong>Olá ${nome},</strong><br>
-                 <p>Recebemos sua solicitação... Segue em anexo uma cópia.</p>`,
-          attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer }]
-        });
-        console.log(`✅ E-mail enviado para cliente: ${emailCliente}`);
-      } catch (err) {
-        console.error(`❌ Erro ao enviar e-mail para cliente:`, err);
-      }
-    }
-  } catch (err) {
-    console.error('❌ Erro geral no processamento do visto negado:', err);
   }
 });
 
