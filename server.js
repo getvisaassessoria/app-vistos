@@ -275,9 +275,26 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   res.json([]);
 });
 
-app.get('/api/compromissos', validateApiKey, async (req, res) => {
+/* app.get('/api/compromissos', validateApiKey, async (req, res) => {
   // ... mantenha o código original ...
   res.json([]);
+});*/
+
+app.get('/api/compromissos', validateApiKey, async (req, res) => {
+  console.log('📥 Consulta recebida em /api/compromissos');
+  console.log('🔗 SUPABASE_URL:', process.env.SUPABASE_URL);
+  try {
+    const { data, error } = await supabase.from('compromissos').select('*');
+    console.log('📊 Dados retornados:', data?.length || 0);
+    if (error) {
+      console.error('❌ Erro do Supabase:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('❌ Erro inesperado:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/compromissos', validateApiKey, async (req, res) => {
