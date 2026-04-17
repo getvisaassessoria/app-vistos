@@ -291,5 +291,70 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
+// ==================== CRIAÇÃO DE COMPROMISSO (SEM AUTENTICAÇÃO) ====================
+app.post('/api/compromissos', async (req, res) => {
+  const { nome, email, telefone, atividade, data, hora, local, concluido } = req.body;
+
+  if (!email || !atividade || !data || !hora) {
+    return res.status(400).json({ error: 'Campos obrigatórios: email, atividade, data, hora' });
+  }
+
+  try {
+    // 1. Buscar cliente pelo e-mail
+    let cliente = await supabase
+      .from('clientes')
+      .select('id, nome_completo, email, telefone')
+      .eq('email', email)
+      .maybeSingle();
+
+    // 2. Se não existir, criar cliente
+    if (!cliente) {
+      const { data: novoCliente, error: insertError } = await supabase
+        .from('clientes')
+        .insert({
+          nome_completo: nome || 'Cliente sem nome',
+          email: email,
+          telefone: telefone || null
+        })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+      cliente = novoCliente;
+      console.log(`✅ Cliente criado: ${cliente.id}`);
+    } else {
+      // Atualiza dados se necessário
+      const updates = {};
+      if (nome && nome !== cliente.nome_completo) updates.nome_completo = nome;
+      if (telefone && telefone !== cliente.telefone) updates.telefone = telefone;
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('clientes').update(updates).eq('id', cliente.id);
+        console.log(`🔄 Cliente atualizado: ${cliente.id}`);
+      }
+    }
+
+    // 3. Criar compromisso vinculado
+    const { data: compromisso, error: compError } = await supabase
+      .from('compromissos')
+      .insert({
+        cliente_id: cliente.id,
+        cliente: `${cliente.nome_completo} (${cliente.telefone || ''})`,
+        atividade: atividade,
+        data: data,
+        hora: hora,
+        local: local || null,
+        concluido: concluido || 0
+      })
+      .select()
+      .single();
+
+    if (compError) throw compError;
+
+    res.status(201).json({ success: true, compromisso, cliente });
+  } catch (err) {
+    console.error('❌ Erro ao criar compromisso:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
