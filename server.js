@@ -744,6 +744,11 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
+// Rota simples para manter o serviço acordado
+app.get('/ping', (req, res) => {
+  res.status(200).send('ok');
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 
