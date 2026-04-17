@@ -20,20 +20,29 @@ const supabase = createClient(
 );
 
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES (DS-160) ====================
-const radioMapping = { /* ... mantido igual ao seu original ... */ };
-function formatValue(fieldName, value) { /* ... */ }
-function groupParallelArrays(data, nameField, relField) { /* ... */ }
-function groupTravels(data) { /* ... */ }
-function drawSeparator(doc) { /* ... */ }
+// (Aqui você deve manter todo o seu radioMapping, formatValue, groupParallelArrays,
+// groupTravels, drawSeparator e o array simpleFields completo.
+// Para não poluir, coloque exatamente o que você já tinha funcionando.)
 
-const simpleFields = [ /* ... array completo do seu código ... */ ];
+const radioMapping = { /* seu código */ };
+function formatValue(fieldName, value) { /* seu código */ }
+function groupParallelArrays(data, nameField, relField) { /* seu código */ }
+function groupTravels(data) { /* seu código */ }
+function drawSeparator(doc) { /* seu código */ }
+const simpleFields = [ /* seu código */ ];
 
-// ==================== ROTAS DE FORMULÁRIOS (DS-160, PASSAPORTE, VISTO NEGADO) ====================
-// (mantenha exatamente como você já tem, não vou repetir para economizar espaço)
-// Elas estão funcionando e não precisam de alteração.
-app.post('/api/submit-ds160', async (req, res) => { /* seu código */ });
-app.post('/api/submit-passaporte', async (req, res) => { /* seu código */ });
-app.post('/api/submit-visto-negado', async (req, res) => { /* seu código */ });
+// ==================== ROTAS DE FORMULÁRIOS ====================
+app.post('/api/submit-ds160', async (req, res) => {
+  /* seu código existente – não altere */
+});
+
+app.post('/api/submit-passaporte', async (req, res) => {
+  /* seu código existente – não altere */
+});
+
+app.post('/api/submit-visto-negado', async (req, res) => {
+  /* seu código existente – não altere */
+});
 
 // ==================== AUTENTICAÇÃO PARA ENDPOINTS ADMIN ====================
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'minha-chave-secreta-123';
@@ -46,7 +55,6 @@ function validateApiKey(req, res, next) {
 }
 
 // ==================== ENDPOINTS DE AGENDA (PROTEGIDOS) ====================
-// GET /api/agendamentos
 app.get('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id } = req.query;
   let query = supabase.from('agendamentos').select('*');
@@ -56,7 +64,6 @@ app.get('/api/agendamentos', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// POST /api/agendamentos
 app.post('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
   if (!solicitacao_id || !tipo || !data_hora) {
@@ -71,7 +78,6 @@ app.post('/api/agendamentos', validateApiKey, async (req, res) => {
   res.status(201).json(data);
 });
 
-// PUT /api/agendamentos/:id
 app.put('/api/agendamentos/:id', validateApiKey, async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
@@ -87,14 +93,12 @@ app.put('/api/agendamentos/:id', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// DELETE /api/agendamentos/:id
 app.delete('/api/agendamentos/:id', validateApiKey, async (req, res) => {
   const { error } = await supabase.from('agendamentos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
 
-// GET /api/solicitacoes (apenas uma vez)
 app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
   const { data, error } = await supabase
     .from('solicitacoes')
@@ -105,7 +109,6 @@ app.get('/api/solicitacoes', validateApiKey, async (req, res) => {
 });
 
 // ==================== ENDPOINTS DE COMPROMISSOS (PROTEGIDOS PARA LISTAGEM/EDIÇÃO) ====================
-// GET /api/compromissos - listar todos (protegido)
 app.get('/api/compromissos', validateApiKey, async (req, res) => {
   const { data, error } = await supabase
     .from('compromissos')
@@ -116,7 +119,6 @@ app.get('/api/compromissos', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// PUT /api/compromissos/:id - atualizar (protegido)
 app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
@@ -130,14 +132,13 @@ app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
-// DELETE /api/compromissos/:id - excluir (protegido)
 app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });
 
-// ==================== CRIAÇÃO DE COMPROMISSO COM VÍNCULO AUTOMÁTICO (SEM AUTENTICAÇÃO) ====================
+// ==================== CRIAÇÃO DE COMPROMISSO (SEM AUTENTICAÇÃO – ROTA ÚNICA E ROBUSTA) ====================
 app.post('/api/compromissos', async (req, res) => {
   const { nome, email, telefone, atividade, data, hora, local, concluido } = req.body;
 
@@ -146,13 +147,16 @@ app.post('/api/compromissos', async (req, res) => {
   }
 
   try {
-    // Busca ou cria o cliente
-    let cliente = await supabase
+    // 1. Buscar cliente pelo e‑mail
+    let { data: cliente, error: clienteError } = await supabase
       .from('clientes')
       .select('id, nome_completo, email, telefone')
       .eq('email', email)
       .maybeSingle();
 
+    if (clienteError) throw clienteError;
+
+    // 2. Se não existir, criar cliente
     if (!cliente) {
       const { data: novoCliente, error: insertError } = await supabase
         .from('clientes')
@@ -177,7 +181,7 @@ app.post('/api/compromissos', async (req, res) => {
       }
     }
 
-    // Cria o compromisso vinculado
+    // 3. Criar compromisso vinculado
     const { data: compromisso, error: compError } = await supabase
       .from('compromissos')
       .insert({
@@ -194,11 +198,7 @@ app.post('/api/compromissos', async (req, res) => {
 
     if (compError) throw compError;
 
-    res.status(201).json({
-      success: true,
-      compromisso: compromisso,
-      cliente: cliente
-    });
+    res.status(201).json({ success: true, compromisso, cliente });
   } catch (err) {
     console.error('❌ Erro ao criar compromisso:', err);
     res.status(500).json({ error: err.message });
@@ -289,71 +289,6 @@ app.get('/api/enviar-lembretes', async (req, res) => {
 // ==================== ROTA DE PING (MANTER SERVIDOR ACORDADO) ====================
 app.get('/ping', (req, res) => {
   res.status(200).send('ok');
-});
-
-// ==================== CRIAÇÃO DE COMPROMISSO (SEM AUTENTICAÇÃO) ====================
-app.post('/api/compromissos', async (req, res) => {
-  const { nome, email, telefone, atividade, data, hora, local, concluido } = req.body;
-
-  if (!email || !atividade || !data || !hora) {
-    return res.status(400).json({ error: 'Campos obrigatórios: email, atividade, data, hora' });
-  }
-
-  try {
-    // 1. Buscar cliente pelo e-mail
-    let cliente = await supabase
-      .from('clientes')
-      .select('id, nome_completo, email, telefone')
-      .eq('email', email)
-      .maybeSingle();
-
-    // 2. Se não existir, criar cliente
-    if (!cliente) {
-      const { data: novoCliente, error: insertError } = await supabase
-        .from('clientes')
-        .insert({
-          nome_completo: nome || 'Cliente sem nome',
-          email: email,
-          telefone: telefone || null
-        })
-        .select()
-        .single();
-      if (insertError) throw insertError;
-      cliente = novoCliente;
-      console.log(`✅ Cliente criado: ${cliente.id}`);
-    } else {
-      // Atualiza dados se necessário
-      const updates = {};
-      if (nome && nome !== cliente.nome_completo) updates.nome_completo = nome;
-      if (telefone && telefone !== cliente.telefone) updates.telefone = telefone;
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('clientes').update(updates).eq('id', cliente.id);
-        console.log(`🔄 Cliente atualizado: ${cliente.id}`);
-      }
-    }
-
-    // 3. Criar compromisso vinculado
-    const { data: compromisso, error: compError } = await supabase
-      .from('compromissos')
-      .insert({
-        cliente_id: cliente.id,
-        cliente: `${cliente.nome_completo} (${cliente.telefone || ''})`,
-        atividade: atividade,
-        data: data,
-        hora: hora,
-        local: local || null,
-        concluido: concluido || 0
-      })
-      .select()
-      .single();
-
-    if (compError) throw compError;
-
-    res.status(201).json({ success: true, compromisso, cliente });
-  } catch (err) {
-    console.error('❌ Erro ao criar compromisso:', err);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 // ==================== INICIALIZAÇÃO ====================
