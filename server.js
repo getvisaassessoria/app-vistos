@@ -871,6 +871,93 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
+// ==================== ENDPOINT DE LEMBRETES ====================
+app.get('/api/enviar-lembretes', async (req, res) => {
+  console.log('🔔 Iniciando verificação de lembretes...');
+  res.status(200).send('Processando lembretes... (ver logs)');
+
+  try {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataAlvo1 = new Date(hoje);
+    dataAlvo1.setDate(hoje.getDate() + 1);
+    const dataAlvo3 = new Date(hoje);
+    dataAlvo3.setDate(hoje.getDate() + 3);
+
+    const dataAlvo1Str = dataAlvo1.toISOString().split('T')[0];
+    const dataAlvo3Str = dataAlvo3.toISOString().split('T')[0];
+
+    console.log(`Buscando compromissos para ${dataAlvo1Str} e ${dataAlvo3Str}`);
+
+    // Busca compromissos com datas alvo
+    const { data: compromissos, error } = await supabase
+      .from('compromissos')
+      .select(`
+        id, cliente, atividade, data, hora, local,
+        clientes (email, telefone, nome_completo)
+      `)
+      .in('data', [dataAlvo1Str, dataAlvo3Str])
+      .eq('concluido', 0);
+
+    if (error) throw error;
+
+    if (!compromissos || compromissos.length === 0) {
+      console.log('Nenhum compromisso encontrado.');
+      return;
+    }
+
+    for (const comp of compromissos) {
+      const clienteInfo = comp.clientes || {};
+      const email = clienteInfo.email;
+      const telefone = clienteInfo.telefone;
+      const nomeCliente = clienteInfo.nome_completo || comp.cliente.split(' (+')[0];
+      const dataComp = comp.data;
+      const horaComp = comp.hora;
+      const atividade = comp.atividade;
+      const local = comp.local || 'A definir';
+
+      // Calcula dias restantes
+      const dataCompDate = new Date(dataComp);
+      const diffDays = Math.ceil((dataCompDate - hoje) / (1000 * 60 * 60 * 24));
+
+      let titulo = '';
+      if (diffDays === 1) titulo = '🔔 Lembrete: seu compromisso é amanhã!';
+      else if (diffDays === 3) titulo = '📅 Lembrete: você tem um compromisso em 3 dias';
+      else continue;
+
+      const corpoEmail = `
+        <h2>Olá ${nomeCliente},</h2>
+        <p>Você tem um compromisso agendado:</p>
+        <ul>
+          <li><strong>Atividade:</strong> ${atividade}</li>
+          <li><strong>Data:</strong> ${dataComp}</li>
+          <li><strong>Horário:</strong> ${horaComp}</li>
+          <li><strong>Local:</strong> ${local}</li>
+        </ul>
+        <p>Não se esqueça dos documentos necessários.</p>
+        <p>Atenciosamente,<br>Equipe GetVisa</p>
+      `;
+
+      if (email) {
+        await resend.emails.send({
+          from: 'GetVisa <contato@getvisa.com.br>',
+          to: [email],
+          subject: titulo,
+          html: corpoEmail
+        });
+        console.log(`✅ E-mail enviado para ${email} (${atividade})`);
+      } else {
+        console.log(`⚠️ Compromisso ID ${comp.id} sem e-mail associado.`);
+      }
+
+      // (Opcional) enviar WhatsApp – você pode integrar com a API do WhatsApp se tiver
+      // if (telefone) { ... }
+    }
+  } catch (err) {
+    console.error('❌ Erro ao processar lembretes:', err);
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 
