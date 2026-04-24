@@ -138,6 +138,16 @@ function drawSeparator(doc) {
   doc.moveDown(0.5);
 }
 
+function drawSectionTitle(doc, title) {
+  doc.moveDown(1);
+  doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title);
+  doc.moveDown(0.3);
+  doc.strokeColor('#003366').lineWidth(1.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+  doc.lineWidth(0.5);
+  doc.moveDown(0.5);
+  doc.fillColor('#000000').fontSize(10).font('Helvetica');
+}
+
 const simpleFields = [
   { name: 'consulado_cidade', label: 'Cidade do Consulado', group: 'iniciais' },
   { name: 'radio-26', label: 'Indicado por agência/agente?', group: 'iniciais' },
@@ -319,7 +329,7 @@ app.post('/api/submit-ds160', async (req, res) => {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
 
-      // --- Geração do PDF (com ordem corrigida e datas brasileiras) ---
+      // --- Geração do PDF (com ordem corrigida, datas brasileiras e títulos de seção) ---
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -333,224 +343,380 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
-        // ==================== ORDEM CORRETA DOS CAMPOS ====================
+        // ==================== ORDEM CORRETA DOS CAMPOS COM TÍTULOS DE SEÇÃO ====================
         // Mapa de labels para acesso rápido
         const fieldLabelMap = {};
         for (const f of simpleFields) {
           fieldLabelMap[f.name] = f.label;
         }
 
-        let lastGroup = null;
+        let currentSection = null;
+        let hasContentInSection = false;
 
-        // Função auxiliar para renderizar um campo
+        // Função para renderizar um campo
         function renderField(fieldName, label) {
           let value = data[fieldName];
           if (value !== undefined && value !== null && value !== '') {
             const formatted = formatValue(fieldName, value);
             if (formatted && formatted !== '(não informado)') {
-              if (lastGroup !== null) drawSeparator(doc);
               doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true });
               doc.font('Helvetica').text(formatted);
               doc.moveDown(0.6);
-              lastGroup = fieldName;
               return true;
             }
           }
           return false;
         }
 
-        // ==================== ORDEM EXPLÍCITA DOS CAMPOS ====================
-        
-        // 1. Informações iniciais e pessoais
-        const grupo1 = ['consulado_cidade', 'radio-26', 'text-1', 'text-64', 'full_name', 'radio-2', 'text-87', 'radio-3', 'select-4', 'text-5', 'text-7', 'text-6', 'text-95', 'radio-outra-nac', 'outra_nacionalidade_text', 'radio-residente', 'text-86', 'text-17', 'text-18'];
-        
-        // 2. Viagem
-        const grupo2 = ['radio-28', 'radio-planos', 'text-21', 'text-34', 'text-41', 'text-42', 'text-43', 'email-4', 'radio-6', 'text-22', 'text-25', 'phone-1', 'text-24', 'text-26', 'text-27', 'text-96', 'text-29', 'text-30'];
-        
-        // 3. Acompanhantes
-        const grupo3 = ['radio-7'];
-        
-        // 4. Viagens anteriores e visto
-        const grupo4 = ['radio-8', 'radio-23', 'text-35', 'text-68', 'text-69', 'radio-33', 'radio-29', 'radio-30'];
-        
-        // 5. Endereço
-        const grupo5 = ['text-71', 'text-72', 'text-73', 'text-74', 'text-75', 'text-76', 'radio-9', 'text-80', 'text-81', 'text-82', 'text-83', 'text-84', 'text-85'];
-        
-        // 6. Telefones
-        const grupo6 = ['text-77', 'text-78', 'radio-10'];
-        
-        // 7. E-mails, mídias sociais e passaporte
-        const grupo7 = ['email-1', 'radio-11', 'radio-12', 'text-38', 'text-40', 'text-39', 'text-88', 'text-66', 'text-67', 'radio-13'];
-        
-        // 8. Contato nos EUA
-        const grupo8 = ['name-2', 'text-41_contato', 'text-42_contato', 'text-43_contato', 'email-4_contato', 'checkbox-15[]', 'email-5', 'email-3'];
-        
-        // 9. Familiares
-        const grupo9 = ['nome_pai', 'text-44', 'radio-14', 'checkbox-16[]', 'nome_mae', 'text-45', 'radio-15', 'checkbox-17[]', 'radio-16'];
-        
-        // 10. Cônjuge, ex e falecido
-        const grupo10 = ['spouse_fullname', 'spouse-dob', 'spouse-nationality', 'spouse-city', 'spouse-country', 'spouse-address-same', 'spouse_endereco', 'spouse_cidade', 'spouse_estado', 'spouse_cep', 'spouse_pais', 'ex_fullname', 'ex_dob', 'ex_nationality', 'ex_city', 'ex_country', 'data_casamento_div', 'data_divorcio', 'cidade_divorcio', 'como_divorcio', 'falecido_fullname', 'falecido_dob', 'falecido_nationality', 'falecido_city', 'falecido_country', 'data_falecimento'];
-        
-        // 11. Trabalho atual
-        const grupo11 = ['radio-27', 'text-49', 'text-101', 'text-102', 'text-104', 'text-103', 'phone-8', 'text-50', 'text-51', 'text-52'];
-        
-        // 12. Trabalhos anteriores e escolaridade
-        const grupo12 = ['radio-17', 'radio-18'];
-        
-        // 13. Detalhes escolaridade
-        const grupo13 = ['text-59', 'text-60', 'text-111', 'text-112', 'text-114', 'text-113', 'text-61', 'text-62'];
-        
-        // 14. Idiomas e viagens internacionais
-        const grupo14 = ['radio-19', 'radio-20'];
-        
-        // Ordem completa
-        const ordemCompleta = [...grupo1, ...grupo2, ...grupo3, ...grupo4, ...grupo5, ...grupo6, ...grupo7, ...grupo8, ...grupo9, ...grupo10, ...grupo11, ...grupo12, ...grupo13, ...grupo14];
-        
-        // Renderizar todos os campos na ordem correta
-        for (const fieldName of ordemCompleta) {
-          const label = fieldLabelMap[fieldName];
-          if (label) {
-            renderField(fieldName, label);
-            
-            // === CAMPOS CONDICIONAIS QUE DEVEM VIR LOGO APÓS SUAS PERGUNTAS ===
-            
-            // Após "Fala outros idiomas?" (radio-19)
-            if (fieldName === 'radio-19' && data['radio-19'] === 'one') {
-              const idiomas = data['idiomas[]'] || [];
-              if (idiomas.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Outros idiomas: ', { continued: true });
-                doc.font('Helvetica').text(idiomas.join(', '));
-                doc.moveDown(0.6);
-                lastGroup = 'idiomas';
-              }
-            }
-            
-            // Após "Viajou para outros países?" (radio-20)
-            if (fieldName === 'radio-20' && data['radio-20'] === 'one') {
-              const paises = data['paises_visitados[]'] || [];
-              if (paises.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Países visitados (últimos 5 anos): ', { continued: true });
-                doc.font('Helvetica').text(paises.join(', '));
-                doc.moveDown(0.6);
-                lastGroup = 'paises';
-              }
-            }
-            
-            // Após "Usou outros números?" (radio-10)
-            if (fieldName === 'radio-10' && data['radio-10'] === 'one') {
-              const telefones = data['telefones_anteriores[]'] || [];
-              if (telefones.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Telefones anteriores: ', { continued: true });
-                doc.font('Helvetica').text(telefones.join(', '));
-                doc.moveDown(0.6);
-                lastGroup = 'telefones';
-              }
-            }
-            
-            // Após "Usou outros e-mails?" (radio-11)
-            if (fieldName === 'radio-11' && data['radio-11'] === 'one') {
-              const emails = data['emails_anteriores[]'] || [];
-              if (emails.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('E-mails anteriores: ', { continued: true });
-                doc.font('Helvetica').text(emails.join(', '));
-                doc.moveDown(0.6);
-                lastGroup = 'emails';
-              }
-            }
-            
-            // Após "Presença em mídias sociais?" (radio-12)
-            if (fieldName === 'radio-12' && data['radio-12'] === 'one') {
-              const plataformas = data['midia_plataforma[]'] || [];
-              const identificadores = data['midia_identificador[]'] || [];
-              const midias = [];
-              for (let i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
-                if (plataformas[i] || identificadores[i]) {
-                  midias.push(`${plataformas[i] || ''}${plataformas[i] && identificadores[i] ? ': ' : ''}${identificadores[i] || ''}`);
-                }
-              }
-              if (midias.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Mídias sociais: ', { continued: true });
-                doc.font('Helvetica').text(midias.join('; '));
-                doc.moveDown(0.6);
-                lastGroup = 'midias';
-              }
-            }
-            
-            // Após "Há acompanhantes?" (radio-7)
-            if (fieldName === 'radio-7' && data['radio-7'] === 'one') {
-              const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
-              if (acompanhantes.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
-                acompanhantes.forEach(acc => doc.font('Helvetica').text(`  - ${acc}`));
-                doc.moveDown(0.6);
-                lastGroup = 'acompanhantes';
-              }
-            }
-            
-            // Após "Já esteve nos EUA?" (radio-8)
-            if (fieldName === 'radio-8' && data['radio-8'] === 'one') {
-              const viagens = groupTravels(data);
-              if (viagens.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
-                viagens.forEach(viagem => doc.font('Helvetica').text(`  - ${viagem}`));
-                doc.moveDown(0.6);
-                lastGroup = 'previousTravel';
-              }
-            }
-            
-            // Após "Parentes imediatos nos EUA?" (radio-16)
-            if (fieldName === 'radio-16' && data['radio-16'] === 'one') {
-              const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
-              if (parentes.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Parentes nos EUA:');
-                parentes.forEach(p => doc.font('Helvetica').text(`  - ${p}`));
-                doc.moveDown(0.6);
-                lastGroup = 'familiares';
-              }
-            }
-            
-            // Após "Teve empregos anteriores?" (radio-17)
-            if (fieldName === 'radio-17' && data['radio-17'] === 'one') {
-              const empregos = [];
-              const empNomes = data['emprego_anterior_nome[]'] || [];
-              const empCargos = data['emprego_anterior_cargo[]'] || [];
-              const empInicios = data['emprego_anterior_inicio[]'] || [];
-              const empFins = data['emprego_anterior_fim[]'] || [];
-              const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
-              for (let i = 0; i < maxEmp; i++) {
-                if (empNomes[i] || empCargos[i]) {
-                  let inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
-                  let fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
-                  let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
-                  if (empInicios[i] || empFins[i]) linha += ` (${inicio} a ${fim})`;
-                  empregos.push(linha);
-                }
-              }
-              if (empregos.length > 0) {
-                drawSeparator(doc);
-                doc.font('Helvetica-Bold').fontSize(10).text('Empregos anteriores:');
-                empregos.forEach(emp => doc.font('Helvetica').text(`  - ${emp}`));
-                doc.moveDown(0.6);
-                lastGroup = 'empregos';
-              }
-            }
+        // Função para iniciar uma nova seção
+        function startSection(sectionTitle) {
+          if (currentSection !== null && hasContentInSection) {
+            doc.moveDown(0.8);
+          }
+          drawSectionTitle(doc, sectionTitle);
+          currentSection = sectionTitle;
+          hasContentInSection = false;
+        }
+
+        // ==================== SEÇÃO 1: INFORMAÇÕES INICIAIS ====================
+        startSection('📋 INFORMAÇÕES INICIAIS');
+        const hasConsulado = renderField('consulado_cidade', 'Cidade do Consulado');
+        const hasIndicacao = renderField('radio-26', 'Indicado por agência/agente?');
+        if (data['radio-26'] === 'one') {
+          renderField('text-1', 'Nome da agência/agente');
+        }
+        renderField('text-64', 'Idioma usado para preencher');
+        if (hasConsulado || hasIndicacao) hasContentInSection = true;
+
+        // ==================== SEÇÃO 2: INFORMAÇÕES PESSOAIS ====================
+        startSection('👤 INFORMAÇÕES PESSOAIS');
+        renderField('full_name', 'Nome completo');
+        if (renderField('radio-2', 'Já teve outro nome?') && data['radio-2'] === 'one') {
+          renderField('text-87', 'Nome anterior');
+        }
+        renderField('radio-3', 'Sexo');
+        renderField('select-4', 'Estado civil');
+        renderField('text-5', 'Data de nascimento');
+        renderField('text-7', 'Cidade de nascimento');
+        renderField('text-6', 'Estado/Província');
+        renderField('text-95', 'País de nacionalidade');
+        if (renderField('radio-outra-nac', 'Possui outra nacionalidade?') && data['radio-outra-nac'] === 'one') {
+          renderField('outra_nacionalidade_text', 'Qual outra nacionalidade?');
+        }
+        if (renderField('radio-residente', 'Residente permanente de outro país?') && data['radio-residente'] === 'one') {
+          // campo adicional se necessário
+        }
+        renderField('text-86', 'CPF');
+        renderField('text-17', 'Número do Seguro Social (SSN)');
+        renderField('text-18', 'Número do contribuinte dos EUA (TIN)');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 3: INFORMAÇÕES DA VIAGEM ====================
+        startSection('✈️ INFORMAÇÕES DA VIAGEM');
+        renderField('radio-28', 'Propósito da viagem');
+        if (renderField('radio-planos', 'Planos específicos?') && data['radio-planos'] === 'one') {
+          // campo adicional se necessário
+        }
+        renderField('text-21', 'Data de chegada prevista');
+        renderField('text-34', 'Duração da estadia (dias)');
+        renderField('text-41', 'Endereço nos EUA');
+        renderField('text-42', 'Cidade (EUA)');
+        renderField('text-43', 'Estado (EUA)');
+        renderField('email-4', 'CEP (EUA)');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 4: PAGADOR DA VIAGEM ====================
+        startSection('💰 PAGADOR DA VIAGEM');
+        renderField('radio-6', 'Quem vai pagar?');
+        renderField('text-22', 'Nome do pagador');
+        renderField('text-25', 'Relacionamento com pagador');
+        renderField('phone-1', 'Telefone do pagador');
+        renderField('text-24', 'E-mail do pagador');
+        renderField('text-26', 'Endereço do pagador');
+        renderField('text-27', 'Cidade do pagador');
+        renderField('text-96', 'UF do pagador');
+        renderField('text-29', 'CEP do pagador');
+        renderField('text-30', 'País do pagador');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 5: ACOMPANHANTES ====================
+        if (data['radio-7'] === 'one') {
+          startSection('👥 ACOMPANHANTES');
+          renderField('radio-7', 'Há acompanhantes?');
+          const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
+          if (acompanhantes.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
+            acompanhantes.forEach(acc => doc.font('Helvetica').text(`  - ${acc}`));
+            doc.moveDown(0.6);
+          }
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 6: HISTÓRICO DE VIAGENS AOS EUA ====================
+        if (data['radio-8'] === 'one') {
+          startSection('🛂 HISTÓRICO DE VIAGENS AOS EUA');
+          renderField('radio-8', 'Já esteve nos EUA?');
+          const viagens = groupTravels(data);
+          if (viagens.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
+            viagens.forEach(viagem => doc.font('Helvetica').text(`  - ${viagem}`));
+            doc.moveDown(0.6);
+          }
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 7: INFORMAÇÕES DO VISTO ====================
+        if (data['radio-23'] === 'one') {
+          startSection('🪪 INFORMAÇÕES DO VISTO');
+          renderField('radio-23', 'Já teve visto americano?');
+          renderField('text-35', 'Data de emissão do visto');
+          renderField('text-68', 'Número do visto');
+          renderField('text-69', 'Data de expiração');
+          renderField('radio-33', 'Impressões digitais coletadas?');
+          renderField('radio-29', 'Mesmo tipo de visto?');
+          renderField('radio-30', 'Mesmo país de emissão?');
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 8: ENDEREÇO RESIDENCIAL ====================
+        startSection('🏠 ENDEREÇO RESIDENCIAL');
+        renderField('text-71', 'Logradouro');
+        renderField('text-72', 'Complemento');
+        renderField('text-73', 'CEP');
+        renderField('text-74', 'Cidade');
+        renderField('text-75', 'Estado');
+        renderField('text-76', 'País');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 9: ENDEREÇO DE CORRESPONDÊNCIA ====================
+        startSection('📬 ENDEREÇO DE CORRESPONDÊNCIA');
+        if (renderField('radio-9', 'Endereço de correspondência é o mesmo?') && data['radio-9'] === 'Não, é diferente') {
+          renderField('text-80', 'Logradouro (correspondência)');
+          renderField('text-81', 'Complemento (correspondência)');
+          renderField('text-82', 'CEP (correspondência)');
+          renderField('text-83', 'Cidade (correspondência)');
+          renderField('text-84', 'Estado (correspondência)');
+          renderField('text-85', 'País (correspondência)');
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 10: TELEFONES ====================
+        startSection('📞 TELEFONES');
+        renderField('text-77', 'Telefone principal');
+        renderField('text-78', 'Telefone comercial');
+        if (renderField('radio-10', 'Usou outros números?') && data['radio-10'] === 'one') {
+          const telefones = data['telefones_anteriores[]'] || [];
+          if (telefones.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Telefones anteriores: ', { continued: true });
+            doc.font('Helvetica').text(telefones.join(', '));
+            doc.moveDown(0.6);
           }
         }
-        
-        // ====== OUTRAS OCUPAÇÕES / FONTES DE RENDA (se houver) ======
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 11: E-MAILS ====================
+        startSection('📧 E-MAILS');
+        renderField('email-1', 'E-mail principal');
+        if (renderField('radio-11', 'Usou outros e-mails?') && data['radio-11'] === 'one') {
+          const emails = data['emails_anteriores[]'] || [];
+          if (emails.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('E-mails anteriores: ', { continued: true });
+            doc.font('Helvetica').text(emails.join(', '));
+            doc.moveDown(0.6);
+          }
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 12: MÍDIAS SOCIAIS ====================
+        startSection('🌐 MÍDIAS SOCIAIS');
+        if (renderField('radio-12', 'Presença em mídias sociais?') && data['radio-12'] === 'one') {
+          const plataformas = data['midia_plataforma[]'] || [];
+          const identificadores = data['midia_identificador[]'] || [];
+          const midias = [];
+          for (let i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
+            if (plataformas[i] || identificadores[i]) {
+              midias.push(`${plataformas[i] || ''}${plataformas[i] && identificadores[i] ? ': ' : ''}${identificadores[i] || ''}`);
+            }
+          }
+          if (midias.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Mídias sociais: ', { continued: true });
+            doc.font('Helvetica').text(midias.join('; '));
+            doc.moveDown(0.6);
+          }
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 13: PASSAPORTE ====================
+        startSection('🛂 PASSAPORTE');
+        renderField('text-38', 'Número do passaporte');
+        renderField('text-40', 'País que emitiu');
+        renderField('text-39', 'Cidade de emissão');
+        renderField('text-88', 'Estado de emissão');
+        renderField('text-66', 'Data de emissão');
+        renderField('text-67', 'Data de validade');
+        renderField('radio-13', 'Passaporte perdido/roubado?');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 14: CONTATO NOS EUA ====================
+        startSection('🇺🇸 CONTATO NOS EUA');
+        renderField('name-2', 'Contato nos EUA (nome)');
+        renderField('text-41_contato', 'Endereço (EUA)');
+        renderField('text-42_contato', 'Cidade (EUA)');
+        renderField('text-43_contato', 'Estado (EUA)');
+        renderField('email-4_contato', 'CEP (EUA)');
+        renderField('checkbox-15[]', 'Relacionamento com contato');
+        renderField('email-5', 'Telefone do contato (EUA)');
+        renderField('email-3', 'E-mail do contato (EUA)');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 15: FAMILIARES ====================
+        startSection('👨‍👩‍👧 FAMILIARES');
+        renderField('nome_pai', 'Nome do pai');
+        renderField('text-44', 'Data de nascimento do pai');
+        if (renderField('radio-14', 'Pai nos EUA?') && data['radio-14'] === 'one') {
+          renderField('checkbox-16[]', 'Status do pai');
+        }
+        renderField('nome_mae', 'Nome da mãe');
+        renderField('text-45', 'Data de nascimento da mãe');
+        if (renderField('radio-15', 'Mãe nos EUA?') && data['radio-15'] === 'one') {
+          renderField('checkbox-17[]', 'Status da mãe');
+        }
+        if (renderField('radio-16', 'Parentes imediatos nos EUA?') && data['radio-16'] === 'one') {
+          const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
+          if (parentes.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Parentes nos EUA:');
+            parentes.forEach(p => doc.font('Helvetica').text(`  - ${p}`));
+            doc.moveDown(0.6);
+          }
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 16: CÔNJUGE ====================
+        if (data['spouse_fullname']) {
+          startSection('💍 CÔNJUGE');
+          renderField('spouse_fullname', 'Nome do cônjuge');
+          renderField('spouse-dob', 'Data de nascimento do cônjuge');
+          renderField('spouse-nationality', 'Nacionalidade do cônjuge');
+          renderField('spouse-city', 'Cidade de nascimento do cônjuge');
+          renderField('spouse-country', 'País de nascimento do cônjuge');
+          if (renderField('spouse-address-same', 'Endereço do cônjuge') && data['spouse-address-same'] === 'Diferente') {
+            renderField('spouse_endereco', 'Endereço (diferente)');
+            renderField('spouse_cidade', 'Cidade');
+            renderField('spouse_estado', 'Estado');
+            renderField('spouse_cep', 'CEP');
+            renderField('spouse_pais', 'País');
+          }
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 17: EX-CÔNJUGE ====================
+        if (data['ex_fullname']) {
+          startSection('💔 EX-CÔNJUGE');
+          renderField('ex_fullname', 'Nome do ex‑cônjuge');
+          renderField('ex_dob', 'Data de nascimento');
+          renderField('ex_nationality', 'Nacionalidade');
+          renderField('ex_city', 'Cidade de nascimento');
+          renderField('ex_country', 'País de nascimento');
+          renderField('data_casamento_div', 'Data do Casamento');
+          renderField('data_divorcio', 'Data do Divórcio');
+          renderField('cidade_divorcio', 'Cidade do Divórcio');
+          renderField('como_divorcio', 'Como se deu o Divórcio');
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 18: CÔNJUGE FALECIDO ====================
+        if (data['falecido_fullname']) {
+          startSection('🕊️ CÔNJUGE FALECIDO');
+          renderField('falecido_fullname', 'Nome do cônjuge falecido');
+          renderField('falecido_dob', 'Data de nascimento');
+          renderField('falecido_nationality', 'Nacionalidade');
+          renderField('falecido_city', 'Cidade de nascimento');
+          renderField('falecido_country', 'País de nascimento');
+          renderField('data_falecimento', 'Data do Falecimento');
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 19: OCUPAÇÃO ATUAL ====================
+        startSection('💼 OCUPAÇÃO ATUAL');
+        renderField('radio-27', 'Ocupação principal');
+        renderField('text-49', 'Empregador / escola');
+        renderField('text-101', 'Endereço');
+        renderField('text-102', 'Cidade');
+        renderField('text-104', 'Estado');
+        renderField('text-103', 'CEP');
+        renderField('phone-8', 'Telefone');
+        renderField('text-50', 'Data início');
+        renderField('text-51', 'Renda mensal (R$)');
+        renderField('text-52', 'Descrição das funções');
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 20: EMPREGOS ANTERIORES ====================
+        if (renderField('radio-17', 'Teve empregos anteriores?') && data['radio-17'] === 'one') {
+          const empregos = [];
+          const empNomes = data['emprego_anterior_nome[]'] || [];
+          const empCargos = data['emprego_anterior_cargo[]'] || [];
+          const empInicios = data['emprego_anterior_inicio[]'] || [];
+          const empFins = data['emprego_anterior_fim[]'] || [];
+          const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
+          for (let i = 0; i < maxEmp; i++) {
+            if (empNomes[i] || empCargos[i]) {
+              let inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
+              let fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
+              let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
+              if (empInicios[i] || empFins[i]) linha += ` (${inicio} a ${fim})`;
+              empregos.push(linha);
+            }
+          }
+          if (empregos.length > 0) {
+            startSection('📋 EMPREGOS ANTERIORES');
+            doc.font('Helvetica-Bold').fontSize(10).text('Empregos anteriores:');
+            empregos.forEach(emp => doc.font('Helvetica').text(`  - ${emp}`));
+            doc.moveDown(0.6);
+          }
+        }
+
+        // ==================== SEÇÃO 21: ESCOLARIDADE ====================
+        if (renderField('radio-18', 'Escolaridade secundário/superior?') && data['radio-18'] === 'one') {
+          startSection('🎓 ESCOLARIDADE');
+          renderField('text-59', 'Instituição de ensino');
+          renderField('text-60', 'Curso');
+          renderField('text-111', 'Endereço da instituição');
+          renderField('text-112', 'Cidade');
+          renderField('text-114', 'Estado');
+          renderField('text-113', 'CEP');
+          renderField('text-61', 'Data início');
+          renderField('text-62', 'Data conclusão');
+          hasContentInSection = true;
+        }
+
+        // ==================== SEÇÃO 22: IDIOMAS ====================
+        startSection('🗣️ IDIOMAS');
+        if (renderField('radio-19', 'Fala outros idiomas?') && data['radio-19'] === 'one') {
+          const idiomas = data['idiomas[]'] || [];
+          if (idiomas.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Outros idiomas: ', { continued: true });
+            doc.font('Helvetica').text(idiomas.join(', '));
+            doc.moveDown(0.6);
+          }
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 23: VIAGENS INTERNACIONAIS ====================
+        startSection('🌍 VIAGENS INTERNACIONAIS');
+        if (renderField('radio-20', 'Viajou para outros países?') && data['radio-20'] === 'one') {
+          const paises = data['paises_visitados[]'] || [];
+          if (paises.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Países visitados (últimos 5 anos): ', { continued: true });
+            doc.font('Helvetica').text(paises.join(', '));
+            doc.moveDown(0.6);
+          }
+        }
+        hasContentInSection = true;
+
+        // ==================== OUTRAS OCUPAÇÕES / FONTES DE RENDA ====================
         const extra_descricoes = data['extra_descricao[]'] || [];
         if (extra_descricoes.length > 0) {
-          drawSeparator(doc);
-          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('OUTRAS OCUPAÇÕES / FONTES DE RENDA');
-          doc.moveDown(0.3);
+          drawSectionTitle(doc, '💰 OUTRAS OCUPAÇÕES / FONTES DE RENDA');
           
           const extra_rendas = data['extra_renda[]'] || [];
           const extra_empregadores = data['extra_empregador[]'] || [];
@@ -783,7 +949,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('DADOS DO CLIENTE');
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('📋 DADOS DO CLIENTE');
         doc.moveDown(0.5);
         doc.font('Helvetica').fontSize(10).fillColor('#000000');
         doc.text(`Nome completo: ${nome}`);
@@ -792,6 +958,9 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.moveDown(1);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
+
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('📝 QUESTIONÁRIO DE AVALIAÇÃO');
+        doc.moveDown(0.5);
 
         const perguntas = [
           { label: '1. Quando seu visto foi negado pela última vez?', field: 'quando_negado' },
@@ -813,7 +982,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
           doc.moveDown(1);
           doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
           doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('RESULTADO DA AVALIAÇÃO');
+          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('📊 RESULTADO DA AVALIAÇÃO');
           doc.moveDown(0.5);
           doc.font('Helvetica').fontSize(10).fillColor('#000000');
           doc.text(`Pontuação: ${score}/100`);
