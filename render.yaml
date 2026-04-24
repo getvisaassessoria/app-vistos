@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: app-vistos-staging
+    env: node
+    plan: free  # <--- ESSA LINHA É FUNDAMENTAL
+    branch: staging
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
