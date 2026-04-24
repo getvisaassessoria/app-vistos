@@ -828,5 +828,68 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
+// ==================== TABELA LEAD PERFIL VISTO (SUPABASE) ====================
+// (Assumindo que você já criou a tabela, apenas usamos o cliente supabase existente)
+
+// ==================== WEBHOOK DA Z-API ====================
+app.post('/api/webhook/zapi', async (req, res) => {
+  console.log('📥 Webhook Z-API recebido:', req.body);
+  const body = req.body || {};
+
+  // Extrair número do cliente e mensagem (formato varia conforme a Z-API)
+  const phone = body.phone || body.from || body.remoteJid || null;
+  let message = body.text?.message || body.message || body.body || '';
+
+  if (!phone || !message) {
+    return res.status(200).json({ received: true, warning: 'missing phone or message' });
+  }
+
+  console.log(`📩 Mensagem de ${phone}: ${message}`);
+
+  // Lógica de resposta (pode usar uma função separada)
+  let resposta = 'Olá! Obrigado por entrar em contato. Em breve um especialista te atenderá.';
+
+  // Exemplo: se for uma saudação, responda
+  const msgLower = message.toLowerCase();
+  if (msgLower.includes('oi') || msgLower.includes('olá') || msgLower.includes('bom dia')) {
+    resposta = 'Olá! 😊 Eu sou o atendimento automatizado da GetVisa. Como posso ajudar?';
+  } else if (msgLower.includes('visto')) {
+    resposta = 'Sobre visto americano, podemos te ajudar! Você já preencheu nosso formulário de avaliação? Caso contrário, acesse: https://getvisa.com.br/visto-negado';
+  }
+
+  // Enviar resposta via Z-API
+  const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE;
+  const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
+  const ZAPI_SECURITY_TOKEN = process.env.ZAPI_SECURITY_TOKEN;
+  if (ZAPI_INSTANCE && ZAPI_TOKEN) {
+    const zapiUrl = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-text`;
+    try {
+      const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+      await fetch(zapiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Client-Token': ZAPI_SECURITY_TOKEN
+        },
+        body: JSON.stringify({ phone, message: resposta })
+      });
+      console.log(`✅ Resposta enviada para ${phone}`);
+    } catch (err) {
+      console.error('❌ Erro ao enviar resposta Z-API:', err);
+    }
+  } else {
+    console.warn('⚠️ Variáveis Z-API não configuradas');
+  }
+
+  res.status(200).json({ received: true });
+});
+
+// ==================== ENDPOINT PARA SALVAR LEAD DO FORMULÁRIO (opcional) ====================
+// Se você quiser que ao enviar o formulário de "visto negado" os dados sejam salvos na tabela lead_perfil_visto
+// Você pode adicionar essa lógica dentro da rota existente de visto negado, mas sem quebrá-la.
+// Exemplo: dentro do processamento em background, após gerar o PDF, salve no Supabase.
+
 // ==================== INICIALIZAÇÃO ====================
+
+
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
