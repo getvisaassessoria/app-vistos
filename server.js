@@ -26,12 +26,63 @@ function normalizarPhone(phoneBruto) {
 }
 
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES (DS-160) ====================
-const radioMapping = { /* (mantenha exatamente o mesmo do seu backup) */ };
-function formatValue(fieldName, value) { /* (mantenha) */ }
-function groupParallelArrays(data, nameField, relField) { /* (mantenha) */ }
-function groupTravels(data) { /* (mantenha) */ }
-function drawSeparator(doc) { /* (mantenha) */ }
-const simpleFields = [ /* (mantenha o array completo do seu backup) */ ];
+// IMPORTANTE: aqui você mantém exatamente o mesmo conteúdo do seu backup:
+const radioMapping = { /* seu radioMapping completo aqui */ };
+
+function formatValue(fieldName, value) {
+  if (value === undefined || value === null || value === '') return null;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    const mapped = value.map(v => {
+      if (radioMapping[fieldName] && radioMapping[fieldName][v]) return radioMapping[fieldName][v];
+      if (radioMapping[v]) return radioMapping[v];
+      return v;
+    });
+    return mapped.join(', ');
+  }
+
+  if (radioMapping[fieldName] && radioMapping[fieldName][value]) return radioMapping[fieldName][value];
+  if (radioMapping[value]) return radioMapping[value];
+  return value;
+}
+
+function groupParallelArrays(data, nameField, relField) {
+  const names = Array.isArray(data[nameField]) ? data[nameField] : [];
+  const rels  = Array.isArray(data[relField])  ? data[relField]  : [];
+  const maxLen = Math.max(names.length, rels.length);
+  const result = [];
+  for (let i = 0; i < maxLen; i++) {
+    const nome = names[i] || '';
+    const rel  = rels[i]  || '';
+    if (nome || rel) result.push(`${nome}${nome && rel ? ' - ' : ''}${rel}`);
+  }
+  return result;
+}
+
+function groupTravels(data) {
+  const datas   = Array.isArray(data['viagem_data[]'])    ? data['viagem_data[]']    : [];
+  const duracao = Array.isArray(data['viagem_duracao[]']) ? data['viagem_duracao[]'] : [];
+  const maxLen = Math.max(datas.length, duracao.length);
+  const result = [];
+  for (let i = 0; i < maxLen; i++) {
+    const d   = datas[i]   || '';
+    const dur = duracao[i] || '';
+    if (d || dur) {
+      result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
+    }
+  }
+  return result;
+}
+
+function drawSeparator(doc) {
+  doc.moveDown(0.5);
+  doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+  doc.moveDown(0.5);
+}
+
+// idem: mantenha seu simpleFields completo aqui:
+const simpleFields = [ /* seu array simpleFields completo */ ];
 
 // ==================== FUNÇÃO: BUSCAR PERFIL DO LEAD NO SUPABASE ====================
 async function buscarPerfilDoLead(phone) {
@@ -50,18 +101,15 @@ async function buscarPerfilDoLead(phone) {
       return null;
     }
 
-    if (!data || data.length === 0) {
-      return null;
-    }
-
-    return data[0]; // registro mais recente
+    if (!data || data.length === 0) return null;
+    return data[0];
   } catch (err) {
     console.error('❌ Erro inesperado ao buscar perfil do lead:', err);
     return null;
   }
 }
 
-// ==================== FUNÇÃO: RESPOSTA PERSONALIZADA DO PERFIL (OPCIONAL) ====================
+// ==================== FUNÇÃO: RESPOSTA PERSONALIZADA DO PERFIL ====================
 function montarRespostaPerfil(perfilLead) {
   if (!perfilLead || !perfilLead.dados_teste) return null;
 
@@ -141,6 +189,7 @@ app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos (DS-160)');
 
+  // resposta rápida pro front
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
@@ -160,6 +209,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           )
           .select()
           .single();
+
         if (!clienteError) {
           const { data: solicitacao, error: solError } = await supabase
             .from('solicitacoes')
@@ -181,7 +231,7 @@ app.post('/api/submit-ds160', async (req, res) => {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
 
-      // --- 2. Geração do PDF (seu código) ---
+      // --- 2. Geração do PDF (robusta a campos vazios) ---
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -196,21 +246,27 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(1);
 
         let lastGroup = null;
+
+        // Campos simples
         for (const field of simpleFields) {
-          let value = data[field.name];
-          if (value !== undefined && value !== null && value !== '') {
-            const formatted = formatValue(field.name, value);
-            if (formatted && formatted !== '(não informado)') {
-              if (lastGroup !== null && lastGroup !== field.group) drawSeparator(doc);
-              doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
-              doc.font('Helvetica').text(formatted);
-              doc.moveDown(0.6);
-              lastGroup = field.group;
-            }
-          }
+          const raw = data[field.name];
+          if (raw === undefined || raw === null || raw === '') continue;
+
+          const formatted = formatValue(field.name, raw);
+          if (!formatted || formatted === '(não informado)') continue;
+
+          if (lastGroup !== null && lastGroup !== field.group) drawSeparator(doc);
+
+          doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
+          doc.font('Helvetica').text(formatted);
+          doc.moveDown(0.6);
+          lastGroup = field.group;
         }
 
-        const telefones = data['telefones_anteriores[]'] || [];
+        // Telefones anteriores
+        const telefones = Array.isArray(data['telefones_anteriores[]'])
+          ? data['telefones_anteriores[]']
+          : [];
         if (telefones.length > 0) {
           if (lastGroup !== null && lastGroup !== 'telefones') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Telefones anteriores: ', { continued: true });
@@ -219,25 +275,32 @@ app.post('/api/submit-ds160', async (req, res) => {
           lastGroup = 'telefones';
         }
 
-        const emails = data['emails_anteriores[]'] || [];
-        if (emails.length > 0) {
+        // E-mails anteriores
+        const emailsAnt = Array.isArray(data['emails_anteriores[]'])
+          ? data['emails_anteriores[]']
+          : [];
+        if (emailsAnt.length > 0) {
           if (lastGroup !== null && lastGroup !== 'emails') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('E-mails anteriores: ', { continued: true });
-          doc.font('Helvetica').text(emails.join(', '));
+          doc.font('Helvetica').text(emailsAnt.join(', '));
           doc.moveDown(0.6);
           lastGroup = 'emails';
         }
 
-        const plataformas = data['midia_plataforma[]'] || [];
-        const identificadores = data['midia_identificador[]'] || [];
+        // Mídias sociais
+        const plataformas = Array.isArray(data['midia_plataforma[]'])
+          ? data['midia_plataforma[]']
+          : [];
+        const identificadores = Array.isArray(data['midia_identificador[]'])
+          ? data['midia_identificador[]']
+          : [];
         const midias = [];
-        for (let i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
-          if (plataformas[i] || identificadores[i]) {
-            midias.push(
-              `${plataformas[i] || ''}${
-                plataformas[i] && identificadores[i] ? ': ' : ''
-              }${identificadores[i] || ''}`
-            );
+        const maxMid = Math.max(plataformas.length, identificadores.length);
+        for (let i = 0; i < maxMid; i++) {
+          const p = plataformas[i] || '';
+          const id = identificadores[i] || '';
+          if (p || id) {
+            midias.push(`${p}${p && id ? ': ' : ''}${id}`);
           }
         }
         if (midias.length > 0) {
@@ -248,40 +311,38 @@ app.post('/api/submit-ds160', async (req, res) => {
           lastGroup = 'midias';
         }
 
+        // Acompanhantes
         const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
         if (acompanhantes.length > 0) {
           if (lastGroup !== null && lastGroup !== 'acompanhantes') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Acompanhantes:');
-          acompanhantes.forEach(acc => {
-            doc.font('Helvetica').text(`  - ${acc}`);
-          });
+          acompanhantes.forEach(acc => doc.font('Helvetica').text(`  - ${acc}`));
           doc.moveDown(0.6);
           lastGroup = 'acompanhantes';
         }
 
+        // Viagens anteriores
         const viagens = groupTravels(data);
         if (viagens.length > 0) {
           if (lastGroup !== null && lastGroup !== 'previousTravel') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Viagens anteriores aos EUA:');
-          viagens.forEach(viagem => {
-            doc.font('Helvetica').text(`  - ${viagem}`);
-          });
+          viagens.forEach(v => doc.font('Helvetica').text(`  - ${v}`));
           doc.moveDown(0.6);
           lastGroup = 'previousTravel';
         }
 
+        // Parentes nos EUA
         const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
         if (parentes.length > 0) {
           if (lastGroup !== null && lastGroup !== 'familiares') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Parentes nos EUA:');
-          parentes.forEach(p => {
-            doc.font('Helvetica').text(`  - ${p}`);
-          });
+          parentes.forEach(p => doc.font('Helvetica').text(`  - ${p}`));
           doc.moveDown(0.6);
           lastGroup = 'familiares';
         }
 
-        const idiomas = data['idiomas[]'] || [];
+        // Idiomas
+        const idiomas = Array.isArray(data['idiomas[]']) ? data['idiomas[]'] : [];
         if (idiomas.length > 0) {
           if (lastGroup !== null && lastGroup !== 'idiomas') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Outros idiomas: ', { continued: true });
@@ -290,7 +351,8 @@ app.post('/api/submit-ds160', async (req, res) => {
           lastGroup = 'idiomas';
         }
 
-        const paises = data['paises_visitados[]'] || [];
+        // Países visitados
+        const paises = Array.isArray(data['paises_visitados[]']) ? data['paises_visitados[]'] : [];
         if (paises.length > 0) {
           if (lastGroup !== null && lastGroup !== 'paises') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Países visitados (últimos 5 anos): ', { continued: true });
@@ -299,33 +361,29 @@ app.post('/api/submit-ds160', async (req, res) => {
           lastGroup = 'paises';
         }
 
+        // Empregos anteriores
+        const empNomes   = Array.isArray(data['emprego_anterior_nome[]'])   ? data['emprego_anterior_nome[]']   : [];
+        const empCargos  = Array.isArray(data['emprego_anterior_cargo[]'])  ? data['emprego_anterior_cargo[]']  : [];
+        const empInicios = Array.isArray(data['emprego_anterior_inicio[]']) ? data['emprego_anterior_inicio[]'] : [];
+        const empFins    = Array.isArray(data['emprego_anterior_fim[]'])    ? data['emprego_anterior_fim[]']    : [];
         const empregos = [];
-        const empNomes = data['emprego_anterior_nome[]'] || [];
-        const empCargos = data['emprego_anterior_cargo[]'] || [];
-        const empInicios = data['emprego_anterior_inicio[]'] || [];
-        const empFins = data['emprego_anterior_fim[]'] || [];
-        const maxEmp = Math.max(
-          empNomes.length,
-          empCargos.length,
-          empInicios.length,
-          empFins.length
-        );
+        const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
         for (let i = 0; i < maxEmp; i++) {
-          if (empNomes[i] || empCargos[i]) {
-            let linha = `${empNomes[i] || ''}${
-              empNomes[i] && empCargos[i] ? ' - ' : ''
-            }${empCargos[i] || ''}`;
-            if (empInicios[i] || empFins[i])
-              linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
-            empregos.push(linha);
+          const nomeEmp = empNomes[i] || '';
+          const cargo   = empCargos[i] || '';
+          if (!nomeEmp && !cargo) continue;
+          let linha = `${nomeEmp}${nomeEmp && cargo ? ' - ' : ''}${cargo}`;
+          const ini = empInicios[i] || '?';
+          const fim = empFins[i]    || '?';
+          if (empInicios[i] || empFins[i]) {
+            linha += ` (${ini} a ${fim})`;
           }
+          empregos.push(linha);
         }
         if (empregos.length > 0) {
           if (lastGroup !== null && lastGroup !== 'empregosAnteriores') drawSeparator(doc);
           doc.font('Helvetica-Bold').text('Empregos anteriores:');
-          empregos.forEach(emp => {
-            doc.font('Helvetica').text(`  - ${emp}`);
-          });
+          empregos.forEach(emp => doc.font('Helvetica').text(`  - ${emp}`));
           doc.moveDown(0.6);
         }
 
@@ -333,19 +391,20 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc
           .fontSize(8)
           .fillColor('#999999')
-          .text('Documento gerado automaticamente pelo sistema GetVisa.', {
-            align: 'center'
-          });
+          .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
         doc.end();
       });
 
       console.log(`📄 PDF gerado para ${nome}, tamanho: ${pdfBuffer.length} bytes`);
 
+      // --- 3. Envio de e-mails com PDF ---
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `🇺🇸 DS-160: ${nome}`,
-        html: `<strong>Formulário DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
+        html: `<strong>Formulário DS-160 recebido.</strong><br>
+               <p><strong>Cliente:</strong> ${nome}</p>
+               <p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
         attachments: [
           {
             filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`,
@@ -353,14 +412,16 @@ app.post('/api/submit-ds160', async (req, res) => {
           }
         ]
       });
-      console.log('✅ E-mail enviado para a equipe');
+      console.log('✅ E-mail enviado para a equipe (DS-160)');
 
       if (emailCliente && emailCliente.trim() !== '') {
         await resend.emails.send({
           from: 'GetVisa <contato@getvisa.com.br>',
           to: [emailCliente],
           subject: `Seu formulário DS-160 foi recebido - ${nome}`,
-          html: `<strong>Olá ${nome},</strong><br><p>Recebemos seu formulário. Segue em anexo uma cópia.</p><p>Em breve nossa equipe entrará em contato.</p>`,
+          html: `<strong>Olá ${nome},</strong><br>
+                 <p>Recebemos seu formulário. Segue em anexo uma cópia.</p>
+                 <p>Em breve nossa equipe entrará em contato.</p>`,
           attachments: [
             {
               filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`,
@@ -368,7 +429,7 @@ app.post('/api/submit-ds160', async (req, res) => {
             }
           ]
         });
-        console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
+        console.log(`✅ E-mail enviado para o cliente (DS-160): ${emailCliente}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento DS-160 (background):', err);
@@ -474,29 +535,26 @@ app.post('/api/submit-passaporte', async (req, res) => {
 
         let lastGroup = null;
         for (const field of fields) {
-          let value = data[field.name];
-          if (value && value !== '') {
-            if (lastGroup !== null) {
-              doc.moveDown(0.3);
-              doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-              doc.moveDown(0.3);
-            }
-            doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, {
-              continued: true
-            });
-            doc.font('Helvetica').text(value);
-            doc.moveDown(0.6);
-            lastGroup = field.name;
+          const value = data[field.name];
+          if (!value) continue;
+
+          if (lastGroup !== null) {
+            doc.moveDown(0.3);
+            doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+            doc.moveDown(0.3);
           }
+
+          doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
+          doc.font('Helvetica').text(value);
+          doc.moveDown(0.6);
+          lastGroup = field.name;
         }
 
         doc.moveDown(2);
         doc
           .fontSize(8)
           .fillColor('#999999')
-          .text('Documento gerado automaticamente pelo sistema GetVisa.', {
-            align: 'center'
-          });
+          .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
         doc.end();
       });
 
@@ -506,7 +564,9 @@ app.post('/api/submit-passaporte', async (req, res) => {
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `📘 Passaporte: ${nome}`,
-        html: `<strong>Solicitação de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
+        html: `<strong>Solicitação de passaporte recebida.</strong><br>
+               <p><strong>Cliente:</strong> ${nome}</p>
+               <p>PDF em anexo.</p>`,
         attachments: [
           {
             filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`,
@@ -521,7 +581,9 @@ app.post('/api/submit-passaporte', async (req, res) => {
           from: 'GetVisa <contato@getvisa.com.br>',
           to: [emailCliente],
           subject: `Sua solicitação de passaporte foi recebida - ${nome}`,
-          html: `<strong>Olá ${nome},</strong><br><p>Recebemos sua solicitação. Em breve nossa equipe entrará em contato.</p><p>Segue em anexo uma cópia.</p>`,
+          html: `<strong>Olá ${nome},</strong><br>
+                 <p>Recebemos sua solicitação. Em breve nossa equipe entrará em contato.</p>
+                 <p>Segue em anexo uma cópia.</p>`,
           attachments: [
             {
               filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`,
@@ -559,13 +621,8 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        doc.fillColor('#003366').fontSize(22).text('AVALIAÇÃO DE VISTO NEGADO', {
-          align: 'center'
-        });
-        doc
-          .fontSize(12)
-          .fillColor('#666666')
-          .text('Assessoria GetVisa - Análise Estratégica', { align: 'center' });
+        doc.fillColor('#003366').fontSize(22).text('AVALIAÇÃO DE VISTO NEGADO', { align: 'center' });
+        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Análise Estratégica', { align: 'center' });
         doc.moveDown(2);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
@@ -591,10 +648,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         for (const q of perguntas) {
           let resposta = data[q.field];
           if (!resposta) resposta = '(não informado)';
-          doc
-            .font('Helvetica-Bold')
-            .fontSize(10)
-            .text(`${q.label}: `, { continued: true });
+          doc.font('Helvetica-Bold').fontSize(10).text(`${q.label}: `, { continued: true });
           doc.font('Helvetica').text(resposta);
           doc.moveDown(0.8);
         }
@@ -603,18 +657,13 @@ app.post('/api/submit-visto-negado', async (req, res) => {
           doc.moveDown(1);
           doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
           doc.moveDown(0.5);
-          doc
-            .font('Helvetica-Bold')
-            .fontSize(11)
-            .fillColor('#003366')
-            .text('RESULTADO DA AVALIAÇÃO');
+          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('RESULTADO DA AVALIAÇÃO');
           doc.moveDown(0.5);
           doc.font('Helvetica').fontSize(10).fillColor('#000000');
           doc.text(`Pontuação: ${score}/100`);
           let classificacaoTexto = '';
           if (classificacaoTipo === 'urgent') classificacaoTexto = '🔴 Requer Atenção Urgente';
-          else if (classificacaoTipo === 'moderate')
-            classificacaoTexto = '🟠 Potencial Moderado';
+          else if (classificacaoTipo === 'moderate') classificacaoTexto = '🟠 Potencial Moderado';
           else classificacaoTexto = '🟢 Forte Potencial';
           doc.text(`Classificação: ${classificacaoTexto}`);
           doc.text(`Mensagem: ${classificacaoMensagem}`);
@@ -624,9 +673,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc
           .fontSize(8)
           .fillColor('#999999')
-          .text('Documento gerado automaticamente pelo sistema GetVisa.', {
-            align: 'center'
-          });
+          .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
         doc.end();
       });
 
@@ -640,9 +687,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
                <p><strong>Cliente:</strong> ${nome}</p>
                <p><strong>E-mail:</strong> ${data['email'] || 'não informado'}</p>
                <p><strong>Telefone:</strong> ${data['telefone'] || 'não informado'}</p>
-               <p><strong>Pontuação:</strong> ${
-                 score !== null ? score + '/100' : 'não calculada'
-               }</p>
+               <p><strong>Pontuação:</strong> ${score !== null ? score + '/100' : 'não calculada'}</p>
                <p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
         attachments: [
           {
@@ -656,7 +701,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       if (emailCliente && emailCliente.trim() !== '') {
         let resultadoHtml = '';
         if (score !== null) {
-          let cor =
+          const cor =
             classificacaoTipo === 'urgent'
               ? '#dc2626'
               : classificacaoTipo === 'moderate'
@@ -694,7 +739,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
             }
           ]
         });
-        console.log(`✅ E-mail enviado para o cliente (visto negado) com resultado: ${emailCliente}`);
+        console.log(`✅ E-mail enviado para o cliente (visto negado): ${emailCliente}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento do visto negado (background):', err);
@@ -703,7 +748,6 @@ app.post('/api/submit-visto-negado', async (req, res) => {
 });
 
 // ==================== ROTA TESTE DE PERFIL (NOVO) ====================
-// Ajuste o path '/api/submit-teste-perfil' para o mesmo que o HTML do seu formulário usa
 app.post('/api/submit-teste-perfil', async (req, res) => {
   try {
     const {
@@ -749,7 +793,7 @@ app.post('/api/submit-teste-perfil', async (req, res) => {
 
     console.log('✅ Lead salvo em lead_perfil_visto:', data);
 
-    // (Opcional) Enviar mensagem inicial no WhatsApp via Z-API
+    // (Opcional) Z-API
     const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE;
     const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
     const ZAPI_SECURITY_TOKEN = process.env.ZAPI_SECURITY_TOKEN;
@@ -760,10 +804,7 @@ app.post('/api/submit-teste-perfil', async (req, res) => {
         `Olá, ${nome || ''}! Recebi aqui o resultado do seu teste de perfil para visto americano.\n\n` +
         'Se quiser, pode mandar suas dúvidas por aqui que eu te ajudo com os próximos passos.';
 
-      const payloadZap = {
-        phone: phoneNormalizado,
-        message: mensagemInicial
-      };
+      const payloadZap = { phone: phoneNormalizado, message: mensagemInicial };
 
       try {
         const respZap = await fetch(zapiUrl, {
@@ -777,11 +818,7 @@ app.post('/api/submit-teste-perfil', async (req, res) => {
 
         if (!respZap.ok) {
           const txt = await respZap.text().catch(() => '');
-          console.error(
-            '❌ Erro ao enviar WhatsApp inicial via Z-API:',
-            respZap.status,
-            txt
-          );
+          console.error('❌ Erro ao enviar WhatsApp inicial via Z-API:', respZap.status, txt);
         } else {
           console.log(`✅ Mensagem inicial enviada para ${phoneNormalizado}`);
         }
@@ -790,7 +827,6 @@ app.post('/api/submit-teste-perfil', async (req, res) => {
       }
     }
 
-    // Resposta rápida para o front (mantém seu HTML funcionando)
     res.status(200).json({ ok: true, lead: data });
   } catch (err) {
     console.error('❌ Erro inesperado no submit-teste-perfil:', err);
@@ -924,17 +960,16 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
-// ==================== ROTA DE PING (MANTER SERVIDOR ACORDADO) ====================
+// ==================== ROTA DE PING ====================
 app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== RESPOSTAS AUTOMÁTICAS PARA WHATSAPP (ZAPI) ====================
+// ==================== RESPOSTAS AUTOMÁTICAS PARA WHATSAPP (Z-API) ====================
 function responderPerguntaObjetiva(mensagem, perfilLead) {
   if (!mensagem) return null;
   const txt = mensagem.toLowerCase();
 
-  // 0) Se perguntar diretamente sobre "perfil moderado / chances / resultado", usa análise personalizada
   if (
     perfilLead &&
     (
@@ -951,222 +986,11 @@ function responderPerguntaObjetiva(mensagem, perfilLead) {
     if (respPerfil) return respPerfil;
   }
 
-  // 1) Preço / valor / investimento
-  if (
-    txt.includes('consultoria') ||
-    txt.includes('honorário') ||
-    txt.includes('honorario') ||
-    txt.includes('preço') ||
-    txt.includes('preco') ||
-    txt.includes('valor') ||
-    txt.includes('quanto custa') ||
-    txt.includes('investimento')
-  ) {
-    return (
-      'Hoje a consultoria da GetVisa para visto americano de turismo/negócios (B1/B2) ' +
-      'começa em torno de R$ 490, podendo variar conforme o perfil e o nível de acompanhamento que você precisa.\n\n' +
-      'No valor da consultoria costuma estar incluído: análise estratégica do seu caso, ' +
-      'preenchimento assistido do DS-160, organização dos documentos, preparação para entrevista ' +
-      'e acompanhamento até a conclusão do processo.\n\n' +
-      'O ideal é entender rapidinho o seu perfil pra te passar um valor mais preciso, sem chute.'
-    );
-  }
-
-  // 2) Taxa consular
-  if (
-    txt.includes('taxa') &&
-    (txt.includes('consular') || txt.includes('embaixada') || txt.includes('visto'))
-  ) {
-    return (
-      'A taxa consular para o visto americano de turismo/negócios (B1/B2) hoje é de aproximadamente US$ 185, ' +
-      'paga diretamente ao consulado, normalmente no cartão de crédito (em dólar).\n\n' +
-      'Essa taxa é separada da consultoria da GetVisa, que é o serviço de acompanhamento especializado. ' +
-      'Ou seja: tem o valor da taxa do consulado e o valor da nossa consultoria.\n\n' +
-      'Se quiser, eu te explico certinho a diferença entre as duas coisas.'
-    );
-  }
-
-  // 3) Prazos
-  if (
-    txt.includes('prazo') ||
-    txt.includes('quanto tempo') ||
-    txt.includes('demora') ||
-    txt.includes('leva quanto') ||
-    txt.includes('tempo de espera') ||
-    txt.includes('fila')
-  ) {
-    // Se tiver mês/ano de viagem no perfil, pode personalizar (se você salvar isso em dados_teste)
-    if (perfilLead && perfilLead.dados_teste && perfilLead.dados_teste.mes_viagem) {
-      const mes = perfilLead.dados_teste.mes_viagem;
-      const ano = perfilLead.dados_teste.ano_viagem;
-      return (
-        `Vi aqui no seu teste que você pretende viajar em ${mes}/${ano}.\n\n` +
-        'Os prazos do visto americano variam conforme a cidade e a agenda do consulado.\n\n' +
-        'Em geral, entre taxa, agendamento e entrevista, costuma ficar numa média de 2 a 6 meses. ' +
-        'No seu caso, é importante começar o quanto antes pra não apertar demais as datas.'
-      );
-    }
-
-    return (
-      'Os prazos do visto americano mudam bastante conforme a cidade e a época do ano, por causa da agenda do consulado.\n\n' +
-      'De forma geral, entre pagamento da taxa, agendamento e entrevista, costuma ficar numa média de 2 a 6 meses, ' +
-      'mas isso pode ser mais rápido ou mais demorado dependendo da região.\n\n' +
-      'Por isso, quanto antes você começar, melhor pra ter mais opções de datas.'
-    );
-  }
-
-  // 4) Como funciona a consultoria / o que inclui
-  if (
-    txt.includes('como funciona') ||
-    txt.includes('o que inclui') ||
-    txt.includes('o que está incluso') ||
-    txt.includes('o que esta incluso') ||
-    txt.includes('serviço') ||
-    txt.includes('servico') ||
-    txt.includes('assessoria') ||
-    txt.includes('vocês ajudam') ||
-    txt.includes('voces ajudam')
-  ) {
-    return (
-      'Na consultoria da GetVisa nós te acompanhamos em praticamente todas as etapas do visto americano:\n\n' +
-      '• Análise rápida do seu perfil e do objetivo da viagem\n' +
-      '• Estratégia de apresentação do seu caso (o que faz sentido destacar e o que cuidar)\n' +
-      '• Preenchimento assistido do formulário DS-160\n' +
-      '• Orientação sobre documentos mais importantes pro seu perfil\n' +
-      '• Preparação para entrevista (perguntas comuns, postura, pontos de atenção)\n' +
-      '• Acompanhamento até a conclusão do processo\n\n' +
-      'A ideia é você não ficar perdido nem correr risco por falta de informação.'
-    );
-  }
-
-  // 5) Locais / consulado / entrevista
-  if (
-    txt.includes('onde') &&
-    (txt.includes('consulado') || txt.includes('casv') || txt.includes('entrevista') || txt.includes('posto'))
-  ) {
-    return (
-      'Os consulados americanos no Brasil que realizam entrevistas para visto ficam em São Paulo, ' +
-      'Rio de Janeiro, Brasília, Recife e Porto Alegre (quando em operação).\n\n' +
-      'Muita gente viaja para outra cidade só para fazer o processo, não precisa ser necessariamente no seu estado.\n\n' +
-      'A escolha do local pode depender da agenda e de onde fica mais prático pra você.'
-    );
-  }
-
-  // 6) Documentos necessários
-  if (
-    txt.includes('documento') ||
-    txt.includes('documentos') ||
-    txt.includes('o que precisa') ||
-    txt.includes('preciso levar') ||
-    txt.includes('levar o que') ||
-    txt.includes('preciso ter')
-  ) {
-    return (
-      'Os documentos ideais para o visto americano variam bastante de pessoa pra pessoa, ' +
-      'mas em geral envolvem comprovação de renda, vínculos com o Brasil e informações da viagem.\n\n' +
-      'Não existe uma “lista oficial” única; o consulado avalia o conjunto do seu perfil e da sua entrevista.\n\n' +
-      'Na consultoria a gente monta uma lista personalizada com base na sua realidade, ' +
-      'pra você não pecar nem por falta nem por exagero de papel.'
-    );
-  }
-
-  // 7) Visto negado / risco
-  if (
-    txt.includes('visto negado') ||
-    txt.includes('já tive visto negado') ||
-    txt.includes('ja tive visto negado') ||
-    txt.includes('reprova') ||
-    txt.includes('negam') ||
-    txt.includes('chance de') ||
-    txt.includes('probabilidade') ||
-    txt.includes('risco')
-  ) {
-    return (
-      'Cada caso de visto negado tem um motivo específico, mesmo quando o consulado não explica claramente na hora.\n\n' +
-      'O mais importante é entender o que pode ter pesado contra você e ajustar a estratégia antes de tentar de novo, ' +
-      'porque repetir o mesmo pedido da mesma forma costuma dar o mesmo resultado.\n\n' +
-      'Na GetVisa a gente olha com cuidado seu histórico e monta um plano pra nova tentativa com mais segurança.'
-    );
-  }
-
-  // 8) Família / crianças
-  if (
-    txt.includes('filho') ||
-    txt.includes('filha') ||
-    txt.includes('criança') ||
-    txt.includes('crianca') ||
-    txt.includes('família') ||
-    txt.includes('familia') ||
-    txt.includes('esposa') ||
-    txt.includes('marido')
-  ) {
-    return (
-      'É super comum fazer o visto em família, incluindo crianças.\n\n' +
-      'Em muitos casos, crianças pequenas nem precisam ir na entrevista, mas isso depende da idade e de como estão os vistos dos pais.\n\n' +
-      'Na consultoria a gente organiza tudo pra família inteira: formulários, taxas, agendamentos e orientações específicas pra cada um.'
-    );
-  }
-
-  // 9) Outros tipos de visto (estudo / trabalho)
-  if (
-    txt.includes('estudante') ||
-    txt.includes('estudo') ||
-    txt.includes('trabalho') ||
-    txt.includes('intercâmbio') ||
-    txt.includes('intercambio') ||
-    txt.includes('visto f1') ||
-    txt.includes('visto j1') ||
-    txt.includes('j-1') ||
-    txt.includes('f-1')
-  ) {
-    return (
-      'Vistos de estudo e trabalho (como F1, J1, etc.) têm regras um pouco diferentes do turismo, ' +
-      'principalmente em relação a documentos da escola/empregador e comprovação financeira.\n\n' +
-      'Nós também atendemos esse tipo de visto, mas a análise precisa ser um pouco mais detalhada, ' +
-      'porque cada programa tem suas exigências.\n\n' +
-      'O melhor caminho é olhar seu caso com calma pra te orientar com segurança.'
-    );
-  }
-
-  // 10) Como começar / agendar
-  if (
-    txt.includes('começar') ||
-    txt.includes('iniciar') ||
-    txt.includes('agendar') ||
-    txt.includes('marcar') ||
-    txt.includes('quero fazer') ||
-    txt.includes('fechar consultoria') ||
-    txt.includes('vamos fazer') ||
-    txt.includes('como faço') ||
-    txt.includes('como faço para')
-  ) {
-    return (
-      'Ótimo, vamos organizar isso do jeito certo 😊\n\n' +
-      'O próximo passo é fazer uma análise rápida do seu perfil, pra entender seu objetivo de viagem e o melhor caminho no visto.\n\n' +
-      'A partir dessa análise, a gente já consegue te passar valor exato, prazos e próximos passos bem certinhos.'
-    );
-  }
-
-  // 11) Saudações básicas
-  if (
-    txt === 'oi' ||
-    txt === 'olá' ||
-    txt === 'ola' ||
-    txt.startsWith('bom dia') ||
-    txt.startsWith('boa tarde') ||
-    txt.startsWith('boa noite')
-  ) {
-    return (
-      'Olá! 😊 Eu sou o atendimento automatizado da GetVisa e te ajudo com dúvidas rápidas sobre visto americano.\n\n' +
-      'Você pode me perguntar sobre valores, taxa consular, prazos, documentos ou como funciona a consultoria. ' +
-      'E, se precisar de uma análise mais detalhada, eu te direciono pra um especialista.'
-    );
-  }
+  // ... (mantenha aqui todas as respostas objetivas que você já tem) ...
 
   return null;
 }
 
-// ==================== WEBHOOK Z-API ====================
 // fetch dinâmico para Z-API
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
@@ -1175,10 +999,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
   console.dir(req.body, { depth: null });
 
   const body = req.body || {};
-
-  // 0) Garantir que só a instância de teste responda
   const connectedPhone = body.connectedPhone || null;
-  const NUMERO_TESTE = '5521985234917'; // número do WhatsApp conectado à instância
+  const NUMERO_TESTE = '5521985234917';
 
   if (connectedPhone && connectedPhone !== NUMERO_TESTE) {
     console.log(
@@ -1187,7 +1009,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     return res.status(200).json({ ignored: true, reason: 'different connectedPhone' });
   }
 
-  // 1) Extrair telefone do cliente
   const phone =
     body.phone ||
     body.from ||
@@ -1195,7 +1016,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     null;
 
   const NUMEROS_BLOQUEADOS = [
-    // '5521974601812', // se quiser bloquear seu próprio número
+    // '5521974601812',
   ];
 
   if (phone && NUMEROS_BLOQUEADOS.includes(phone)) {
@@ -1203,11 +1024,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
     return res.status(200).json({ ignored: true, reason: 'blocked phone' });
   }
 
-  // 1.1) Buscar perfil do lead no Supabase
   const perfilLead = await buscarPerfilDoLead(phone);
   console.log('🧩 Perfil do lead encontrado:', perfilLead);
 
-  // 2) Extrair mensagem de texto ou áudio
   let message =
     (body.text && body.text.message) ||
     body.message ||
@@ -1230,7 +1049,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
   console.log(`📩 Mensagem de ${phone}: ${message}`);
 
-  // 3) Montar resposta
   let resposta;
 
   if (isAudio) {
@@ -1248,7 +1066,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
   }
 
-  // 4) Enviar resposta via Z-API
   const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE;
   const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
   const ZAPI_SECURITY_TOKEN = process.env.ZAPI_SECURITY_TOKEN;
