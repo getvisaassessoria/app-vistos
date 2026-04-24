@@ -54,8 +54,42 @@ const radioMapping = {
   'falecido-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' }
 };
 
+// Função para formatar data do padrão americano (YYYY-MM-DD) para brasileiro (DD/MM/YYYY)
+function formatDateToBrazilian(dateString) {
+  if (!dateString || dateString === '') return null;
+  
+  // Se já estiver no formato DD/MM/YYYY, retorna como está
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) return dateString;
+  
+  // Tenta converter YYYY-MM-DD para DD/MM/YYYY
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+  
+  // Tenta converter outros formatos comuns
+  const date = new Date(dateString);
+  if (!isNaN(date.getTime())) {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  
+  // Se não conseguiu converter, retorna o valor original
+  return dateString;
+}
+
 function formatValue(fieldName, value) {
   if (value === undefined || value === null || value === '') return null;
+  
+  // Verifica se é um campo de data e aplica formatação
+  const dateFields = ['text-5', 'text-21', 'text-35', 'text-66', 'text-67', 'text-61', 'text-62', 'spouse-dob', 'data_casamento_div', 'data_divorcio', 'data_falecimento', 'text-50', 'text-44', 'text-45'];
+  if (dateFields.includes(fieldName)) {
+    const formattedDate = formatDateToBrazilian(value);
+    if (formattedDate) return formattedDate;
+  }
+  
   if (Array.isArray(value)) {
     if (value.length === 0) return null;
     const mapped = value.map(v => {
@@ -91,6 +125,8 @@ function groupTravels(data) {
   for (let i = 0; i < maxLen; i++) {
     let d = datas[i] || '';
     let dur = duracao[i] || '';
+    // Formatar a data da viagem
+    if (d) d = formatDateToBrazilian(d);
     if (d || dur) result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
   }
   return result;
@@ -283,7 +319,7 @@ app.post('/api/submit-ds160', async (req, res) => {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
 
-      // --- Geração do PDF (com ordem corrigida) ---
+      // --- Geração do PDF (com ordem corrigida e datas brasileiras) ---
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -491,8 +527,10 @@ app.post('/api/submit-ds160', async (req, res) => {
               const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
               for (let i = 0; i < maxEmp; i++) {
                 if (empNomes[i] || empCargos[i]) {
+                  let inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
+                  let fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
                   let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
-                  if (empInicios[i] || empFins[i]) linha += ` (${empInicios[i] || '?'} a ${empFins[i] || '?'})`;
+                  if (empInicios[i] || empFins[i]) linha += ` (${inicio} a ${fim})`;
                   empregos.push(linha);
                 }
               }
@@ -527,7 +565,10 @@ app.post('/api/submit-ds160', async (req, res) => {
             doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupação adicional ${i+1}: ${extra_descricoes[i] || '(não informado)'}`);
             if (extra_empregadores[i]) doc.font('Helvetica').text(`Empregador: ${extra_empregadores[i]}`);
             if (extra_rendas[i]) doc.font('Helvetica').text(`Renda mensal: ${extra_rendas[i]}`);
-            if (extra_inicios[i]) doc.font('Helvetica').text(`Data início: ${extra_inicios[i]}`);
+            if (extra_inicios[i]) {
+              const dataInicioFormatada = formatDateToBrazilian(extra_inicios[i]);
+              doc.font('Helvetica').text(`Data início: ${dataInicioFormatada}`);
+            }
             if (extra_enderecos[i]) doc.font('Helvetica').text(`Endereço: ${extra_enderecos[i]}`);
             if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text(`Cidade/UF: ${extra_cidades[i]} / ${extra_estados[i]}`);
             if (extra_ceps[i]) doc.font('Helvetica').text(`CEP: ${extra_ceps[i]}`);
@@ -666,6 +707,10 @@ app.post('/api/submit-passaporte', async (req, res) => {
         for (const field of fields) {
           let value = data[field.name];
           if (value && value !== '') {
+            // Formatar data se necessário
+            if (field.name.includes('data') || field.name.includes('nasc')) {
+              value = formatDateToBrazilian(value);
+            }
             if (lastGroup !== null) {
               doc.moveDown(0.3);
               doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
