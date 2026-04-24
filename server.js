@@ -828,5 +828,64 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
+// ==================== WEBHOOK Z-API (WHATSAPP) ====================
+app.post('/api/webhook/zapi', async (req, res) => {
+  console.log('📥 Webhook Z-API recebido:', req.body);
+  const body = req.body || {};
+
+  const phone = body.phone || body.from || body.remoteJid || null;
+  let message = body.text?.message || body.message || body.body || '';
+
+  if (!phone || !message) {
+    return res.status(200).json({ received: true, warning: 'missing phone or message' });
+  }
+
+  console.log(`📩 Mensagem de ${phone}: ${message}`);
+
+  let resposta = 'Olá! Obrigado por entrar em contato. Em breve um especialista te atenderá.';
+  const msg = message.toLowerCase();
+  if (msg.includes('oi') || msg.includes('olá') || msg.includes('bom dia')) {
+    resposta = 'Olá! 😊 Eu sou o atendimento automatizado da GetVisa. Como posso ajudar?';
+  } else if (msg.includes('visto negado')) {
+    resposta = 'Sobre visto americano negado, podemos ajudar! Preencha nosso formulário: https://getvisa.com.br/visto-negado';
+  } else if (msg.includes('preço') || msg.includes('valor')) {
+    resposta = 'Os valores variam conforme o perfil. Preencha nosso formulário para orçamento.';
+  } else if (msg.includes('prazo') || msg.includes('demora')) {
+    resposta = 'Os prazos dependem da agenda do consulado. Recomendamos iniciar o quanto antes.';
+  }
+
+  const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE;
+  const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
+  const ZAPI_SECURITY_TOKEN = process.env.ZAPI_SECURITY_TOKEN;
+
+  if (!ZAPI_INSTANCE || !ZAPI_TOKEN) {
+    console.warn('⚠️ Z-API não configurada (variáveis em falta)');
+    return res.status(200).json({ received: true, warning: 'Z-API not configured' });
+  }
+
+  const zapiUrl = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-text`;
+
+  try {
+    const response = await fetch(zapiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ZAPI_SECURITY_TOKEN && { 'Client-Token': ZAPI_SECURITY_TOKEN })
+      },
+      body: JSON.stringify({ phone, message: resposta })
+    });
+    if (response.ok) {
+      console.log(`✅ Resposta enviada para ${phone}`);
+    } else {
+      const errText = await response.text();
+      console.error(`❌ Erro Z-API (${response.status}): ${errText}`);
+    }
+  } catch (err) {
+    console.error('❌ Erro ao enviar resposta Z-API:', err);
+  }
+
+  res.status(200).json({ received: true });
+});
+
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
