@@ -312,6 +312,35 @@ app.post('/api/submit-ds160', async (req, res) => {
           }
         }
 
+        // ====== NOVA SEÇÃO: OUTRAS OCUPAÇÕES / FONTES DE RENDA ======
+        const extra_descricoes = data['extra_descricao[]'] || [];
+        const extra_rendas = data['extra_renda[]'] || [];
+        const extra_empregadores = data['extra_empregador[]'] || [];
+        const extra_inicios = data['extra_data_inicio[]'] || [];
+        const extra_enderecos = data['extra_endereco[]'] || [];
+        const extra_cidades = data['extra_cidade[]'] || [];
+        const extra_estados = data['extra_estado[]'] || [];
+        const extra_telefones = data['extra_telefone[]'] || [];
+        const extra_ceps = data['extra_cep[]'] || [];
+
+        if (extra_descricoes.length > 0) {
+          drawSeparator(doc);
+          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('OUTRAS OCUPAÇÕES / FONTES DE RENDA');
+          doc.moveDown(0.3);
+          
+          for (let i = 0; i < extra_descricoes.length; i++) {
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupação adicional ${i+1}: ${extra_descricoes[i] || '(não informado)'}`);
+            if (extra_empregadores[i]) doc.font('Helvetica').text(`Empregador: ${extra_empregadores[i]}`);
+            if (extra_rendas[i]) doc.font('Helvetica').text(`Renda mensal: ${extra_rendas[i]}`);
+            if (extra_inicios[i]) doc.font('Helvetica').text(`Data início: ${extra_inicios[i]}`);
+            if (extra_enderecos[i]) doc.font('Helvetica').text(`Endereço: ${extra_enderecos[i]}`);
+            if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text(`Cidade/UF: ${extra_cidades[i]} / ${extra_estados[i]}`);
+            if (extra_ceps[i]) doc.font('Helvetica').text(`CEP: ${extra_ceps[i]}`);
+            if (extra_telefones[i]) doc.font('Helvetica').text(`Telefone: ${extra_telefones[i]}`);
+            doc.moveDown(0.6);
+          }
+        }
+
         // Telefones anteriores
         const telefones = data['telefones_anteriores[]'] || [];
         if (telefones.length > 0) {
