@@ -919,7 +919,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
   const ZAPI_SECURITY_TOKEN = process.env.ZAPI_SECURITY_TOKEN;
 
   if (!ZAPI_INSTANCE || !ZAPI_TOKEN) {
-    console.warn('⚠️ Z-API não configurada');
+    console.warn('⚠️ Z-API não configurada (variáveis em falta)');
     return res.status(200).json({ received: true, warning: 'Z-API not configured' });
   }
 
@@ -946,7 +946,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
   res.status(200).json({ received: true });
 });
-
 // ==================== INICIALIZAÇÃO ====================
 
 
