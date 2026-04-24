@@ -2,10 +2,19 @@ services:
   - type: web
     name: app-vistos-staging
     env: node
-    plan: free  # <--- ESSA LINHA É FUNDAMENTAL
     branch: staging
     buildCommand: npm install
     startCommand: node server.js
+    plan: free
     envVars:
-      - key: NODE_VERSION
-        value: 22.22.0
+      - key: SUPABASE_URL
+        value: "https://seu-projeto.supabase.co"   # substitua pelo valor real (ou use sync: false para definir manualmente)
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: "sua_chave"
+      - key: RESEND_API_KEY
+        value: "re_..."
+      # Z-API opcional
+      - key: ZAPI_INSTANCE
+        value: ""
+      - key: ZAPI_TOKEN
+        value: ""
