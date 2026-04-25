@@ -329,7 +329,7 @@ app.post('/api/submit-ds160', async (req, res) => {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
 
-      // --- Geração do PDF (com ordem corrigida, datas brasileiras e títulos de seção sem emojis) ---
+      // --- Geração do PDF (com todas as correções) ---
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -490,13 +490,16 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 9: ENDERECO DE CORRESPONDENCIA ====================
         startSection('ENDERECO DE CORRESPONDENCIA');
-        if (renderField('radio-9', 'Endereco de correspondencia e o mesmo?') && data['radio-9'] === 'Não, é diferente') {
-          renderField('text-80', 'Logradouro (correspondencia)');
-          renderField('text-81', 'Complemento (correspondencia)');
-          renderField('text-82', 'CEP (correspondencia)');
-          renderField('text-83', 'Cidade (correspondencia)');
-          renderField('text-84', 'Estado (correspondencia)');
-          renderField('text-85', 'Pais (correspondencia)');
+        renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
+        if (data['radio-9'] === 'Não, é diferente') {
+          doc.font('Helvetica-Bold').fontSize(10).text('Endereco de correspondencia (diferente):');
+          doc.moveDown(0.3);
+          renderField('text-80', '  Logradouro');
+          renderField('text-81', '  Complemento');
+          renderField('text-82', '  CEP');
+          renderField('text-83', '  Cidade');
+          renderField('text-84', '  Estado');
+          renderField('text-85', '  Pais');
         }
         hasContentInSection = true;
 
@@ -650,32 +653,115 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-52', 'Descricao das funcoes');
         hasContentInSection = true;
 
+        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA (logo após OCUPACAO ATUAL) ====================
+        const extra_descricoes = data['extra_descricao[]'] || [];
+        if (extra_descricoes.length > 0) {
+          startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
+          
+          const extra_rendas = data['extra_renda[]'] || [];
+          const extra_empregadores = data['extra_empregador[]'] || [];
+          const extra_inicios = data['extra_data_inicio[]'] || [];
+          const extra_enderecos = data['extra_endereco[]'] || [];
+          const extra_cidades = data['extra_cidade[]'] || [];
+          const extra_estados = data['extra_estado[]'] || [];
+          const extra_telefones = data['extra_telefone[]'] || [];
+          const extra_ceps = data['extra_cep[]'] || [];
+          
+          for (let i = 0; i < extra_descricoes.length; i++) {
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupacao adicional ${i+1}: ${extra_descricoes[i] || '(nao informado)'}`);
+            if (extra_empregadores[i]) doc.font('Helvetica').text(`  Empregador: ${extra_empregadores[i]}`);
+            if (extra_rendas[i]) doc.font('Helvetica').text(`  Renda mensal: ${extra_rendas[i]}`);
+            if (extra_inicios[i]) {
+              const dataInicioFormatada = formatDateToBrazilian(extra_inicios[i]);
+              doc.font('Helvetica').text(`  Data inicio: ${dataInicioFormatada}`);
+            }
+            if (extra_enderecos[i]) doc.font('Helvetica').text(`  Endereco: ${extra_enderecos[i]}`);
+            if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text(`  Cidade/UF: ${extra_cidades[i]} / ${extra_estados[i]}`);
+            if (extra_ceps[i]) doc.font('Helvetica').text(`  CEP: ${extra_ceps[i]}`);
+            if (extra_telefones[i]) doc.font('Helvetica').text(`  Telefone: ${extra_telefones[i]}`);
+            doc.moveDown(0.6);
+          }
+          hasContentInSection = true;
+        }
+
         // ==================== SEÇÃO 20: EMPREGOS ANTERIORES ====================
         if (renderField('radio-17', 'Teve empregos anteriores?') && data['radio-17'] === 'one') {
-          const empregos = [];
           const empNomes = data['emprego_anterior_nome[]'] || [];
-          const empCargos = data['emprego_anterior_cargo[]'] || [];
-          const empInicios = data['emprego_anterior_inicio[]'] || [];
-          const empFins = data['emprego_anterior_fim[]'] || [];
-          const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
-          for (let i = 0; i < maxEmp; i++) {
-            if (empNomes[i] || empCargos[i]) {
-              let inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
-              let fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
-              let linha = `${empNomes[i] || ''}${empNomes[i] && empCargos[i] ? ' - ' : ''}${empCargos[i] || ''}`;
-              if (empInicios[i] || empFins[i]) linha += ` (${inicio} a ${fim})`;
-              empregos.push(linha);
-            }
-          }
-          if (empregos.length > 0) {
+          if (empNomes.length > 0) {
             startSection('EMPREGOS ANTERIORES');
-            doc.font('Helvetica-Bold').fontSize(10).text('Empregos anteriores:');
-            empregos.forEach(emp => doc.font('Helvetica').text(`  - ${emp}`));
-            doc.moveDown(0.6);
+            const empCargos = data['emprego_anterior_cargo[]'] || [];
+            const empInicios = data['emprego_anterior_inicio[]'] || [];
+            const empFins = data['emprego_anterior_fim[]'] || [];
+            const maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
+            for (let i = 0; i < maxEmp; i++) {
+              if (empNomes[i] || empCargos[i]) {
+                let inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
+                let fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
+                doc.font('Helvetica-Bold').fontSize(10).text(`Emprego anterior ${i+1}:`);
+                if (empNomes[i]) doc.font('Helvetica').text(`  Empregador: ${empNomes[i]}`);
+                if (empCargos[i]) doc.font('Helvetica').text(`  Cargo: ${empCargos[i]}`);
+                if (empInicios[i] || empFins[i]) doc.font('Helvetica').text(`  Periodo: ${inicio} a ${fim}`);
+                doc.moveDown(0.4);
+              }
+            }
+            hasContentInSection = true;
           }
         }
 
-        // ==================== SEÇÃO 21: ESCOLARIDADE ====================
+        // ==================== SEÇÃO 21: SERVICO MILITAR ====================
+        startSection('SERVICO MILITAR');
+        const servicoMilitar = data['servico_militar'] || '';
+        if (servicoMilitar === 'Sim') {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
+          doc.font('Helvetica').text('Sim');
+          doc.moveDown(0.6);
+          renderField('military_country', 'Pais');
+          renderField('military_branch', 'Ramo das Forcas Armadas');
+          renderField('military_rank', 'Patente / Posicao');
+          renderField('military_specialty', 'Especialidade Militar');
+          renderField('military_date_from', 'Data de inicio');
+          renderField('military_date_to', 'Data de termino');
+        } else {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
+          doc.font('Helvetica').text('Nao');
+          doc.moveDown(0.6);
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 22: TREINAMENTO ESPECIALIZADO ====================
+        startSection('TREINAMENTO ESPECIALIZADO');
+        const treinamentoEspecial = data['treinamento_especializado'] || '';
+        if (treinamentoEspecial === 'Sim') {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
+          doc.font('Helvetica').text('Sim');
+          doc.moveDown(0.6);
+          renderField('treinamento_descricao', 'Descricao do treinamento');
+        } else {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
+          doc.font('Helvetica').text('Nao');
+          doc.moveDown(0.6);
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 23: SEGURANCA (ANTECEDENTES CRIMINAIS) ====================
+        startSection('SEGURANCA');
+        const antecedentes = data['antecedentes_criminais'] || '';
+        if (antecedentes === 'Sim') {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
+          doc.font('Helvetica').text('Sim');
+          doc.moveDown(0.6);
+          renderField('antecedentes_descricao', 'Descricao dos antecedentes');
+          renderField('antecedentes_data', 'Data do ocorrido');
+          renderField('antecedentes_local', 'Local');
+          renderField('antecedentes_resolucao', 'Resolucao do caso');
+        } else {
+          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
+          doc.font('Helvetica').text('Nao');
+          doc.moveDown(0.6);
+        }
+        hasContentInSection = true;
+
+        // ==================== SEÇÃO 24: ESCOLARIDADE ====================
         if (renderField('radio-18', 'Escolaridade secundario/superior?') && data['radio-18'] === 'one') {
           startSection('ESCOLARIDADE');
           renderField('text-59', 'Instituicao de ensino');
@@ -689,7 +775,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 22: IDIOMAS ====================
+        // ==================== SEÇÃO 25: IDIOMAS ====================
         startSection('IDIOMAS');
         if (renderField('radio-19', 'Fala outros idiomas?') && data['radio-19'] === 'one') {
           const idiomas = data['idiomas[]'] || [];
@@ -701,7 +787,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 23: VIAGENS INTERNACIONAIS ====================
+        // ==================== SEÇÃO 26: VIAGENS INTERNACIONAIS ====================
         startSection('VIAGENS INTERNACIONAIS');
         if (renderField('radio-20', 'Viajou para outros paises?') && data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
@@ -712,36 +798,6 @@ app.post('/api/submit-ds160', async (req, res) => {
           }
         }
         hasContentInSection = true;
-
-        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA ====================
-        const extra_descricoes = data['extra_descricao[]'] || [];
-        if (extra_descricoes.length > 0) {
-          drawSectionTitle(doc, 'OUTRAS OCUPACOES / FONTES DE RENDA');
-          
-          const extra_rendas = data['extra_renda[]'] || [];
-          const extra_empregadores = data['extra_empregador[]'] || [];
-          const extra_inicios = data['extra_data_inicio[]'] || [];
-          const extra_enderecos = data['extra_endereco[]'] || [];
-          const extra_cidades = data['extra_cidade[]'] || [];
-          const extra_estados = data['extra_estado[]'] || [];
-          const extra_telefones = data['extra_telefone[]'] || [];
-          const extra_ceps = data['extra_cep[]'] || [];
-          
-          for (let i = 0; i < extra_descricoes.length; i++) {
-            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupacao adicional ${i+1}: ${extra_descricoes[i] || '(nao informado)'}`);
-            if (extra_empregadores[i]) doc.font('Helvetica').text(`Empregador: ${extra_empregadores[i]}`);
-            if (extra_rendas[i]) doc.font('Helvetica').text(`Renda mensal: ${extra_rendas[i]}`);
-            if (extra_inicios[i]) {
-              const dataInicioFormatada = formatDateToBrazilian(extra_inicios[i]);
-              doc.font('Helvetica').text(`Data inicio: ${dataInicioFormatada}`);
-            }
-            if (extra_enderecos[i]) doc.font('Helvetica').text(`Endereco: ${extra_enderecos[i]}`);
-            if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text(`Cidade/UF: ${extra_cidades[i]} / ${extra_estados[i]}`);
-            if (extra_ceps[i]) doc.font('Helvetica').text(`CEP: ${extra_ceps[i]}`);
-            if (extra_telefones[i]) doc.font('Helvetica').text(`Telefone: ${extra_telefones[i]}`);
-            doc.moveDown(0.6);
-          }
-        }
 
         doc.moveDown(2);
         doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
