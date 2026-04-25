@@ -133,13 +133,15 @@ function drawSeparator(doc) {
 }
 
 function drawSectionTitle(doc, title) {
-  doc.moveDown(1);
-  doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title);
-  doc.moveDown(0.3);
-  doc.strokeColor('#003366').lineWidth(1.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-  doc.lineWidth(0.5);
-  doc.moveDown(0.5);
-  doc.fillColor('#000000').fontSize(10).font('Helvetica');
+    doc.moveDown(1);
+    doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title.normalize('NFD').replace(/[\u0300-\u036f]/g, ''), { 
+        // Fallback: remover acentos como última alternativa
+    });
+    doc.moveDown(0.3);
+    doc.strokeColor('#003366').lineWidth(1.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.lineWidth(0.5);
+    doc.moveDown(0.5);
+    doc.fillColor('#000000').fontSize(10).font('Helvetica');
 }
 
 const simpleFields = [
