@@ -753,7 +753,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 25: SEGURANÇA ====================
+        // ==================== SEÇÃO 25: SEGURANCA ====================
         startSection('SEGURANCA');
         if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
@@ -1208,11 +1208,11 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// Webhook para Z-API (WhatsApp) - VERSÃO SIMPLIFICADA
+// ==================== WEBHOOK Z-API CORRIGIDO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('[ZAPI] Recebido:', JSON.stringify(req.body));
   
-  // Resposta imediata
+  // Resposta imediata para evitar timeout
   res.status(200).json({ status: 'ok' });
   
   try {
@@ -1227,51 +1227,77 @@ app.post('/api/webhook/zapi', async (req, res) => {
     
     if (typeof rawMessage === 'string') {
       messageText = rawMessage;
-    } else if (rawMessage && rawMessage.text) {
-      messageText = rawMessage.text;
-    } else if (rawMessage && rawMessage.body) {
-      messageText = rawMessage.body;
+    } else if (rawMessage && typeof rawMessage === 'object') {
+      messageText = rawMessage.text || rawMessage.body || rawMessage.content || '';
     } else {
       messageText = String(rawMessage);
     }
     
     if (!phone || !messageText) {
-      console.log('[ZAPI] Dados incompletos');
+      console.log('[ZAPI] Dados incompletos - phone:', phone, 'message:', messageText);
       return;
     }
     
     console.log(`[ZAPI] ${phone}: ${messageText}`);
     
-    // Processar resposta (convertendo para minúsculo com segurança)
+    // Processar resposta com segurança
     const msg = messageText.toLowerCase();
     let resposta = 'Olá! Obrigado por contatar a GetVisa. Em breve retornamos.';
     
-    if (msg.includes('oi') || msg.includes('olá')) {
-      resposta = 'Olá! Como posso ajudar? Digite "visto negado", "preço" ou "prazo"';
+    if (msg.includes('oi') || msg.includes('olá') || msg.includes('bom dia')) {
+      resposta = 'Olá! 😊 Como posso ajudar? Digite "visto negado", "preço" ou "prazo"';
     } else if (msg.includes('visto negado')) {
-      resposta = 'Simulador de visto negado: https://getvisa.com.br/visto-negado';
-    } else if (msg.includes('preço') || msg.includes('valor')) {
-      resposta = 'Preencha o DS-160 para orçamento: https://getvisa.com.br/ds-160';
-    } else if (msg.includes('prazo')) {
-      resposta = 'Prazos variam de 15 a 90 dias, dependendo do consulado.';
+      resposta = '⚠️ Simulador de visto negado: https://getvisa.com.br/visto-negado';
+    } else if (msg.includes('preço') || msg.includes('valor') || msg.includes('custo')) {
+      resposta = '💰 Preencha o DS-160 para orçamento: https://getvisa.com.br/ds-160';
+    } else if (msg.includes('prazo') || msg.includes('demora') || msg.includes('tempo')) {
+      resposta = '⏰ Prazos variam de 15 a 90 dias, dependendo da agenda do consulado.';
     }
     
-    // Enviar resposta
+    // Enviar resposta via Z-API
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
     
-    if (instance && token && phone) {
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.replace(/\D/g, ''), message: resposta })
-      });
-      console.log('[ZAPI] Resposta enviada');
+    console.log('[ZAPI] Instance configurada:', instance ? '✅' : '❌');
+    console.log('[ZAPI] Token configurado:', token ? '✅' : '❌');
+    
+    if (!instance || !token) {
+      console.error('[ZAPI] ERRO: Credenciais da Z-API não configuradas');
+      return;
+    }
+    
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    console.log('[ZAPI] Enviando para:', cleanPhone);
+    console.log('[ZAPI] Mensagem:', resposta);
+    
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    
+    const fetchResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(securityToken && { 'Client-Token': securityToken })
+      },
+      body: JSON.stringify({ 
+        phone: cleanPhone, 
+        message: resposta 
+      })
+    });
+    
+    const responseText = await fetchResponse.text();
+    console.log('[ZAPI] Status HTTP:', fetchResponse.status);
+    console.log('[ZAPI] Resposta Z-API:', responseText);
+    
+    if (fetchResponse.status === 200) {
+      console.log('[ZAPI] ✅ Mensagem enviada com sucesso!');
+    } else {
+      console.error('[ZAPI] ❌ Falha no envio. Status:', fetchResponse.status);
     }
     
   } catch (error) {
-    console.error('[ZAPI] Erro:', error.message);
+    console.error('[ZAPI] ❌ Erro:', error.message);
+    console.error(error.stack);
   }
 });
 
