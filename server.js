@@ -817,6 +817,50 @@ app.put('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.json(data);
 });
 
+// ENDPOINT DE TESTE - NÃO ENVIA MENSAGEM REAL
+app.post('/api/webhook/zapi-test', async (req, res) => {
+  console.log('🧪 TESTE - Webhook recebido:', req.body);
+  const body = req.body || {};
+  
+  const phone = body.phone || body.from || body.remoteJid || null;
+  
+  // Extrair mensagem
+  let message = '';
+  const rawMessage = body.text?.message || body.message || body.body || '';
+  
+  if (typeof rawMessage === 'string') {
+    message = rawMessage;
+  } else if (rawMessage && typeof rawMessage === 'object') {
+    message = rawMessage.text || rawMessage.body || rawMessage.content || '';
+  } else {
+    message = String(rawMessage);
+  }
+  
+  // Simular resposta sem enviar WhatsApp
+  let resposta = 'Olá! Obrigado por entrar em contato. Em breve um especialista te atenderá.';
+  
+  if (message) {
+    const msg = message.toLowerCase();
+    if (msg.includes('oi') || msg.includes('olá')) {
+      resposta = 'Olá! 😊 Eu sou o atendimento automatizado da GetVisa. Como posso ajudar?';
+    } else if (msg.includes('visto negado')) {
+      resposta = 'Sobre visto americano negado, podemos ajudar! Preencha nosso formulário: https://getvisa.com.br/visto-negado';
+    } else if (msg.includes('preço') || msg.includes('valor')) {
+      resposta = 'Os valores variam conforme o perfil. Preencha nosso formulário para orçamento.';
+    }
+  }
+  
+  // Retornar apenas para teste (NÃO envia WhatsApp)
+  res.json({
+    test: true,
+    received: true,
+    phone: phone,
+    message_received: message,
+    simulated_response: resposta,
+    warning: '✅ MODO TESTE - Nenhuma mensagem real foi enviada ao WhatsApp'
+  });
+});
+
 app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
