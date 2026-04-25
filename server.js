@@ -1209,41 +1209,29 @@ app.get('/ping', (req, res) => {
 });
 
 // ==================== WEBHOOK Z-API CORRIGIDO ====================
-// ==================== WEBHOOK Z-API CORRIGIDO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('[ZAPI] Recebido:', JSON.stringify(req.body));
-  
+  console.log('[ZAPI] Webhook chamado');
+
   // Resposta imediata
   res.status(200).json({ status: 'ok' });
-  
+
   try {
     const body = req.body;
-    
-    // CORREÇÃO: O telefone do REMETENTE (quem enviou a mensagem)
-    const phone = body.phone || body.from || null;
-    
-    // CORREÇÃO: A mensagem pode estar em body.text.message ou body.message
-    let messageText = '';
-    
-    if (body.text && body.text.message) {
-      messageText = body.text.message;
-    } else if (body.message) {
-      if (typeof body.message === 'string') {
-        messageText = body.message;
-      } else if (body.message.text) {
-        messageText = body.message.text;
-      }
-    }
-    
-    console.log(`[ZAPI] Telefone do remetente: ${phone}`);
-    console.log(`[ZAPI] Mensagem recebida: ${messageText}`);
-    
+
+    // Extrai o número que enviou a mensagem
+    const phone = body.phone || body.from;
+    // Extrai o texto da mensagem
+    const messageText = body.text?.message || body.message?.text || body.message;
+
+    console.log(`📞 Telefone: ${phone}`);
+    console.log(`💬 Mensagem: ${messageText}`);
+
     if (!phone || !messageText) {
-      console.log('[ZAPI] Dados incompletos');
+      console.warn('⚠️ Dados incompletos');
       return;
     }
-    
-    // Processar resposta
+
+    // Processa resposta
     const msg = messageText.toLowerCase();
     let resposta = 'Olá! Obrigado por contatar a GetVisa. Em breve retornamos.';
     
@@ -1256,34 +1244,38 @@ app.post('/api/webhook/zapi', async (req, res) => {
     } else if (msg.includes('prazo')) {
       resposta = 'Prazos variam de 15 a 90 dias, dependendo da agenda do consulado.';
     }
-    
-    // Enviar resposta para o número que enviou a mensagem
+
+    // Envia resposta
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
-    
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+
     if (!instance || !token) {
-      console.error('[ZAPI] Credenciais não configuradas');
+      console.error('❌ Z-API sem credenciais');
       return;
     }
-    
+
     const cleanPhone = phone.toString().replace(/\D/g, '');
     const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-    
-    console.log(`[ZAPI] Respondendo para: ${cleanPhone}`);
-    console.log(`[ZAPI] Resposta: ${resposta}`);
-    
+
+    console.log(`📤 Respondendo para: ${cleanPhone}`);
+    console.log(`📤 Resposta: ${resposta}`);
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Client-Token': securityToken || 'F65c27a64cd2e4984aa85a8f08040c2f7S'  // 🔑 SECURITY TOKEN AQUI!
+      },
       body: JSON.stringify({ phone: cleanPhone, message: resposta })
     });
-    
+
     const responseText = await response.text();
-    console.log('[ZAPI] Status:', response.status);
-    console.log('[ZAPI] Resposta Z-API:', responseText);
+    console.log(`📨 Status: ${response.status}`);
+    console.log(`📨 Resposta Z-API: ${responseText}`);
     
   } catch (error) {
-    console.error('[ZAPI] Erro:', error.message);
+    console.error('❌ Erro no webhook:', error.message);
   }
 });
 
