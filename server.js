@@ -834,7 +834,18 @@ app.post('/api/webhook/zapi', async (req, res) => {
   const body = req.body || {};
 
   const phone = body.phone || body.from || body.remoteJid || null;
-  let message = body.text?.message || body.message || body.body || '';
+  
+  // EXTRAIR MENSAGEM CORRETAMENTE (string ou objeto)
+  let message = '';
+  const rawMessage = body.text?.message || body.message || body.body || '';
+  
+  if (typeof rawMessage === 'string') {
+    message = rawMessage;
+  } else if (rawMessage && typeof rawMessage === 'object') {
+    message = rawMessage.text || rawMessage.body || rawMessage.content || '';
+  } else {
+    message = String(rawMessage);
+  }
 
   if (!phone || !message) {
     return res.status(200).json({ received: true, warning: 'missing phone or message' });
@@ -843,7 +854,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
   console.log(`📩 Mensagem de ${phone}: ${message}`);
 
   let resposta = 'Olá! Obrigado por entrar em contato. Em breve um especialista te atenderá.';
+  
+  // AGORA msg é sempre uma string
   const msg = message.toLowerCase();
+  
   if (msg.includes('oi') || msg.includes('olá') || msg.includes('bom dia')) {
     resposta = 'Olá! 😊 Eu sou o atendimento automatizado da GetVisa. Como posso ajudar?';
   } else if (msg.includes('visto negado')) {
@@ -870,21 +884,22 @@ app.post('/api/webhook/zapi', async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(ZAPI_SECURITY_TOKEN && { 'Client-Token': ZAPI_SECURITY_TOKEN })
+        'Client-Token': ZAPI_SECURITY_TOKEN || ''
       },
-      body: JSON.stringify({ phone, message: resposta })
+      body: JSON.stringify({
+        phone: phone.toString().replace(/\D/g, ''),
+        message: resposta
+      })
     });
-    if (response.ok) {
-      console.log(`✅ Resposta enviada para ${phone}`);
-    } else {
-      const errText = await response.text();
-      console.error(`❌ Erro Z-API (${response.status}): ${errText}`);
-    }
-  } catch (err) {
-    console.error('❌ Erro ao enviar resposta Z-API:', err);
+    
+    const data = await response.json();
+    console.log('✅ Resposta Z-API:', data);
+    res.status(200).json({ received: true, sent: true });
+    
+  } catch (error) {
+    console.error('❌ Erro ao enviar para Z-API:', error);
+    res.status(200).json({ received: true, warning: 'error sending message' });
   }
-
-  res.status(200).json({ received: true });
 });
 
 // ==================== INICIALIZAÇÃO ====================
