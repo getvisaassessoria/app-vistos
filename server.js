@@ -703,8 +703,22 @@ app.post('/api/submit-ds160', async (req, res) => {
             hasContentInSection = true;
           }
         }
+// ==================== SEÇÃO 22: ESCOLARIDADE ====================
+        if (data['radio-18'] === 'one') {
+          startSection('ESCOLARIDADE');
+          renderField('text-59', 'Instituicao de ensino');
+          renderField('text-60', 'Curso');
+          renderField('text-111', 'Endereco da instituicao');
+          renderField('text-112', 'Cidade');
+          renderField('text-114', 'Estado');
+          renderField('text-113', 'CEP');
+          renderField('text-61', 'Data inicio');
+          renderField('text-62', 'Data conclusao');
+          hasContentInSection = true;
+        }
 
-        // ==================== SEÇÃO 21: SERVICO MILITAR ====================
+
+        // ==================== SEÇÃO 23: SERVICO MILITAR ====================
         startSection('SERVICO MILITAR');
         if (data['servico_militar'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
@@ -723,7 +737,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 22: TREINAMENTO ESPECIALIZADO ====================
+        // ==================== SEÇÃO 24: TREINAMENTO ESPECIALIZADO ====================
         startSection('TREINAMENTO ESPECIALIZADO');
         if (data['treinamento_especializado'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
@@ -737,7 +751,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 23: SEGURANCA ====================
+        // ==================== SEÇÃO 25: SEGURANCA ====================
         startSection('SEGURANCA');
         if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
@@ -754,21 +768,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 24: ESCOLARIDADE ====================
-        if (data['radio-18'] === 'one') {
-          startSection('ESCOLARIDADE');
-          renderField('text-59', 'Instituicao de ensino');
-          renderField('text-60', 'Curso');
-          renderField('text-111', 'Endereco da instituicao');
-          renderField('text-112', 'Cidade');
-          renderField('text-114', 'Estado');
-          renderField('text-113', 'CEP');
-          renderField('text-61', 'Data inicio');
-          renderField('text-62', 'Data conclusao');
-          hasContentInSection = true;
-        }
-
-        // ==================== SEÇÃO 25: IDIOMAS ====================
+        
+        // ==================== SEÇÃO 26: IDIOMAS ====================
         startSection('IDIOMAS');
         if (data['radio-19'] === 'one') {
           const idiomas = data['idiomas[]'] || [];
@@ -780,7 +781,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 26: VIAGENS INTERNACIONAIS ====================
+        // ==================== SEÇÃO 27: VIAGENS INTERNACIONAIS ====================
         startSection('VIAGENS INTERNACIONAIS');
         if (data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
