@@ -380,7 +380,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = false;
         }
 
-        // ==================== SEÇÃO 1: INFORMACOES INICIAIS ====================
+        // ==================== SEÇÃO 1: INFORMAÇÕES INICIAIS ====================
         startSection('INFORMACOES INICIAIS');
         renderField('consulado_cidade', 'Cidade do Consulado');
         if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
@@ -389,7 +389,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-64', 'Idioma usado para preencher');
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 2: INFORMACOES PESSOAIS ====================
+        // ==================== SEÇÃO 2: INFORMAÇÕES PESSOAIS ====================
         startSection('INFORMACOES PESSOAIS');
         renderField('full_name', 'Nome completo');
         if (renderField('radio-2', 'Ja teve outro nome?') && data['radio-2'] === 'one') {
@@ -410,7 +410,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 3: INFORMACOES DA VIAGEM ====================
+        // ==================== SEÇÃO 3: INFORMAÇÕES DA VIAGEM ====================
         startSection('INFORMACOES DA VIAGEM');
         renderField('radio-28', 'Proposito da viagem');
         renderField('radio-planos', 'Planos especificos?');
@@ -449,7 +449,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 6: HISTORICO DE VIAGENS AOS EUA ====================
+        // ==================== SEÇÃO 6: HISTÓRICO DE VIAGENS AOS EUA ====================
         if (data['radio-8'] === 'one') {
           startSection('HISTORICO DE VIAGENS AOS EUA');
           renderField('radio-8', 'Ja esteve nos EUA?');
@@ -462,7 +462,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 7: INFORMACOES DO VISTO ====================
+        // ==================== SEÇÃO 7: INFORMAÇÕES DO VISTO ====================
         if (data['radio-23'] === 'one') {
           startSection('INFORMACOES DO VISTO');
           renderField('radio-23', 'Ja teve visto americano?');
@@ -475,7 +475,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 8: ENDERECO RESIDENCIAL ====================
+        // ==================== SEÇÃO 8: ENDEREÇO RESIDENCIAL ====================
         startSection('ENDERECO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
         renderField('text-72', 'Complemento');
@@ -485,7 +485,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-76', 'Pais');
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 9: ENDERECO DE CORRESPONDENCIA ====================
+        // ==================== SEÇÃO 9: ENDEREÇO DE CORRESPONDÊNCIA ====================
         startSection('ENDERECO DE CORRESPONDENCIA');
         renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
         if (data['radio-9'] === 'Não, é diferente') {
@@ -591,7 +591,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 16: CONJUGE ====================
+        // ==================== SEÇÃO 16: CÔNJUGE ====================
         if (data['spouse_fullname']) {
           startSection('CONJUGE');
           renderField('spouse_fullname', 'Nome do conjuge');
@@ -609,7 +609,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 17: EX-CONJUGE ====================
+        // ==================== SEÇÃO 17: EX-CÔNJUGE ====================
         if (data['ex_fullname']) {
           startSection('EX-CONJUGE');
           renderField('ex_fullname', 'Nome do ex-conjuge');
@@ -624,7 +624,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 18: CONJUGE FALECIDO ====================
+        // ==================== SEÇÃO 18: CÔNJUGE FALECIDO ====================
         if (data['falecido_fullname']) {
           startSection('CONJUGE FALECIDO');
           renderField('falecido_fullname', 'Nome do conjuge falecido');
@@ -636,7 +636,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        // ==================== SEÇÃO 19: OCUPACAO ATUAL ====================
+        // ==================== SEÇÃO 19: OCUPAÇÃO ATUAL ====================
         startSection('OCUPACAO ATUAL');
         renderField('radio-27', 'Ocupacao principal');
         renderField('text-49', 'Empregador / escola');
@@ -718,7 +718,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
 
 
-        // ==================== SEÇÃO 23: SERVICO MILITAR ====================
+        // ==================== SEÇÃO 23: SERVIÇO MILITAR ====================
         startSection('SERVICO MILITAR');
         if (data['servico_militar'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
@@ -751,7 +751,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 25: SEGURANCA ====================
+        // ==================== SEÇÃO 25: SEGURANÇA ====================
         startSection('SEGURANCA');
         if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
