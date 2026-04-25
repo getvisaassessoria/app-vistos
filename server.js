@@ -58,16 +58,13 @@ const radioMapping = {
 function formatDateToBrazilian(dateString) {
   if (!dateString || dateString === '') return null;
   
-  // Se já estiver no formato DD/MM/YYYY, retorna como está
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) return dateString;
   
-  // Tenta converter YYYY-MM-DD para DD/MM/YYYY
   const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) {
     return `${match[3]}/${match[2]}/${match[1]}`;
   }
   
-  // Tenta converter outros formatos comuns
   const date = new Date(dateString);
   if (!isNaN(date.getTime())) {
     const day = String(date.getDate()).padStart(2, '0');
@@ -76,15 +73,13 @@ function formatDateToBrazilian(dateString) {
     return `${day}/${month}/${year}`;
   }
   
-  // Se não conseguiu converter, retorna o valor original
   return dateString;
 }
 
 function formatValue(fieldName, value) {
   if (value === undefined || value === null || value === '') return null;
   
-  // Verifica se é um campo de data e aplica formatação
-  const dateFields = ['text-5', 'text-21', 'text-35', 'text-66', 'text-67', 'text-69', 'text-61', 'text-62', 'spouse-dob', 'data_casamento_div', 'data_divorcio', 'data_falecimento', 'text-50', 'text-44', 'text-45'];
+  const dateFields = ['text-5', 'text-21', 'text-35', 'text-66', 'text-67', 'text-69', 'text-61', 'text-62', 'spouse-dob', 'data_casamento_div', 'data_divorcio', 'data_falecimento', 'text-50', 'text-44', 'text-45', 'military_date_from', 'military_date_to', 'antecedentes_data'];
   if (dateFields.includes(fieldName)) {
     const formattedDate = formatDateToBrazilian(value);
     if (formattedDate) return formattedDate;
@@ -125,7 +120,6 @@ function groupTravels(data) {
   for (let i = 0; i < maxLen; i++) {
     let d = datas[i] || '';
     let dur = duracao[i] || '';
-    // Formatar a data da viagem
     if (d) d = formatDateToBrazilian(d);
     if (d || dur) result.push(`${d}${d && dur ? ' - ' : ''}${dur} dias`);
   }
@@ -285,10 +279,24 @@ const simpleFields = [
   { name: 'text-61', label: 'Data início', group: 'escolaridade' },
   { name: 'text-62', label: 'Data conclusão', group: 'escolaridade' },
   { name: 'radio-19', label: 'Fala outros idiomas?', group: 'idiomas' },
-  { name: 'radio-20', label: 'Viajou para outros países?', group: 'paises' }
+  { name: 'radio-20', label: 'Viajou para outros países?', group: 'paises' },
+  { name: 'servico_militar', label: 'Serviu nas forcas armadas?', group: 'military' },
+  { name: 'military_country', label: 'Pais', group: 'military' },
+  { name: 'military_branch', label: 'Ramo das Forcas Armadas', group: 'military' },
+  { name: 'military_rank', label: 'Patente / Posicao', group: 'military' },
+  { name: 'military_specialty', label: 'Especialidade Militar', group: 'military' },
+  { name: 'military_date_from', label: 'Data de inicio', group: 'military' },
+  { name: 'military_date_to', label: 'Data de termino', group: 'military' },
+  { name: 'treinamento_especializado', label: 'Treinamento especializado?', group: 'training' },
+  { name: 'treinamento_descricao', label: 'Descricao do treinamento', group: 'training' },
+  { name: 'antecedentes_criminais', label: 'Antecedentes criminais?', group: 'security' },
+  { name: 'antecedentes_descricao', label: 'Descricao dos antecedentes', group: 'security' },
+  { name: 'antecedentes_data', label: 'Data do ocorrido', group: 'security' },
+  { name: 'antecedentes_local', label: 'Local', group: 'security' },
+  { name: 'antecedentes_resolucao', label: 'Resolucao do caso', group: 'security' }
 ];
 
-// ==================== ROTA DS-160 (RESPOSTA IMEDIATA + BACKGROUND) ====================
+// ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados recebidos (DS-160)');
@@ -296,7 +304,6 @@ app.post('/api/submit-ds160', async (req, res) => {
 
   (async () => {
     try {
-      // --- Salvar no Supabase ---
       let solicitacaoId = null;
       try {
         const { data: cliente, error: clienteError } = await supabase
@@ -329,7 +336,6 @@ app.post('/api/submit-ds160', async (req, res) => {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
 
-      // --- Geração do PDF (com todas as correções) ---
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -343,8 +349,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
-        // ==================== ORDEM CORRETA DOS CAMPOS COM TÍTULOS DE SEÇÃO ====================
-        // Mapa de labels para acesso rápido
         const fieldLabelMap = {};
         for (const f of simpleFields) {
           fieldLabelMap[f.name] = f.label;
@@ -353,7 +357,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         let currentSection = null;
         let hasContentInSection = false;
 
-        // Função para renderizar um campo
         function renderField(fieldName, label) {
           let value = data[fieldName];
           if (value !== undefined && value !== null && value !== '') {
@@ -368,7 +371,6 @@ app.post('/api/submit-ds160', async (req, res) => {
           return false;
         }
 
-        // Função para iniciar uma nova seção
         function startSection(sectionTitle) {
           if (currentSection !== null && hasContentInSection) {
             doc.moveDown(0.8);
@@ -380,13 +382,12 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 1: INFORMACOES INICIAIS ====================
         startSection('INFORMACOES INICIAIS');
-        const hasConsulado = renderField('consulado_cidade', 'Cidade do Consulado');
-        const hasIndicacao = renderField('radio-26', 'Indicado por agencia/agente?');
-        if (data['radio-26'] === 'one') {
+        renderField('consulado_cidade', 'Cidade do Consulado');
+        if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
           renderField('text-1', 'Nome da agencia/agente');
         }
         renderField('text-64', 'Idioma usado para preencher');
-        if (hasConsulado || hasIndicacao) hasContentInSection = true;
+        hasContentInSection = true;
 
         // ==================== SEÇÃO 2: INFORMACOES PESSOAIS ====================
         startSection('INFORMACOES PESSOAIS');
@@ -403,9 +404,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         if (renderField('radio-outra-nac', 'Possui outra nacionalidade?') && data['radio-outra-nac'] === 'one') {
           renderField('outra_nacionalidade_text', 'Qual outra nacionalidade?');
         }
-        if (renderField('radio-residente', 'Residente permanente de outro pais?') && data['radio-residente'] === 'one') {
-          // campo adicional se necessário
-        }
+        renderField('radio-residente', 'Residente permanente de outro pais?');
         renderField('text-86', 'CPF');
         renderField('text-17', 'Numero do Seguro Social (SSN)');
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
@@ -414,9 +413,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         // ==================== SEÇÃO 3: INFORMACOES DA VIAGEM ====================
         startSection('INFORMACOES DA VIAGEM');
         renderField('radio-28', 'Proposito da viagem');
-        if (renderField('radio-planos', 'Planos especificos?') && data['radio-planos'] === 'one') {
-          // campo adicional se necessário
-        }
+        renderField('radio-planos', 'Planos especificos?');
         renderField('text-21', 'Data de chegada prevista');
         renderField('text-34', 'Duracao da estadia (dias)');
         renderField('text-41', 'Endereco nos EUA');
@@ -653,11 +650,10 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-52', 'Descricao das funcoes');
         hasContentInSection = true;
 
-        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA (logo após OCUPACAO ATUAL) ====================
+        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA ====================
         const extra_descricoes = data['extra_descricao[]'] || [];
         if (extra_descricoes.length > 0) {
           startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
-          
           const extra_rendas = data['extra_renda[]'] || [];
           const extra_empregadores = data['extra_empregador[]'] || [];
           const extra_inicios = data['extra_data_inicio[]'] || [];
@@ -685,7 +681,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
 
         // ==================== SEÇÃO 20: EMPREGOS ANTERIORES ====================
-        if (renderField('radio-17', 'Teve empregos anteriores?') && data['radio-17'] === 'one') {
+        if (data['radio-17'] === 'one') {
           const empNomes = data['emprego_anterior_nome[]'] || [];
           if (empNomes.length > 0) {
             startSection('EMPREGOS ANTERIORES');
@@ -710,8 +706,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 21: SERVICO MILITAR ====================
         startSection('SERVICO MILITAR');
-        const servicoMilitar = data['servico_militar'] || '';
-        if (servicoMilitar === 'Sim') {
+        if (data['servico_militar'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
@@ -730,8 +725,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 22: TREINAMENTO ESPECIALIZADO ====================
         startSection('TREINAMENTO ESPECIALIZADO');
-        const treinamentoEspecial = data['treinamento_especializado'] || '';
-        if (treinamentoEspecial === 'Sim') {
+        if (data['treinamento_especializado'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
@@ -743,10 +737,9 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ==================== SEÇÃO 23: SEGURANCA (ANTECEDENTES CRIMINAIS) ====================
+        // ==================== SEÇÃO 23: SEGURANCA ====================
         startSection('SEGURANCA');
-        const antecedentes = data['antecedentes_criminais'] || '';
-        if (antecedentes === 'Sim') {
+        if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
@@ -762,7 +755,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         hasContentInSection = true;
 
         // ==================== SEÇÃO 24: ESCOLARIDADE ====================
-        if (renderField('radio-18', 'Escolaridade secundario/superior?') && data['radio-18'] === 'one') {
+        if (data['radio-18'] === 'one') {
           startSection('ESCOLARIDADE');
           renderField('text-59', 'Instituicao de ensino');
           renderField('text-60', 'Curso');
@@ -777,7 +770,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 25: IDIOMAS ====================
         startSection('IDIOMAS');
-        if (renderField('radio-19', 'Fala outros idiomas?') && data['radio-19'] === 'one') {
+        if (data['radio-19'] === 'one') {
           const idiomas = data['idiomas[]'] || [];
           if (idiomas.length > 0) {
             doc.font('Helvetica-Bold').fontSize(10).text('Outros idiomas: ', { continued: true });
@@ -789,7 +782,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 
         // ==================== SEÇÃO 26: VIAGENS INTERNACIONAIS ====================
         startSection('VIAGENS INTERNACIONAIS');
-        if (renderField('radio-20', 'Viajou para outros paises?') && data['radio-20'] === 'one') {
+        if (data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
           if (paises.length > 0) {
             doc.font('Helvetica-Bold').fontSize(10).text('Paises visitados (ultimos 5 anos): ', { continued: true });
@@ -806,7 +799,6 @@ app.post('/api/submit-ds160', async (req, res) => {
 
       console.log(`📄 PDF gerado para ${nome}, tamanho: ${pdfBuffer.length} bytes`);
 
-      // --- Envio de e-mails ---
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
@@ -832,7 +824,7 @@ app.post('/api/submit-ds160', async (req, res) => {
   })();
 });
 
-// ==================== ROTA PASSAPORTE (RESPOSTA IMEDIATA + BACKGROUND) ====================
+// ==================== ROTA PASSAPORTE ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de passaporte recebidos');
@@ -929,7 +921,6 @@ app.post('/api/submit-passaporte', async (req, res) => {
         for (const field of fields) {
           let value = data[field.name];
           if (value && value !== '') {
-            // Formatar data se necessário
             if (field.name.includes('data') || field.name.includes('nasc')) {
               value = formatDateToBrazilian(value);
             }
@@ -977,7 +968,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
   })();
 });
 
-// ==================== ROTA VISTO NEGADO (RESPOSTA IMEDIATA + BACKGROUND) ====================
+// ==================== ROTA VISTO NEGADO ====================
 app.post('/api/submit-visto-negado', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados de Visto Negado recebidos:', data);
