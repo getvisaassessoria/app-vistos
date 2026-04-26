@@ -1208,71 +1208,139 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API CORRIGIDO ====================
+// ==================== WEBHOOK Z-API COM RESPOSTA HUMANIZADA ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('[ZAPI] Webhook chamado');
-
-  // Resposta imediata
   res.status(200).json({ status: 'ok' });
 
   try {
     const body = req.body;
-
-    // Extrai o número que enviou a mensagem
     const phone = body.phone || body.from;
-    // Extrai o texto da mensagem
     const messageText = body.text?.message || body.message?.text || body.message;
 
-    console.log(`📞 Telefone: ${phone}`);
-    console.log(`💬 Mensagem: ${messageText}`);
+    if (!phone) return;
 
-    if (!phone || !messageText) {
-      console.warn('⚠️ Dados incompletos');
-      return;
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    console.log(`📞 ${cleanPhone}: ${messageText || '(vazio)'}`);
+
+    let resposta = '';
+
+    // Buscar cliente pelo telefone
+    const { data: cliente, error } = await supabase
+      .from('clientes')
+      .select('id, nome_completo, email, telefone')
+      .eq('telefone', cleanPhone)
+      .single();
+
+    if (!cliente) {
+      // Cliente novo - oferecer avaliação
+      resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
+                 `Olá! 👋 Ainda não temos seu perfil analisado.\n\n` +
+                 `📋 *Faça agora a avaliação gratuita:*\n` +
+                 `https://getvisa.com.br/visto-negado\n\n` +
+                 `Descubra suas chances de aprovação para o visto americano em poucos minutos!`;
+    } else {
+      // Buscar última solicitação do cliente
+      const { data: solicitacao } = await supabase
+        .from('solicitacoes')
+        .select('dados, created_at, tipo')
+        .eq('cliente_id', cliente.id)
+        .eq('tipo', 'visto_negado')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (solicitacao && solicitacao.dados) {
+        const dados = solicitacao.dados;
+        
+        // Extrair dados do perfil
+        const nome = cliente.nome_completo || 'Cliente';
+        const primeiroNome = nome.split(' ')[0];
+        const score = dados.score || 0;
+        const classificacao = dados.classificacao_tipo || 
+                             (score < 50 ? 'urgent' : (score < 70 ? 'moderate' : 'strong'));
+        
+        // Mapear classificação para texto
+        const classificacaoTexto = {
+          'urgent': 'que Requer Atenção',
+          'moderate': 'Moderado',
+          'strong': 'Forte'
+        };
+        
+        // Extrair informações específicas do formulário
+        const situacaoProfissional = dados.ocupacao || dados.radio27 || dados.situacao_profissional || 'não informada';
+        const renda = dados.renda_mensal || dados.text51 || dados.renda || 'não informada';
+        const propositoViagem = dados.proposito_viagem || dados.radio28 || dados.motivo || 'turismo';
+        const historicoViagens = (dados.paises_visitados || dados.viagens || '').toString();
+        
+        // Determinar pontos fortes e de atenção
+        let pontoAtencao = '';
+        let pontoForte = '';
+        
+        if (situacaoProfissional === 'Desempregado(a) no momento' || situacaoProfissional === 'Desempregado') {
+          pontoAtencao = `sua situação atual de desempregado(a) no momento`;
+        } else if (parseFloat(renda) < 3000) {
+          pontoAtencao = `sua renda atual (${renda}), que está abaixo da média esperada`;
+        } else {
+          pontoAtencao = `seu perfil profissional (${situacaoProfissional})`;
+        }
+        
+        if (historicoViagens && historicoViagens !== '' && historicoViagens !== 'não informado') {
+          pontoForte = `seu excelente histórico de viagens (${historicoViagens.substring(0, 50)})`;
+        } else if (score > 70) {
+          pontoForte = `sua boa pontuação na análise (${score}/100)`;
+        } else {
+          pontoForte = `seu comprometimento em organizar a documentação corretamente`;
+        }
+        
+        // Construir resposta humanizada
+        resposta = `Olá, ${primeiroNome}! Analisamos seu perfil classificado como ${classificacaoTexto[classificacao]}. `;
+        resposta += `O ponto de maior atenção é ${pontoAtencao}, que exige uma estratégia precisa para justificar sua situação e o propósito de ${propositoViagem.toLowerCase()}. `;
+        resposta += `O grande diferencial a seu favor é ${pontoForte}, que demonstra que você respeita as normas imigratórias internacionais. `;
+        
+        resposta += `\n\n*Investimento:*\n`;
+        resposta += `🇺🇸 Taxa Consular (MRV): aprox. US$ 185 (~R$ 950).\n`;
+        resposta += `📋 Assessoria: R$ 350 (50% na entrega do rascunho do DS-160 e 50% no agendamento).\n\n`;
+        
+        resposta += `*Nossa assessoria focará em:* `;
+        
+        if (situacaoProfissional === 'Desempregado(a) no momento') {
+          resposta += `organizar sua documentação de suporte para demonstrar disponibilidade financeira atual de forma sólida, mitigando o risco pela falta de vínculo empregatício. `;
+        } else {
+          resposta += `estruturar sua comprovação de renda e vínculos com o Brasil, organizando a documentação de suporte para o propósito da viagem. `;
+        }
+        
+        resposta += `O objetivo é transformar seu perfil em uma proposta clara e profissional para o cônsul.\n\n`;
+        resposta += `Podemos iniciar a montagem do seu processo e preparar essa estratégia? 🚀`;
+        
+      } else {
+        // Cliente existe mas não tem análise de visto negado
+        resposta = `Olá ${cliente.nome_completo.split(' ')[0]}! 👋\n\n` +
+                   `Ainda não temos sua análise de perfil específica para visto americano.\n\n` +
+                   `📋 *Faça agora gratuitamente:*\n` +
+                   `https://getvisa.com.br/visto-negado\n\n` +
+                   `Em poucos minutos você recebe uma análise personalizada do seu caso!`;
+      }
     }
 
-    // Processa resposta
-    const msg = messageText.toLowerCase();
-    let resposta = 'Olá! Obrigado por contatar a GetVisa. Em breve retornamos.';
-    
-    if (msg.includes('oi') || msg.includes('olá')) {
-      resposta = 'Olá! Como posso ajudar? Digite "visto negado", "preço" ou "prazo"';
-    } else if (msg.includes('visto negado')) {
-      resposta = 'Simulador de visto negado: https://getvisa.com.br/visto-negado';
-    } else if (msg.includes('preço') || msg.includes('valor')) {
-      resposta = 'Preencha o DS-160 para orçamento: https://getvisa.com.br/ds-160';
-    } else if (msg.includes('prazo')) {
-      resposta = 'Prazos variam de 15 a 90 dias, dependendo da agenda do consulado.';
-    }
-
-    // Envia resposta
+    // Enviar resposta via Z-API
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
     const securityToken = process.env.ZAPI_SECURITY_TOKEN;
 
-    if (!instance || !token) {
-      console.error('❌ Z-API sem credenciais');
-      return;
+    if (instance && token && resposta) {
+      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+      const result = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Client-Token': securityToken || ''
+        },
+        body: JSON.stringify({ phone: cleanPhone, message: resposta })
+      });
+      const responseText = await result.text();
+      console.log(`✅ Enviado para ${cleanPhone}: ${result.status} - ${responseText.substring(0, 100)}`);
     }
-
-    const cleanPhone = phone.toString().replace(/\D/g, '');
-    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-
-    console.log(`📤 Respondendo para: ${cleanPhone}`);
-    console.log(`📤 Resposta: ${resposta}`);
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Client-Token': securityToken || 'F65c27a64cd2e4984aa85a8f08040c2f7S'  // 🔑 SECURITY TOKEN AQUI!
-      },
-      body: JSON.stringify({ phone: cleanPhone, message: resposta })
-    });
-
-    const responseText = await response.text();
-    console.log(`📨 Status: ${response.status}`);
-    console.log(`📨 Resposta Z-API: ${responseText}`);
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
