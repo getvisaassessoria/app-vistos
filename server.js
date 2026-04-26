@@ -1444,7 +1444,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `✅ Preparação específica para entrevista\n` +
                    `✅ Acompanhamento jurídico especializado\n\n` +
                    `📋 *Faça sua avaliação específica para visto negado:*\n` +
-                   `https://getvisa.com.br/visto-negado`;
+                   `https://getvisa.com.br/simulador-visto-americano`;
       }
       
       // ========== RESPOSTA PADRÃO (SAUDAÇÃO) ==========
