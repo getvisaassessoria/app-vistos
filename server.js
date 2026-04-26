@@ -1261,7 +1261,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
                  `Olá! 👋 Ainda não temos sua análise de perfil.\n\n` +
                  `📋 *Faça sua avaliação gratuita:*\n` +
-                 `https://getvisa.com.br/visto-negado`;
+                 `https://getvisa.com.br/visto-americano-negado`;
     } else {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Análise Realizada';
