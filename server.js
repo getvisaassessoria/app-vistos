@@ -859,6 +859,85 @@ app.post('/api/submit-ds160', async (req, res) => {
   })();
 });
 
+// ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
+app.post('/api/submit-avaliacao', async (req, res) => {
+  const data = req.body;
+  console.log('📥 Dados da Avaliação Normal recebidos:', data);
+  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
+
+  (async () => {
+    try {
+      const nome = data['nome'] || data['full_name'] || 'Cliente_Sem_Nome';
+      const emailCliente = data['email'] || data['email-1'] || null;
+      const telefoneCliente = data['telefone'] || data['whatsapp'] || data['text-77'] || null;
+      const score = data['score'] || data['pontuacao'] || 0;
+      const classificacao = data['classificacao'] || data['classificacao_perfil'] || 
+                           (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
+      
+      console.log(`📝 Salvando lead: ${nome}, ${telefoneCliente}, ${classificacao}, ${score}`);
+      
+      // 1. SALVAR NA TABELA leads_simulador
+      if (telefoneCliente) {
+        const { data: inserted, error: insertError } = await supabase
+          .from('leads_simulador')
+          .insert({
+            nome_cliente: nome,
+            telefone_whatsapp: telefoneCliente,
+            email: emailCliente,
+            pontuacao_total: score,
+            classificacao_perfil: classificacao,
+            respostas_simulador: data,
+            data_simulacao: new Date(),
+            status_lead: 'novo'
+          })
+          .select();
+        
+        if (insertError) {
+          console.error('❌ Erro ao salvar lead:', insertError);
+          console.error('Detalhes:', JSON.stringify(insertError));
+        } else {
+          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
+          
+          // 2. ENVIAR MENSAGEM HUMANIZADA NO WHATSAPP
+          const primeiroNome = nome.split(' ')[0];
+          const situacaoProfissional = data['ocupacao'] || data['radio27'] || data['situacao_profissional'] || 'CLT';
+          const historicoViagens = data['historico_viagens'] || data['paises_visitados'] || '';
+          const primeiraViagem = !historicoViagens || historicoViagens.toLowerCase().includes('nunca');
+          
+          let mensagemWhats = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e a partir de agora, vou acompanhar você em todo processo!\n\n`;
+          mensagemWhats += `Recebemos sua avaliação e seu perfil foi classificado como *${classificacao}*. `;
+          
+          if (situacaoProfissional.toLowerCase().includes('clt') || situacaoProfissional.toLowerCase().includes('empregado')) {
+            mensagemWhats += `O fato de você estar como ${situacaoProfissional} é excelente, pois demonstra estabilidade. `;
+          } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
+            mensagemWhats += `Sua experiência como autônomo é um ponto positivo, e vamos organizar sua documentação financeira da melhor forma. `;
+          } else {
+            mensagemWhats += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
+          }
+          
+          mensagemWhats += `Nosso foco agora será organizar essa comprovação de vínculo e preparar você para a entrevista`;
+          
+          if (primeiraViagem) {
+            mensagemWhats += `, já que será sua primeira viagem internacional.`;
+          } else {
+            mensagemWhats += `.`;
+          }
+          
+          mensagemWhats += `\n\n✅ *Podemos continuar o processo?*\n`;
+          mensagemWhats += `Se sua resposta for *SIM*, te mando agora mesmo o link para o preenchimento do rascunho do formulário DS-160. 🚀`;
+          
+          await enviarWhatsApp(telefoneCliente, mensagemWhats);
+        }
+      } else {
+        console.error('❌ Telefone não informado, não foi possível salvar o lead');
+      }
+      
+    } catch (err) {
+      console.error('❌ Erro no processamento da avaliação:', err);
+    }
+  })();
+});
+
 // ==================== ROTA PASSAPORTE ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
