@@ -862,6 +862,10 @@ app.post('/api/submit-ds160', async (req, res) => {
 // ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
+  console.log('📥 Dados da Avaliação Normal recebidos:', JSON.stringify(data, null, 2));
+  console.log('📞 Telefone recebido:', data['telefone']);
+  console.log('📧 Email recebido:', data['email']);
+  console.log('📝 Nome recebido:', data['nome']);
   console.log('📥 Dados da Avaliação Normal recebidos:', data);
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
