@@ -19,6 +19,38 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
+async function enviarWhatsApp(telefone, mensagem) {
+  try {
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    
+    if (!instance || !token) {
+      console.log('⚠️ Z-API não configurada');
+      return false;
+    }
+    
+    const cleanPhone = telefone.toString().replace(/\D/g, '');
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Client-Token': securityToken || ''
+      },
+      body: JSON.stringify({ phone: cleanPhone, message: mensagem })
+    });
+    
+    console.log(`📱 WhatsApp enviado para ${cleanPhone}: ${response.status}`);
+    return response.status === 200;
+  } catch (error) {
+    console.error('❌ Erro ao enviar WhatsApp:', error.message);
+    return false;
+  }
+}
+
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
 const radioMapping = {
   'one': 'Sim',
@@ -981,10 +1013,35 @@ app.post('/api/submit-visto-negado', async (req, res) => {
     try {
       const nome = data['nome'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email'] || null;
+      const telefoneCliente = data['telefone'] || null;
       const score = data['score'] || null;
       const classificacaoTipo = data['classificacao_tipo'] || '';
       const classificacaoTitulo = data['classificacao_titulo'] || '';
       const classificacaoMensagem = data['classificacao_mensagem'] || '';
+
+      // ========== ENVIAR MENSAGEM NO WHATSAPP ==========
+      if (telefoneCliente && score !== null) {
+        const primeiroNome = nome.split(' ')[0];
+        const classificacaoTexto = classificacaoTipo === 'urgent' ? 'que Requer Atenção Urgente' 
+                                 : classificacaoTipo === 'moderate' ? 'com Potencial Moderado' 
+                                 : 'com Forte Potencial';
+        
+        let mensagemWhats = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, faço parte da equipe GETVISA e vou te acompanhar por todo o processo.\n\n`;
+        mensagemWhats += `Recebemos sua análise específica para *VISTO AMERICANO NEGADO*. Seu perfil foi classificado como ${classificacaoTexto} (${score}/100).\n\n`;
+        mensagemWhats += `*O que identificamos:*\n`;
+        mensagemWhats += `• Última negativa: ${data['quando_negado'] || 'recentemente'}\n`;
+        mensagemWhats += `• Motivo: ${data['motivo_negativa'] || 'não informado'}\n\n`;
+        mensagemWhats += `*Nossa estratégia para REVERTER seu caso:*\n`;
+        mensagemWhats += `✅ Revisão completa do histórico de negativas\n`;
+        mensagemWhats += `✅ Correção do DS-160\n`;
+        mensagemWhats += `✅ Documentação de suporte reforçada\n`;
+        mensagemWhats += `✅ Preparação para entrevista\n\n`;
+        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 450)\n\n`;
+        mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
+        mensagemWhats += `*Falar com especialista:* https://wa.me/5521974601812`;
+        
+        await enviarWhatsApp(telefoneCliente, mensagemWhats);
+      }
 
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
@@ -1208,20 +1265,14 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API COM RESPOSTA HUMANIZADA ====================
-// ==================== WEBHOOK Z-API COM DETECÇÃO POR CAMPOS ====================
+// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  // Resposta imediata para evitar timeout
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
-  
-  // 🔒 PROTEÇÃO CONTRA LOOP
   if (body.fromMe === true) return;
-  
   const connectedPhone = body.connectedPhone;
   const senderPhone = body.phone || body.from;
-  
   if (senderPhone === connectedPhone) return;
   if (body.isStatusReply === true || body.waitingMessage === true) return;
 
@@ -1232,258 +1283,71 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const cleanPhone = senderPhone.toString().replace(/\D/g, '');
     console.log(`📞 ${cleanPhone}: ${messageText}`);
 
-    // Buscar lead no Supabase
-    const { data: lead, error } = await supabase
+    let resposta = '';
+    let lead = null;
+    
+    // Buscar lead em leads_simulador
+    const { data: leadSimulador, error: errorSimulador } = await supabase
       .from('leads_simulador')
       .select('*')
       .eq('telefone_whatsapp', cleanPhone)
       .order('data_simulacao', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    if (leadSimulador && leadSimulador.length > 0) {
+      lead = leadSimulador[0];
+    } else {
+      // Buscar lead em leads_visto_negado (se a tabela existir)
+      try {
+        const { data: leadNegado, error: errorNegado } = await supabase
+          .from('leads_visto_negado')
+          .select('*')
+          .eq('telefone_whatsapp', cleanPhone)
+          .order('data_simulacao', { ascending: false })
+          .limit(1);
+        
+        if (leadNegado && leadNegado.length > 0) {
+          lead = leadNegado[0];
+        }
+      } catch (e) {
+        console.log('Tabela leads_visto_negado não existe ainda');
+      }
+    }
 
-    let resposta = '';
-
-    // ==================== CENÁRIO 1: LEAD JÁ EXISTE ====================
-    if (lead) {
+    // ==================== LEAD NÃO EXISTE ====================
+    if (!lead) {
+      resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
+                 `Olá! 👋 Podemos ajudar você a conquistar seu visto americano!\n\n` +
+                 `📋 *Comece com sua avaliação gratuita:*\n` +
+                 `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+                 `🔍 *Dúvidas frequentes:*\n` +
+                 `Digite:\n` +
+                 `💰 "preço" - valores do processo\n` +
+                 `⏰ "prazo" - prazos estimados\n` +
+                 `📄 "documentos" - o que é necessário\n` +
+                 `⚠️ "visto negado" - como reverter\n` +
+                 `📋 "como funciona" - etapas do processo\n\n` +
+                 `Como posso ajudar você hoje? 🚀`;
+    }
+    
+    // ==================== LEAD EXISTE ====================
+    else {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
       const pontuacao = lead.pontuacao_total || 0;
-      const respostas = lead.respostas_simulador || {};
       
-      // 🔍 DETECÇÃO SEGURA DA ORIGEM PELOS CAMPOS DO JSON
-      const temCamposVistoNegado = !!(respostas.quando_negado || 
-                                       respostas.motivo_negativa || 
-                                       respostas.problemas_imigracao);
-      
-      const temCamposAvaliacaoGeral = !!(respostas.situacao_profissional || 
-                                          respostas.renda_mensal || 
-                                          respostas.radio27);
-      
-      // ========== FLUXO 3: VISTO NEGADO ==========
-      if (temCamposVistoNegado && !temCamposAvaliacaoGeral) {
-        const situacaoProfissional = respostas.situacao_profissional || respostas.ocupacao || 'não informada';
-        
-        resposta = `Olá, ${primeiroNome}! 👋\n\n`;
-        resposta += `Baseado na sua análise específica para *VISTO AMERICANO NEGADO*:\n\n`;
-        resposta += `📊 *Classificação:* ${classificacao} (${pontuacao}/100)\n\n`;
-        resposta += `🔍 *O que identificamos:*\n`;
-        
-        if (situacaoProfissional === 'Desempregado(a) no momento') {
-          resposta += `• Situação profissional instável\n`;
-          resposta += `• Necessidade de comprovação de vínculos\n`;
-        } else {
-          resposta += `• Perfil com potencial de reversão\n`;
-          resposta += `• Documentação precisa ser fortalecida\n`;
-        }
-        
-        resposta += `\n🎯 *Nossa estratégia para REVERTER seu caso:*\n`;
-        resposta += `✅ Revisão completa do histórico de negativas\n`;
-        resposta += `✅ Correção do DS-160 com base nos motivos da negativa\n`;
-        resposta += `✅ Documentação de suporte reforçada\n`;
-        resposta += `✅ Preparação específica para entrevista consular\n`;
-        resposta += `✅ Acompanhamento jurídico especializado\n\n`;
-        
-        resposta += `💰 *Investimento para reversão:*\n`;
-        resposta += `🇺🇸 Taxa Consular (MRV): ~R$ 950\n`;
-        resposta += `🔧 Assessoria Especializada Visto Negado: R$ 450 (2x R$ 225)\n\n`;
-        
-        resposta += `⏰ *Prazo estimado:* 30 a 60 dias\n\n`;
-        resposta += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
-        resposta += `*Agende uma conversa:* https://wa.me/5521974601812`;
-      }
-      
-      // ========== FLUXO 1: AVALIAÇÃO GERAL ==========
-      else {
-        const situacaoProfissional = respostas.situacao_profissional || 
-                                     respostas.ocupacao || 
-                                     respostas.radio27 || 
-                                     'não informada';
-        const propositoViagem = respostas.proposito_viagem || 
-                                respostas.radio28 || 
-                                'Turismo';
-        const historicoViagens = respostas.historico_viagens || 
-                                 respostas.paises_visitados || 
-                                 '';
-        
-        // Identificar ponto de atenção
-        let pontoAtencao = '';
-        if (situacaoProfissional.toLowerCase().includes('desempregado')) {
-          pontoAtencao = `sua situação atual de desempregado(a)`;
-        } else if (pontuacao < 50) {
-          pontoAtencao = `a necessidade de fortalecer seus vínculos com o Brasil`;
-        } else {
-          pontoAtencao = `a comprovação de renda e vínculos profissionais`;
-        }
-        
-        // Identificar ponto forte
-        let pontoForte = '';
-        if (historicoViagens && !historicoViagens.toLowerCase().includes('nunca')) {
-          pontoForte = `seu histórico de viagens internacionais`;
-        } else if (pontuacao >= 70) {
-          pontoForte = `sua boa pontuação na análise`;
-        } else {
-          pontoForte = `sua disposição em organizar a documentação corretamente`;
-        }
-        
-        resposta = `Olá, ${primeiroNome}! 👋\n\n`;
-        resposta += `Analisamos seu perfil classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
-        resposta += `🎯 *Ponto de atenção:* ${pontoAtencao}.\n`;
-        resposta += `✅ *Seu diferencial:* ${pontoForte}.\n\n`;
-        resposta += `*📊 Investimento:*\n`;
-        resposta += `🇺🇸 Taxa Consular (MRV): ~R$ 950\n`;
-        resposta += `📋 Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n`;
-        resposta += `*Nossa estratégia para seu caso:*\n`;
-        resposta += `• Organização da documentação de suporte\n`;
-        resposta += `• Preenchimento do DS-160\n`;
-        resposta += `• Preparação para entrevista consular\n`;
-        resposta += `• Acompanhamento até a aprovação\n\n`;
-        resposta += `Podemos dar início ao seu processo hoje? 🚀\n\n`;
-        resposta += `*Agende uma conversa:* https://wa.me/5521974601812`;
-      }
-    }
-    
-    // ==================== CENÁRIO 2: LEAD NÃO EXISTE ====================
-    else {
-      // ========== FLUXO 2: INFORMAÇÕES GERAIS ==========
-      if (messageText.includes('info') || 
-          messageText.includes('como funciona') || 
-          messageText.includes('processo') ||
-          messageText.includes('etapas')) {
-        
-        resposta = `🛫 *Como funciona o processo de visto americano?*\n\n` +
-                   `📋 *Passo a passo completo:*\n\n` +
-                   `1️⃣ *Análise do perfil* (grátis, 2 minutos)\n` +
-                   `   → Identificamos seus pontos fortes e de atenção\n\n` +
-                   `2️⃣ *Preenchimento do DS-160*\n` +
-                   `   → Nosso time preenche o formulário oficial\n\n` +
-                   `3️⃣ *Agendamento da entrevista*\n` +
-                   `   → Buscamos a melhor data disponível\n\n` +
-                   `4️⃣ *Preparação para entrevista*\n` +
-                   `   → Simulação e dicas personalizadas\n\n` +
-                   `5️⃣ *Acompanhamento até a aprovação*\n` +
-                   `   → Suporte em todas as etapas\n\n` +
-                   `⏰ *Prazo médio total:* 30 a 90 dias\n\n` +
-                   `📋 *Comece com sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917`;
-      }
-      
-      // ========== PERGUNTAS SOBRE PREÇO ==========
-      else if (messageText.includes('preço') || 
-               messageText.includes('valor') || 
-               messageText.includes('quanto custa')) {
-        
-        resposta = `💰 *Investimento para o visto americano*\n\n` +
-                   `🇺🇸 *Taxa Consular (MRV):* ~R$ 950\n` +
-                   `   → Paga diretamente ao consulado no agendamento\n\n` +
-                   `📋 *Assessoria GetVisa:* R$ 350\n` +
-                   `   → 50% na entrega do DS-160 (R$ 175)\n` +
-                   `   → 50% no agendamento da entrevista (R$ 175)\n\n` +
-                   `*O que inclui:*\n` +
-                   `✅ Análise completa do perfil\n` +
-                   `✅ Preenchimento do DS-160\n` +
-                   `✅ Preparação para entrevista\n` +
-                   `✅ Acompanhamento até a aprovação\n\n` +
-                   `📋 *Faça sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917`;
-      }
-      
-      // ========== PERGUNTAS SOBRE PRAZO ==========
-      else if (messageText.includes('prazo') || 
-               messageText.includes('demora') || 
-               messageText.includes('tempo')) {
-        
-        resposta = `⏰ *Prazos do processo de visto americano*\n\n` +
-                   `📅 *Agendamento da entrevista:* 2 a 8 semanas\n` +
-                   `🔍 *Análise consular:* 7 a 15 dias úteis\n` +
-                   `📬 *Retorno do passaporte:* 5 a 10 dias\n\n` +
-                   `*Com nossa assessoria:*\n` +
-                   `🚀 Agendamento em até 15 dias\n` +
-                   `🎯 Acompanhamento prioritário\n` +
-                   `⚡ Processo otimizado\n\n` +
-                   `📋 *Quer acelerar seu processo? Faça avaliação:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917`;
-      }
-      
-      // ========== PERGUNTAS SOBRE DOCUMENTOS ==========
-      else if (messageText.includes('documento') || 
-               messageText.includes('documentação') || 
-               messageText.includes('necessário')) {
-        
-        resposta = `📄 *Documentos necessários para o visto americano*\n\n` +
-                   `📌 *Obrigatórios:*\n` +
-                   `• Passaporte válido (mínimo 6 meses)\n` +
-                   `• Foto 5x7 recente (fundo branco)\n` +
-                   `• Comprovante de pagamento da taxa MRV\n` +
-                   `• DS-160 preenchido\n\n` +
-                   `📌 *Recomendados (fortalecem o perfil):*\n` +
-                   `• Comprovante de renda (holerites, IR)\n` +
-                   `• Extratos bancários (últimos 3 meses)\n` +
-                   `• Comprovante de imóveis/veículos\n` +
-                   `• Carteira de trabalho\n` +
-                   `• Comprovante de vínculo empregatício\n\n` +
-                   `📋 *Cada caso é único. Faça sua avaliação:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917`;
-      }
-      
-      // ========== VISTO NEGADO (INFO GERAL) ==========
-      else if (messageText.includes('visto negado') || 
-               messageText.includes('negativa')) {
-        
-        resposta = `⚠️ *Visto Americano Negado - Guia de Reversão*\n\n` +
-                   `Ter o visto negado *não é o fim*! 🚀\n` +
-                   `Nós especializamos em casos de reversão.\n\n` +
-                   `🔍 *Causas comuns de negativa:*\n` +
-                   `• Falta de vínculos com o Brasil\n` +
-                   `• Inconsistências no DS-160\n` +
-                   `• Documentação insuficiente\n` +
-                   `• Respostas inconsistentes na entrevista\n\n` +
-                   `🎯 *Nossa abordagem para seu caso:*\n` +
-                   `✅ Análise aprofundada do histórico de negativas\n` +
-                   `✅ Correção estratégica do DS-160\n` +
-                   `✅ Documentação de suporte reforçada\n` +
-                   `✅ Preparação específica para entrevista\n` +
-                   `✅ Acompanhamento jurídico especializado\n\n` +
-                   `📋 *Faça sua avaliação específica para visto negado:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917`;
-      }
-      
-      // ========== RESPOSTA PADRÃO (SAUDAÇÃO) ==========
-      else if (messageText.includes('oi') || 
-               messageText.includes('olá') || 
-               messageText.includes('bom dia') || 
-               messageText.includes('boa tarde')) {
-        
-        resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                   `Olá! 👋 Seja bem-vindo(a)!\n\n` +
-                   `📋 *Oferecemos:*\n` +
-                   `• ✅ Avaliação gratuita do seu perfil (2 minutos)\n` +
-                   `• ✅ Assessoria completa para visto americano\n` +
-                   `• ✅ Casos especiais: visto negado, perfil desafiador\n\n` +
-                   `📊 *O que podemos fazer por você:*\n` +
-                   `→ Analisar suas chances de aprovação\n` +
-                   `→ Corrigir pontos que podem causar negativa\n` +
-                   `→ Acompanhar até o visto aprovado\n\n` +
-                   `📋 *Faça sua avaliação gratuita agora:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                   `Ou me diga o que você gostaria de saber:\n` +
-                   `💰 Preço | ⏰ Prazo | 📄 Documentos | ⚠️ Visto Negado`;
-      }
-      
-      // ========== RESPOSTA PARA QUALQUER OUTRA MENSAGEM ==========
-      else {
-        resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                   `Olá! 👋 Podemos ajudar você a conquistar seu visto americano!\n\n` +
-                   `📋 *Comece com sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                   `🔍 *Dúvidas frequentes:*\n` +
-                   `Digite:\n` +
-                   `💰 "preço" - valores do processo\n` +
-                   `⏰ "prazo" - prazos estimados\n` +
-                   `📄 "documentos" - o que é necessário\n` +
-                   `⚠️ "visto negado" - como reverter\n` +
-                   `📋 "como funciona" - etapas do processo\n\n` +
-                   `Como posso ajudar você hoje? 🚀`;
-      }
+      resposta = `Olá, ${primeiroNome}! 👋\n\n`;
+      resposta += `Analisamos seu perfil classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
+      resposta += `*📊 Investimento:*\n`;
+      resposta += `🇺🇸 Taxa Consular (MRV): ~R$ 950\n`;
+      resposta += `📋 Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n`;
+      resposta += `*Nossa estratégia para seu caso:*\n`;
+      resposta += `• Organização da documentação de suporte\n`;
+      resposta += `• Preenchimento do DS-160\n`;
+      resposta += `• Preparação para entrevista consular\n`;
+      resposta += `• Acompanhamento até a aprovação\n\n`;
+      resposta += `Podemos dar início ao seu processo hoje? 🚀\n\n`;
+      resposta += `*Agende uma conversa:* https://wa.me/5521974601812`;
     }
 
     // ==================== ENVIAR RESPOSTA ====================
@@ -1493,25 +1357,19 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     if (instance && token && resposta) {
       const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      
       await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Client-Token': securityToken || ''
         },
-        body: JSON.stringify({ 
-          phone: cleanPhone, 
-          message: resposta 
-        })
+        body: JSON.stringify({ phone: cleanPhone, message: resposta })
       });
-      
       console.log(`✅ Resposta enviada para ${cleanPhone}`);
     }
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
-    console.error(error.stack);
   }
 });
 
