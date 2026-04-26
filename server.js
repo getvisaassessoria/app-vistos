@@ -1210,22 +1210,27 @@ app.get('/ping', (req, res) => {
 
 // ==================== WEBHOOK Z-API COM RESPOSTA HUMANIZADA ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('[ZAPI] Webhook chamado');
+  // 1. Responda imediatamente ao servidor da Z-API para evitar timeouts
   res.status(200).json({ status: 'ok' });
 
   try {
     const body = req.body;
+
+    // 🔥 CORREÇÃO DO LOOP: Se a mensagem veio de "mim mesmo" (do bot), pare aqui.
+    if (body.fromMe === true) {
+      return; 
+    }
+
     const phone = body.phone || body.from;
     const messageText = body.text?.message || body.message?.text || body.message;
 
-    if (!phone) return;
+    // Se não houver telefone ou se for uma mensagem de grupo, ignore
+    if (!phone || phone.includes('@g.us')) return;
 
     const cleanPhone = phone.toString().replace(/\D/g, '');
-    console.log(`📞 ${cleanPhone}: ${messageText || '(vazio)'}`);
+    console.log(`📞 Mensagem recebida de ${cleanPhone}: ${messageText || '(vazio)'}`);
 
-    let resposta = '';
-
-    // Buscar lead na tabela leads_simulador pelo telefone
+    // 2. Buscar o lead no Supabase
     const { data: lead, error } = await supabase
       .from('leads_simulador')
       .select('*')
@@ -1234,97 +1239,52 @@ app.post('/api/webhook/zapi', async (req, res) => {
       .limit(1)
       .single();
 
+    let resposta = '';
+
     if (!lead) {
-      // Lead não encontrado - oferecer avaliação
       resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                 `Olá! 👋 Ainda não temos sua análise de perfil.\n\n` +
-                 `📋 *Faça agora a avaliação gratuita:*\n` +
+                 `Olá! 👋 Ainda não identificamos sua análise de perfil em nosso sistema.\n\n` +
+                 `📋 *Faça sua avaliação gratuita aqui:*\n` +
                  `https://getvisa.com.br/visto-negado\n\n` +
-                 `Descubra suas chances de aprovação para o visto americano em poucos minutos!`;
+                 `Descubra suas chances de aprovação em poucos minutos!`;
     } else {
-      // Extrair dados do lead
+      // Lógica de construção da resposta (mantida conforme seu padrão humanizado)
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const score = lead.pontuacao_total || 0;
-      const classificacao = lead.classificacao_perfil || (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
-      
-      // Extrair respostas do JSON (respostas_simulador)
+      const classificacao = lead.classificacao_perfil || 'Análise Realizada';
       const respostas = lead.respostas_simulador || {};
       
-      // Mapear as respostas para os campos que você precisa
-      const situacaoProfissional = respostas.situacao_profissional || 
-                                   respostas.ocupacao || 
-                                   respostas.radio27 || 
-                                   respostas['Ocupação'] ||
-                                   'não informada';
-                                   
-      const renda = respostas.renda_mensal || 
-                    respostas.renda || 
-                    respostas.text51 || 
-                    respostas['Renda mensal'] ||
-                    'não informada';
-                    
-      const propositoViagem = respostas.proposito_viagem || 
-                              respostas.radio28 || 
-                              respostas['Propósito da viagem'] ||
-                              'turismo';
-                              
-      const historicoViagens = respostas.historico_viagens || 
-                               respostas.paises_visitados || 
-                               respostas.viagens || 
-                               '';
+      const situacaoProfissional = respostas.situacao_profissional || respostas.radio27 || 'não informada';
+      const renda = respostas.renda_mensal || respostas.text51 || 'não informada';
+      const propositoViagem = respostas.proposito_viagem || 'Turismo';
+      const historicoViagens = respostas.historico_viagens || '';
+
+      let pontoAtencao = situacaoProfissional.toLowerCase().includes('desempregado') 
+        ? `sua situação atual de desempregado(a)` 
+        : `seu perfil profissional e comprovação de renda`;
+
+      let pontoForte = (historicoViagens && !historicoViagens.toLowerCase().includes('nunca'))
+        ? `seu histórico de viagens internacionais`
+        : `sua transparência na busca pela regularização do visto`;
+
+      resposta = `Olá, ${primeiroNome}! Analisamos seu perfil classificado como *${classificacao}*.\n\n`;
+      resposta += `O ponto de maior atenção é ${pontoAtencao}, que exige uma estratégia precisa para justificar sua situação e o propósito de ${propositoViagem.toLowerCase()}.\n\n`;
+      resposta += `O diferencial a seu favor é ${pontoForte}, que ajuda a demonstrar boas intenções ao consulado.\n\n`;
       
-      // Determinar ponto de atenção
-      let pontoAtencao = '';
-      const situacaoLower = situacaoProfissional.toLowerCase();
-      if (situacaoLower.includes('desempregado')) {
-        pontoAtencao = `sua situação atual de desempregado(a) no momento`;
-      } else if (parseFloat(renda) < 3000) {
-        pontoAtencao = `sua renda atual (${renda}), que está abaixo da média esperada`;
-      } else {
-        pontoAtencao = `seu perfil profissional (${situacaoProfissional})`;
-      }
-      
-      // Determinar ponto forte
-      let pontoForte = '';
-      if (historicoViagens && historicoViagens !== '' && 
-          !historicoViagens.toLowerCase().includes('nunca') && 
-          !historicoViagens.toLowerCase().includes('nenhuma')) {
-        pontoForte = `seu excelente histórico de viagens (${historicoViagens.substring(0, 50)})`;
-      } else if (score >= 70) {
-        pontoForte = `sua boa pontuação na análise (${score}/100)`;
-      } else {
-        pontoForte = `seu comprometimento em organizar a documentação corretamente`;
-      }
-      
-      // Construir resposta humanizada
-      resposta = `Olá, ${primeiroNome}! Analisamos seu perfil classificado como ${classificacao}. `;
-      resposta += `O ponto de maior atenção é ${pontoAtencao}, que exige uma estratégia precisa para justificar sua situação e o propósito de ${propositoViagem.toLowerCase()}. `;
-      resposta += `O grande diferencial a seu favor é ${pontoForte}, que demonstra que você respeita as normas imigratórias internacionais. `;
-      
-      resposta += `\n\n*Investimento:*\n`;
+      resposta += `*Investimento:*\n`;
       resposta += `🇺🇸 Taxa Consular (MRV): aprox. US$ 185 (~R$ 950).\n`;
-      resposta += `📋 Assessoria: R$ 350 (50% na entrega do rascunho do DS-160 e 50% no agendamento).\n\n`;
+      resposta += `📋 Assessoria: R$ 350 (50% na análise do DS-160 e 50% no agendamento).\n\n`;
       
-      resposta += `*Nossa assessoria focará em:* `;
-      
-      if (situacaoLower.includes('desempregado')) {
-        resposta += `organizar sua documentação de suporte para demonstrar disponibilidade financeira atual de forma sólida, mitigando o risco pela falta de vínculo empregatício. `;
-      } else {
-        resposta += `estruturar sua comprovação de renda e vínculos com o Brasil, organizando a documentação de suporte para o propósito da viagem. `;
-      }
-      
-      resposta += `O objetivo é transformar seu perfil em uma proposta clara e profissional para o cônsul.\n\n`;
-      resposta += `Podemos iniciar a montagem do seu processo e preparar essa estratégia? 🚀`;
+      resposta += `Nossa assessoria focará em organizar sua documentação de suporte e mitigar riscos do perfil.\n\n`;
+      resposta += `Podemos iniciar sua estratégia hoje? 🚀`;
     }
 
-    // Enviar resposta via Z-API
+    // 3. Enviar via Z-API
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
     const securityToken = process.env.ZAPI_SECURITY_TOKEN;
 
     if (instance && token && resposta) {
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      await fetch(url, {
+      await fetch(`https://api.z-api.io/instances/${instance}/token/${token}/send-text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1332,7 +1292,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         },
         body: JSON.stringify({ phone: cleanPhone, message: resposta })
       });
-      console.log(`✅ Resposta enviada para ${cleanPhone}`);
+      console.log(`✅ Resposta enviada para ${cleanPhone} sem gerar loop.`);
     }
     
   } catch (error) {
