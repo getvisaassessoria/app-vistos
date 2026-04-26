@@ -1349,6 +1349,7 @@ app.get('/ping', (req, res) => {
 });
 
 // ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   res.status(200).json({ status: 'ok' });
 
@@ -1360,17 +1361,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
   if (body.isStatusReply === true || body.waitingMessage === true) return;
 
   try {
-    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase();
+    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
     const cleanPhone = senderPhone.toString().replace(/\D/g, '');
     console.log(`📞 ${cleanPhone}: ${messageText}`);
 
-    let resposta = '';
+    // Buscar lead no Supabase
     let lead = null;
     
-    // Buscar lead em leads_simulador
-    const { data: leadSimulador, error: errorSimulador } = await supabase
+    const { data: leadSimulador } = await supabase
       .from('leads_simulador')
       .select('*')
       .eq('telefone_whatsapp', cleanPhone)
@@ -1379,23 +1379,100 @@ app.post('/api/webhook/zapi', async (req, res) => {
     
     if (leadSimulador && leadSimulador.length > 0) {
       lead = leadSimulador[0];
-    } else {
-      // Buscar lead em leads_visto_negado (se a tabela existir)
-      try {
-        const { data: leadNegado, error: errorNegado } = await supabase
-          .from('leads_visto_negado')
-          .select('*')
-          .eq('telefone_whatsapp', cleanPhone)
-          .order('data_simulacao', { ascending: false })
-          .limit(1);
-        
-        if (leadNegado && leadNegado.length > 0) {
-          lead = leadNegado[0];
-        }
-      } catch (e) {
-        console.log('Tabela leads_visto_negado não existe ainda');
-      }
+      console.log('✅ Lead encontrado:', lead.nome_cliente);
     }
+    
+    // ==================== RESPOSTA "SIM" - enviar link do DS-160 ====================
+    if (lead && messageText === 'sim') {
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
+                       `Vamos dar continuidade ao seu processo de visto americano!\n\n` +
+                       `📋 *Acesse o formulário DS-160 clicando no link abaixo:*\n` +
+                       `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
+                       `⚠️ *Importante:* Preencha com atenção todos os campos solicitados. Após o envio, nossa equipe fará a análise e entraremos em contato com os próximos passos.\n\n` +
+                       `Estamos juntos nessa! 🇺🇸✨\n\n` +
+                       `*Dúvidas?* Basta me chamar aqui mesmo.`;
+      
+      await enviarRespostaWhatsApp(cleanPhone, resposta);
+      console.log(`✅ Link do DS-160 enviado para ${primeiroNome}`);
+      return;
+    }
+    
+    // ==================== LEAD EXISTE (mas não é "SIM") - mensagem humanizada ====================
+    if (lead) {
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const classificacao = lead.classificacao_perfil || 'Analisado';
+      const pontuacao = lead.pontuacao_total || 0;
+      const respostas = lead.respostas_simulador || {};
+      const situacaoProfissional = respostas.ocupacao || respostas.radio27 || 'CLT';
+      const historicoViagens = respostas.historico_viagens || respostas.paises_visitados || '';
+      const primeiraViagem = !historicoViagens || historicoViagens.toLowerCase().includes('nunca');
+      
+      let resposta = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e a partir de agora, vou acompanhar você em todo processo!\n\n`;
+      resposta += `Recebemos sua avaliação e seu perfil foi classificado como *${classificacao}* (${pontuacao}/100). `;
+      
+      if (situacaoProfissional.toLowerCase().includes('clt')) {
+        resposta += `O fato de você estar como CLT é excelente, pois demonstra estabilidade. `;
+      } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
+        resposta += `Sua experiência como autônomo é um ponto positivo, e vamos organizar sua documentação financeira da melhor forma. `;
+      } else {
+        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
+      }
+      
+      resposta += `Nosso foco agora será organizar essa comprovação de vínculo e preparar você para a entrevista`;
+      
+      if (primeiraViagem) {
+        resposta += `, já que será sua primeira viagem internacional.`;
+      }
+      
+      resposta += `\n\n✅ *Podemos continuar o processo?*\n`;
+      resposta += `Se sua resposta for *SIM*, te mando agora mesmo o link para o preenchimento do rascunho do formulário DS-160. 🚀`;
+      
+      await enviarRespostaWhatsApp(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== LEAD NÃO EXISTE - oferecer avaliação ====================
+    else {
+      let resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
+                     `Olá! 👋 Seja bem-vindo(a)!\n\n` +
+                     `📋 *Faça sua avaliação gratuita de perfil:*\n` +
+                     `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+                     `Em 2 minutos você descobre suas chances de aprovação e recebe uma análise personalizada.\n\n` +
+                     `🚀 *Vamos começar?*`;
+      
+      await enviarRespostaWhatsApp(cleanPhone, resposta);
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro no webhook:', error.message);
+  }
+});
+
+// Função auxiliar para enviar resposta
+async function enviarRespostaWhatsApp(phone, message) {
+  try {
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    
+    if (!instance || !token) return;
+    
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Client-Token': securityToken || ''
+      },
+      body: JSON.stringify({ phone, message })
+    });
+    
+    console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
+  } catch (error) {
+    console.error('❌ Erro ao enviar resposta:', error.message);
+  }
+}
 
     // ==================== LEAD NÃO EXISTE ====================
     if (!lead) {
