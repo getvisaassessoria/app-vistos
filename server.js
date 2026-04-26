@@ -1350,7 +1350,6 @@ app.get('/ping', (req, res) => {
 
 // ==================== WEBHOOK Z-API ====================
 // ==================== WEBHOOK Z-API ====================
-// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   res.status(200).json({ status: 'ok' });
 
@@ -1365,8 +1364,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
-    const cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    console.log(`📞 Mensagem de ${cleanPhone}: "${messageText}"`);
+    // 🔥 CORREÇÃO: Normalizar telefone removendo 55
+    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    console.log(`📞 Telefone normalizado: ${cleanPhone}`);
+    console.log(`📞 Mensagem: "${messageText}"`);
 
     // 🔍 BUSCAR LEAD NO SUPABASE
     let lead = null;
@@ -1416,7 +1420,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== LEAD EXISTE != ====================
+    // ==================== LEAD EXISTE ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
@@ -1424,10 +1428,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
       const respostas = lead.respostas_simulador || {};
       
       // Extrair dados do perfil
-      const perfil = respostas.perfil || respostas.radio27 || respostas.ocupacao || 'não informado';
-      const renda = respostas.renda || respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || respostas.paises_visitados || 'nunca viajou';
-      const motivo = respostas.proposito_viagem || respostas.radio28 || respostas.motivo || 'não informado';
+      const perfil = respostas.situacao_profissional || respostas.perfil || 'não informado';
+      const renda = respostas.renda_mensal || respostas.renda || 'não informada';
+      const historico = respostas.historico_viagens || respostas.histórico || 'não informado';
+      const motivo = respostas.proposito_viagem || respostas.motivo || 'não informado';
       const primeiraViagem = historico.toLowerCase().includes('nunca');
       
       // Construir resposta HUMANIZADA
@@ -1439,24 +1443,21 @@ app.post('/api/webhook/zapi', async (req, res) => {
       resposta += `• Histórico: ${historico}\n`;
       resposta += `• Motivo: ${motivo}\n\n`;
       
-      resposta += `🔍 *Análise:* `;
-      if (perfil.toLowerCase().includes('estudante')) {
-        resposta += `Como estudante, o consulado valoriza vínculos com o Brasil, como matrícula ativa e planejamento de retorno. `;
+      if (perfil.toLowerCase().includes('desempregado')) {
+        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil e organizar sua documentação financeira.\n\n`;
       } else if (perfil.toLowerCase().includes('clt')) {
-        resposta += `Sua estabilidade como CLT é um ponto muito positivo. `;
-      } else {
-        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
+        resposta += `Sua estabilidade como CLT é um ponto muito positivo para o consulado.\n\n`;
       }
       
       if (primeiraViagem) {
-        resposta += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra para demonstrar seus vínculos. `;
+        resposta += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra para demonstrar seus vínculos.\n\n`;
       }
       
-      resposta += `\n\n✅ *Podemos dar início ao seu processo?*\n`;
+      resposta += `✅ *Podemos dar início ao seu processo?*\n`;
       resposta += `Se sua resposta for *SIM*, te envio agora o link do formulário DS-160. 🚀`;
       
-      console.log(`📝 Resposta humanizada para ${primeiroNome}: ${resposta.substring(0, 100)}...`);
       await sendReply(cleanPhone, resposta);
+      console.log(`📝 Resposta humanizada enviada para ${primeiroNome}`);
       return;
     }
     
@@ -1476,112 +1477,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.error('❌ Erro no webhook:', error.message);
     console.error(error.stack);
   }
-});
-
-// ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
-app.post('/api/submit-simulador', async (req, res) => {
-  const data = req.body;
-  console.log('📥 [1] Simulador recebido - Dados COMPLETOS:', JSON.stringify(data, null, 2));
-  console.log('📥 [2] Telefone recebido:', data['telefone']);
-  console.log('📥 [3] Nome recebido:', data['nome']);
-  console.log('📥 [4] Email recebido:', data['email']);
-  
-  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
-
-  (async () => {
-    try {
-      const nome = data['nome'] || data['nome_cliente_contato'] || 'Cliente_Sem_Nome';
-      const telefoneCliente = data['telefone'] || data['telefone_whatsapp_contato'] || null;
-      const emailCliente = data['email'] || data['email_contato'] || null;
-      
-      console.log(`📥 [5] Nome extraído: ${nome}`);
-      console.log(`📥 [6] Telefone extraído: ${telefoneCliente}`);
-      
-      // Buscar ou extrair as respostas
-      const situacaoProfissional = data['situacao_profissional'] || data['perfil'] || '';
-      const renda = data['renda'] || data['renda_mensal'] || '';
-      const historicoViagens = data['historico_viagens'] || data['histórico'] || '';
-      const propositoViagem = data['proposito_viagem'] || data['motivo'] || '';
-      
-      console.log(`📥 [7] Situação: ${situacaoProfissional}`);
-      console.log(`📥 [8] Renda: ${renda}`);
-      console.log(`📥 [9] Histórico: ${historicoViagens}`);
-      console.log(`📥 [10] Motivo: ${propositoViagem}`);
-      
-      // Lógica de pontuação
-      let score = 65;
-      let classificacao = 'Potencial Moderado';
-      
-      if (situacaoProfissional === 'Desempregado(a) no momento') {
-        score = 45;
-        classificacao = 'Requer Atenção';
-      } else if (renda === 'Acima de R$ 15.000') {
-        score = 85;
-        classificacao = 'Forte Potencial';
-      } else if (situacaoProfissional.includes('CLT')) {
-        score = 55;
-        classificacao = 'Perfil Regular';
-      }
-      
-      console.log(`📥 [11] Score calculado: ${score}`);
-      console.log(`📥 [12] Classificação: ${classificacao}`);
-      
-      // Salvar na tabela leads_simulador
-      if (!telefoneCliente) {
-        console.error('❌ [13] Telefone NÃO INFORMADO! Não foi possível salvar.');
-        return;
-      }
-      
-      const insertData = {
-        nome_cliente: nome,
-        telefone_whatsapp: telefoneCliente,
-        email: emailCliente,
-        pontuacao_total: score,
-        classificacao_perfil: classificacao,
-        respostas_simulador: data,
-        data_simulacao: new Date(),
-        status_lead: 'novo'
-      };
-      
-      console.log('📥 [14] Tentando inserir:', JSON.stringify(insertData, null, 2));
-      
-      const { data: inserted, error } = await supabase
-        .from('leads_simulador')
-        .insert(insertData)
-        .select();
-      
-      if (error) {
-        console.error('❌ [15] Erro no Supabase:', error.message);
-        console.error('❌ [15] Código do erro:', error.code);
-      } else {
-        console.log(`✅ [16] Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
-        
-        // Enviar WhatsApp humanizado
-        const primeiroNome = nome.split(' ')[0];
-        const primeiraViagem = historicoViagens.includes('Nunca') || historicoViagens.includes('nunca');
-        
-        let mensagem = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e vou te acompanhar.\n\n`;
-        mensagem += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-        mensagem += `📊 *Seus dados:*\n`;
-        mensagem += `• Situação: ${situacaoProfissional}\n`;
-        mensagem += `• Renda: ${renda}\n`;
-        mensagem += `• Histórico: ${historicoViagens}\n`;
-        mensagem += `• Motivo: ${propositoViagem}\n\n`;
-        
-        if (primeiraViagem) {
-          mensagem += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra.\n\n`;
-        }
-        
-        mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
-        mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160. 🚀`;
-        
-        await enviarWhatsApp(telefoneCliente, mensagem);
-      }
-      
-    } catch (err) {
-      console.error('❌ Erro no processamento:', err);
-    }
-  })();
 });
 
 
