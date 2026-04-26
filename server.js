@@ -1210,27 +1210,43 @@ app.get('/ping', (req, res) => {
 
 // ==================== WEBHOOK Z-API COM RESPOSTA HUMANIZADA ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  // 1. Responda imediatamente ao servidor da Z-API para evitar timeouts
+  // Resposta imediata
   res.status(200).json({ status: 'ok' });
 
+  const body = req.body;
+  
+  // 🔥 PROTEÇÃO MÚLTIPLA CONTRA LOOP
+  // 1. Ignorar se a mensagem foi enviada PELO SISTEMA
+  if (body.fromMe === true) {
+    console.log('🚫 Ignorado: mensagem enviada pelo próprio sistema (fromMe=true)');
+    return;
+  }
+  
+  // 2. Ignorar se o remetente é o MESMO número conectado
+  const connectedPhone = body.connectedPhone || process.env.ZAPI_CONNECTED_PHONE;
+  const senderPhone = body.phone || body.from;
+  
+  if (senderPhone === connectedPhone) {
+    console.log(`🚫 Ignorado: remetente (${senderPhone}) é o próprio número da empresa`);
+    return;
+  }
+  
+  // 3. Ignorar se é mensagem de status ou sistema
+  if (body.isStatusReply === true || body.waitingMessage === true) {
+    console.log('🚫 Ignorado: mensagem de status ou sistema');
+    return;
+  }
+  
+  // 4. Log para debug
+  console.log(`📞 Processando mensagem de: ${senderPhone}`);
+
   try {
-    const body = req.body;
-
-    // 🔥 CORREÇÃO DO LOOP: Se a mensagem veio de "mim mesmo" (do bot), pare aqui.
-    if (body.fromMe === true) {
-      return; 
-    }
-
-    const phone = body.phone || body.from;
     const messageText = body.text?.message || body.message?.text || body.message;
+    if (!messageText) return;
 
-    // Se não houver telefone ou se for uma mensagem de grupo, ignore
-    if (!phone || phone.includes('@g.us')) return;
-
-    const cleanPhone = phone.toString().replace(/\D/g, '');
-    console.log(`📞 Mensagem recebida de ${cleanPhone}: ${messageText || '(vazio)'}`);
-
-    // 2. Buscar o lead no Supabase
+    const cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    
+    // Buscar lead no Supabase
     const { data: lead, error } = await supabase
       .from('leads_simulador')
       .select('*')
@@ -1243,42 +1259,26 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     if (!lead) {
       resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                 `Olá! 👋 Ainda não identificamos sua análise de perfil em nosso sistema.\n\n` +
-                 `📋 *Faça sua avaliação gratuita aqui:*\n` +
-                 `https://getvisa.com.br/visto-negado\n\n` +
-                 `Descubra suas chances de aprovação em poucos minutos!`;
+                 `Olá! 👋 Ainda não temos sua análise de perfil.\n\n` +
+                 `📋 *Faça sua avaliação gratuita:*\n` +
+                 `https://getvisa.com.br/visto-negado`;
     } else {
-      // Lógica de construção da resposta (mantida conforme seu padrão humanizado)
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Análise Realizada';
       const respostas = lead.respostas_simulador || {};
       
-      const situacaoProfissional = respostas.situacao_profissional || respostas.radio27 || 'não informada';
-      const renda = respostas.renda_mensal || respostas.text51 || 'não informada';
+      const situacaoProfissional = respostas.situacao_profissional || 'não informada';
       const propositoViagem = respostas.proposito_viagem || 'Turismo';
-      const historicoViagens = respostas.historico_viagens || '';
-
-      let pontoAtencao = situacaoProfissional.toLowerCase().includes('desempregado') 
-        ? `sua situação atual de desempregado(a)` 
-        : `seu perfil profissional e comprovação de renda`;
-
-      let pontoForte = (historicoViagens && !historicoViagens.toLowerCase().includes('nunca'))
-        ? `seu histórico de viagens internacionais`
-        : `sua transparência na busca pela regularização do visto`;
-
+      
       resposta = `Olá, ${primeiroNome}! Analisamos seu perfil classificado como *${classificacao}*.\n\n`;
-      resposta += `O ponto de maior atenção é ${pontoAtencao}, que exige uma estratégia precisa para justificar sua situação e o propósito de ${propositoViagem.toLowerCase()}.\n\n`;
-      resposta += `O diferencial a seu favor é ${pontoForte}, que ajuda a demonstrar boas intenções ao consulado.\n\n`;
-      
+      resposta += `O ponto de maior atenção é sua situação atual (${situacaoProfissional}), que exige uma estratégia precisa para o propósito de ${propositoViagem.toLowerCase()}.\n\n`;
       resposta += `*Investimento:*\n`;
-      resposta += `🇺🇸 Taxa Consular (MRV): aprox. US$ 185 (~R$ 950).\n`;
-      resposta += `📋 Assessoria: R$ 350 (50% na análise do DS-160 e 50% no agendamento).\n\n`;
-      
-      resposta += `Nossa assessoria focará em organizar sua documentação de suporte e mitigar riscos do perfil.\n\n`;
+      resposta += `🇺🇸 Taxa Consular: aprox. US$ 185 (~R$ 950)\n`;
+      resposta += `📋 Assessoria: R$ 350\n\n`;
       resposta += `Podemos iniciar sua estratégia hoje? 🚀`;
     }
 
-    // 3. Enviar via Z-API
+    // Enviar resposta
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
     const securityToken = process.env.ZAPI_SECURITY_TOKEN;
@@ -1292,11 +1292,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
         },
         body: JSON.stringify({ phone: cleanPhone, message: resposta })
       });
-      console.log(`✅ Resposta enviada para ${cleanPhone} sem gerar loop.`);
+      console.log(`✅ Resposta enviada para ${cleanPhone}`);
     }
     
   } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
+    console.error('❌ Erro:', error.message);
   }
 });
 
