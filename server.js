@@ -1242,20 +1242,41 @@ app.post('/api/webhook/zapi', async (req, res) => {
                  `https://getvisa.com.br/visto-negado\n\n` +
                  `Descubra suas chances de aprovação para o visto americano em poucos minutos!`;
     } else {
-      // Lead encontrado - extrair dados do perfil
+      // Extrair dados do lead
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const score = lead.pontuacao || 0;
-      const classificacao = lead.classificacao || (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
+      const score = lead.pontuacao_total || 0;
+      const classificacao = lead.classificacao_perfil || (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
       
-      // Extrair informações específicas (ajuste os nomes dos campos conforme sua tabela)
-      const situacaoProfissional = lead.situacao_profissional || lead.ocupacao || 'não informada';
-      const renda = lead.renda_mensal || lead.renda || 'não informada';
-      const propositoViagem = lead.proposito_viagem || 'turismo';
-      const historicoViagens = lead.historico_viagens || lead.paises_visitados || '';
+      // Extrair respostas do JSON (respostas_simulador)
+      const respostas = lead.respostas_simulador || {};
+      
+      // Mapear as respostas para os campos que você precisa
+      const situacaoProfissional = respostas.situacao_profissional || 
+                                   respostas.ocupacao || 
+                                   respostas.radio27 || 
+                                   respostas['Ocupação'] ||
+                                   'não informada';
+                                   
+      const renda = respostas.renda_mensal || 
+                    respostas.renda || 
+                    respostas.text51 || 
+                    respostas['Renda mensal'] ||
+                    'não informada';
+                    
+      const propositoViagem = respostas.proposito_viagem || 
+                              respostas.radio28 || 
+                              respostas['Propósito da viagem'] ||
+                              'turismo';
+                              
+      const historicoViagens = respostas.historico_viagens || 
+                               respostas.paises_visitados || 
+                               respostas.viagens || 
+                               '';
       
       // Determinar ponto de atenção
       let pontoAtencao = '';
-      if (situacaoProfissional === 'Desempregado(a) no momento') {
+      const situacaoLower = situacaoProfissional.toLowerCase();
+      if (situacaoLower.includes('desempregado')) {
         pontoAtencao = `sua situação atual de desempregado(a) no momento`;
       } else if (parseFloat(renda) < 3000) {
         pontoAtencao = `sua renda atual (${renda}), que está abaixo da média esperada`;
@@ -1265,7 +1286,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
       
       // Determinar ponto forte
       let pontoForte = '';
-      if (historicoViagens && historicoViagens !== '' && historicoViagens !== 'nenhuma' && historicoViagens !== 'não') {
+      if (historicoViagens && historicoViagens !== '' && 
+          !historicoViagens.toLowerCase().includes('nunca') && 
+          !historicoViagens.toLowerCase().includes('nenhuma')) {
         pontoForte = `seu excelente histórico de viagens (${historicoViagens.substring(0, 50)})`;
       } else if (score >= 70) {
         pontoForte = `sua boa pontuação na análise (${score}/100)`;
@@ -1284,7 +1307,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       
       resposta += `*Nossa assessoria focará em:* `;
       
-      if (situacaoProfissional === 'Desempregado(a) no momento') {
+      if (situacaoLower.includes('desempregado')) {
         resposta += `organizar sua documentação de suporte para demonstrar disponibilidade financeira atual de forma sólida, mitigando o risco pela falta de vínculo empregatício. `;
       } else {
         resposta += `estruturar sua comprovação de renda e vínculos com o Brasil, organizando a documentação de suporte para o propósito da viagem. `;
