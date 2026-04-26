@@ -1464,7 +1464,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `→ Corrigir pontos que podem causar negativa\n` +
                    `→ Acompanhar até o visto aprovado\n\n` +
                    `📋 *Faça sua avaliação gratuita agora:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano\n\n` +
+                   `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
                    `Ou me diga o que você gostaria de saber:\n` +
                    `💰 Preço | ⏰ Prazo | 📄 Documentos | ⚠️ Visto Negado`;
       }
