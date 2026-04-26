@@ -1364,7 +1364,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `   → Suporte em todas as etapas\n\n` +
                    `⏰ *Prazo médio total:* 30 a 90 dias\n\n` +
                    `📋 *Comece com sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano`;
+                   `https://getvisa.com.br/simulador-visto-americano-4917`;
       }
       
       // ========== PERGUNTAS SOBRE PREÇO ==========
@@ -1384,7 +1384,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `✅ Preparação para entrevista\n` +
                    `✅ Acompanhamento até a aprovação\n\n` +
                    `📋 *Faça sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano`;
+                   `https://getvisa.com.br/simulador-visto-americano-4917`;
       }
       
       // ========== PERGUNTAS SOBRE PRAZO ==========
@@ -1401,7 +1401,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `🎯 Acompanhamento prioritário\n` +
                    `⚡ Processo otimizado\n\n` +
                    `📋 *Quer acelerar seu processo? Faça avaliação:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano`;
+                   `https://getvisa.com.br/simulador-visto-americano-4917`;
       }
       
       // ========== PERGUNTAS SOBRE DOCUMENTOS ==========
@@ -1422,7 +1422,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `• Carteira de trabalho\n` +
                    `• Comprovante de vínculo empregatício\n\n` +
                    `📋 *Cada caso é único. Faça sua avaliação:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano`;
+                   `https://getvisa.com.br/simulador-visto-americano-4917`;
       }
       
       // ========== VISTO NEGADO (INFO GERAL) ==========
@@ -1444,7 +1444,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                    `✅ Preparação específica para entrevista\n` +
                    `✅ Acompanhamento jurídico especializado\n\n` +
                    `📋 *Faça sua avaliação específica para visto negado:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano`;
+                   `https://getvisa.com.br/simulador-visto-americano-4917`;
       }
       
       // ========== RESPOSTA PADRÃO (SAUDAÇÃO) ==========
@@ -1474,7 +1474,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
                    `Olá! 👋 Podemos ajudar você a conquistar seu visto americano!\n\n` +
                    `📋 *Comece com sua avaliação gratuita:*\n` +
-                   `https://getvisa.com.br/simulador-visto-americano\n\n` +
+                   `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
                    `🔍 *Dúvidas frequentes:*\n` +
                    `Digite:\n` +
                    `💰 "preço" - valores do processo\n` +
