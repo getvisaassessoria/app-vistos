@@ -825,14 +825,27 @@ app.post('/api/submit-avaliacao', async (req, res) => {
 
   (async () => {
     try {
-      const nome = data['nome'] || data['full_name'] || 'Cliente_Sem_Nome';
-      const emailCliente = data['email'] || data['email-1'] || null;
-      const telefoneCliente = data['telefone'] || data['whatsapp'] || data['text-77'] || null;
+      const nome = data['nome'] || 'Cliente_Sem_Nome';
+      const emailCliente = data['email'] || null;
+      
+      // 🔥 CORREÇÃO: Normalizar telefone
+      let telefoneCliente = data['telefone'] || data['whatsapp'] || null;
+      if (telefoneCliente) {
+        telefoneCliente = telefoneCliente.toString().replace(/\D/g, '');
+        // Remove 55 do início se existir
+        if (telefoneCliente.startsWith('55')) {
+          telefoneCliente = telefoneCliente.substring(2);
+        }
+        // Se ainda tiver 12 dígitos (com 9 extra), ajusta
+        if (telefoneCliente.length === 12) {
+          telefoneCliente = telefoneCliente.substring(1);
+        }
+        console.log(`📞 Telefone original: ${data['telefone']} → normalizado: ${telefoneCliente}`);
+      }
+      
       const score = data['score'] || data['pontuacao'] || 0;
       const classificacao = data['classificacao'] || data['classificacao_perfil'] || 
                            (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
-      
-      console.log(`📝 Salvando lead: ${nome}, ${telefoneCliente}, ${classificacao}, ${score}`);
       
       if (telefoneCliente) {
         const { data: inserted, error: insertError } = await supabase
@@ -852,43 +865,17 @@ app.post('/api/submit-avaliacao', async (req, res) => {
         if (insertError) {
           console.error('❌ Erro ao salvar lead:', insertError);
         } else {
-          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
+          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
           
           const primeiroNome = nome.split(' ')[0];
-          const situacaoProfissional = data['ocupacao'] || data['radio27'] || data['situacao_profissional'] || 'CLT';
-          const historicoViagens = data['historico_viagens'] || data['paises_visitados'] || '';
-          const primeiraViagem = !historicoViagens || historicoViagens.toLowerCase().includes('nunca');
-          
-          let mensagemWhats = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e a partir de agora, vou acompanhar você em todo processo!\n\n`;
-          mensagemWhats += `Recebemos sua avaliação e seu perfil foi classificado como *${classificacao}*. `;
-          
-          if (situacaoProfissional.toLowerCase().includes('clt') || situacaoProfissional.toLowerCase().includes('empregado')) {
-            mensagemWhats += `O fato de você estar como ${situacaoProfissional} é excelente, pois demonstra estabilidade. `;
-          } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
-            mensagemWhats += `Sua experiência como autônomo é um ponto positivo, e vamos organizar sua documentação financeira da melhor forma. `;
-          } else {
-            mensagemWhats += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
-          }
-          
-          mensagemWhats += `Nosso foco agora será organizar essa comprovação de vínculo e preparar você para a entrevista`;
-          
-          if (primeiraViagem) {
-            mensagemWhats += `, já que será sua primeira viagem internacional.`;
-          } else {
-            mensagemWhats += `.`;
-          }
-          
-          mensagemWhats += `\n\n✅ *Podemos continuar o processo?*\n`;
-          mensagemWhats += `Se sua resposta for *SIM*, te mando agora mesmo o link para o preenchimento do rascunho do formulário DS-160. 🚀`;
+          let mensagemWhats = `Olá, ${primeiroNome}! Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
+          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\nComo posso ajudar? 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
-      } else {
-        console.error('❌ Telefone não informado, não foi possível salvar o lead');
       }
-      
     } catch (err) {
-      console.error('❌ Erro no processamento da avaliação:', err);
+      console.error('❌ Erro:', err);
     }
   })();
 });
