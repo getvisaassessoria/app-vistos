@@ -1348,135 +1348,7 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API ====================
-// ==================== WEBHOOK Z-API ====================
-// ==================== WEBHOOK Z-API ====================
-app.post('/api/webhook/zapi', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
 
-  const body = req.body;
-  if (body.fromMe === true) return;
-  const connectedPhone = body.connectedPhone;
-  const senderPhone = body.phone || body.from;
-  if (senderPhone === connectedPhone) return;
-  if (body.isStatusReply === true || body.waitingMessage === true) return;
-
-  try {
-    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
-    if (!messageText) return;
-
-    const cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    console.log(`📞 Mensagem de ${cleanPhone}: "${messageText}"`);
-
-    // 🔍 BUSCAR LEAD NO SUPABASE
-    let lead = null;
-    
-    const { data: leads, error } = await supabase
-      .from('leads_simulador')
-      .select('*')
-      .eq('telefone_whatsapp', cleanPhone)
-      .order('data_simulacao', { ascending: false });
-    
-    console.log(`🔍 Buscando lead para ${cleanPhone}: encontrados ${leads?.length || 0} registros`);
-    
-    if (leads && leads.length > 0) {
-      lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}, score: ${lead.pontuacao_total}, class: ${lead.classificacao_perfil}`);
-    } else {
-      console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
-    }
-    
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-    
-    const sendReply = async (phone, message) => {
-      if (!instance || !token) return;
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-        body: JSON.stringify({ phone, message })
-      });
-      console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
-    };
-    
-    // ==================== RESPOSTA "SIM" ====================
-    if (lead && messageText === 'sim') {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `Vamos dar continuidade ao seu processo!\n\n` +
-                       `📋 *Acesse o formulário DS-160:*\n` +
-                       `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
-                       `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Estamos juntos nessa! 🇺🇸✨`;
-      
-      await sendReply(cleanPhone, resposta);
-      console.log(`✅ Link do DS-160 enviado para ${primeiroNome}`);
-      return;
-    }
-    
-    // ==================== LEAD EXISTE != ====================
-    if (lead) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const classificacao = lead.classificacao_perfil || 'Analisado';
-      const pontuacao = lead.pontuacao_total || 0;
-      const respostas = lead.respostas_simulador || {};
-      
-      // Extrair dados do perfil
-      const perfil = respostas.perfil || respostas.radio27 || respostas.ocupacao || 'não informado';
-      const renda = respostas.renda || respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || respostas.paises_visitados || 'nunca viajou';
-      const motivo = respostas.proposito_viagem || respostas.radio28 || respostas.motivo || 'não informado';
-      const primeiraViagem = historico.toLowerCase().includes('nunca');
-      
-      // Construir resposta HUMANIZADA
-      let resposta = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
-      resposta += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
-      resposta += `📊 *Seus dados:*\n`;
-      resposta += `• Perfil: ${perfil}\n`;
-      resposta += `• Renda: ${renda}\n`;
-      resposta += `• Histórico: ${historico}\n`;
-      resposta += `• Motivo: ${motivo}\n\n`;
-      
-      resposta += `🔍 *Análise:* `;
-      if (perfil.toLowerCase().includes('estudante')) {
-        resposta += `Como estudante, o consulado valoriza vínculos com o Brasil, como matrícula ativa e planejamento de retorno. `;
-      } else if (perfil.toLowerCase().includes('clt')) {
-        resposta += `Sua estabilidade como CLT é um ponto muito positivo. `;
-      } else {
-        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
-      }
-      
-      if (primeiraViagem) {
-        resposta += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra para demonstrar seus vínculos. `;
-      }
-      
-      resposta += `\n\n✅ *Podemos dar início ao seu processo?*\n`;
-      resposta += `Se sua resposta for *SIM*, te envio agora o link do formulário DS-160. 🚀`;
-      
-      console.log(`📝 Resposta humanizada para ${primeiroNome}: ${resposta.substring(0, 100)}...`);
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== LEAD NÃO EXISTE ====================
-    if (!lead) {
-      const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                       `Olá! 👋 Seja bem-vindo(a)!\n\n` +
-                       `📋 *Faça sua avaliação gratuita de perfil:*\n` +
-                       `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                       `Em 2 minutos você descobre suas chances de aprovação! 🚀`;
-      
-      await sendReply(cleanPhone, resposta);
-      console.log(`📝 Oferta de avaliação enviada para ${cleanPhone}`);
-    }
-    
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
-    console.error(error.stack);
-  }
-});
 
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
 app.post('/api/submit-simulador', async (req, res) => {
@@ -2935,12 +2807,13 @@ app.get('/ping', (req, res) => {
 });
 
 // ==================== WEBHOOK Z-API ====================
-// ==================== WEBHOOK Z-API ====================
-// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
+  // Resposta imediata para evitar timeout
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
+  
+  // 🔒 PROTEÇÃO CONTRA LOOP
   if (body.fromMe === true) return;
   const connectedPhone = body.connectedPhone;
   const senderPhone = body.phone || body.from;
@@ -2951,23 +2824,24 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
-    const cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    console.log(`📞 Mensagem de ${cleanPhone}: "${messageText}"`);
+    // Normalizar telefone (remover 55 do início)
+    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
 
-    // 🔍 BUSCAR LEAD NO SUPABASE
+    // Buscar lead no Supabase
     let lead = null;
-    
-    const { data: leads, error } = await supabase
+    const { data: leads } = await supabase
       .from('leads_simulador')
       .select('*')
       .eq('telefone_whatsapp', cleanPhone)
       .order('data_simulacao', { ascending: false });
     
-    console.log(`🔍 Buscando lead para ${cleanPhone}: encontrados ${leads?.length || 0} registros`);
-    
     if (leads && leads.length > 0) {
       lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}, score: ${lead.pontuacao_total}, class: ${lead.classificacao_perfil}`);
+      console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
     } else {
       console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
     }
@@ -2987,80 +2861,133 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
     
-    // ==================== RESPOSTA "SIM" ====================
-    if (lead && messageText === 'sim') {
+    // ==================== 1. RESPOSTA "SIM" ====================
+    if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `Vamos dar continuidade ao seu processo!\n\n` +
                        `📋 *Acesse o formulário DS-160:*\n` +
                        `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
                        `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
                        `Estamos juntos nessa! 🇺🇸✨`;
-      
       await sendReply(cleanPhone, resposta);
-      console.log(`✅ Link do DS-160 enviado para ${primeiroNome}`);
       return;
     }
     
-    // ==================== LEAD EXISTE != ====================
+    // ==================== 2. RESPOSTA "NÃO" ====================
+    if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
+                       `🔍 *O que você gostaria de saber?*\n\n` +
+                       `1️⃣ *Como funciona o processo?*\n` +
+                       `2️⃣ *Preços e pagamento*\n` +
+                       `3️⃣ *Prazos*\n` +
+                       `4️⃣ *Documentos necessários*\n` +
+                       `5️⃣ *Falar com especialista*\n\n` +
+                       `Digite o número da sua dúvida.\n\n` +
+                       `Se mudar de ideia, digite *SIM* para começar! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== 3. MENU DE DÚVIDAS (1-5) ====================
+    if (lead && (messageText === '1' || messageText === '1️⃣')) {
+      const resposta = `📋 *Como funciona o processo?*\n\n` +
+                       `1️⃣ Análise do perfil (você já fez ✅)\n` +
+                       `2️⃣ Preenchimento do DS-160\n` +
+                       `3️⃣ Agendamento da entrevista\n` +
+                       `4️⃣ Preparação para entrevista\n` +
+                       `5️⃣ Acompanhamento até a aprovação\n\n` +
+                       `⏰ Prazo médio: 30 a 90 dias\n\n` +
+                       `Digite *SIM* para começar seu DS-160! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    if (lead && (messageText === '2' || messageText === '2️⃣')) {
+      const resposta = `💰 *Investimento:*\n\n` +
+                       `🇺🇸 Taxa Consular: ~R$ 950\n` +
+                       `📋 Assessoria: R$ 350 (2x R$ 175)\n\n` +
+                       `*O que inclui:*\n` +
+                       `✅ Análise do perfil\n` +
+                       `✅ Preenchimento do DS-160\n` +
+                       `✅ Preparação para entrevista\n` +
+                       `✅ Acompanhamento total\n\n` +
+                       `Digite *SIM* para começar! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    if (lead && (messageText === '3' || messageText === '3️⃣')) {
+      const resposta = `⏰ *Prazos:*\n\n` +
+                       `📅 Agendamento: 2 a 8 semanas\n` +
+                       `🔍 Análise consular: 7 a 15 dias\n` +
+                       `📬 Retorno do passaporte: 5 a 10 dias\n\n` +
+                       `🚀 *Com nossa assessoria:* agendamento em até 15 dias\n\n` +
+                       `Digite *SIM* para acelerar seu processo! ⚡`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    if (lead && (messageText === '4' || messageText === '4️⃣')) {
+      const resposta = `📄 *Documentos necessários:*\n\n` +
+                       `📌 *Obrigatórios:*\n` +
+                       `• Passaporte válido\n` +
+                       `• Foto 5x7\n` +
+                       `• Comprovante da taxa MRV\n` +
+                       `• DS-160 preenchido\n\n` +
+                       `📌 *Recomendados:*\n` +
+                       `• Comprovante de renda\n` +
+                       `• Extratos bancários\n` +
+                       `• Comprovante de vínculos\n\n` +
+                       `Digite *SIM* e te ajudo com a documentação! 📋`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    if (lead && (messageText === '5' || messageText === '5️⃣')) {
+      const resposta = `📞 *Falar com um especialista:*\n\n` +
+                       `https://wa.me/5521974601812\n\n` +
+                       `Ou agende uma consultoria gratuita:\n` +
+                       `https://calendly.com/getvisa/consultoria\n\n` +
+                       `Estamos aqui para te ajudar! 💬`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== 4. LEAD EXISTE (mensagem padrão) ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
       const pontuacao = lead.pontuacao_total || 0;
       const respostas = lead.respostas_simulador || {};
+      const perfil = respostas.situacao_profissional || 'não informado';
+      const renda = respostas.renda_mensal || 'não informada';
+      const historico = respostas.historico_viagens || 'não informado';
+      const motivo = respostas.proposito_viagem || 'não informado';
       
-      // Extrair dados do perfil
-      const perfil = respostas.perfil || respostas.radio27 || respostas.ocupacao || 'não informado';
-      const renda = respostas.renda || respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || respostas.paises_visitados || 'nunca viajou';
-      const motivo = respostas.proposito_viagem || respostas.radio28 || respostas.motivo || 'não informado';
-      const primeiraViagem = historico.toLowerCase().includes('nunca');
+      let resposta = `Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
+      resposta += `📊 *Seus dados:*\n• Perfil: ${perfil}\n• Renda: ${renda}\n• Histórico: ${historico}\n• Motivo: ${motivo}\n\n`;
+      resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 350)\n\n`;
+      resposta += `✅ *Podemos iniciar seu processo?*\n`;
+      resposta += `• Digite *SIM* para receber o link do DS-160\n`;
+      resposta += `• Digite *NÃO* para tirar dúvidas\n\n`;
+      resposta += `Como posso ajudar? 🚀`;
       
-      // Construir resposta HUMANIZADA
-      let resposta = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
-      resposta += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
-      resposta += `📊 *Seus dados:*\n`;
-      resposta += `• Perfil: ${perfil}\n`;
-      resposta += `• Renda: ${renda}\n`;
-      resposta += `• Histórico: ${historico}\n`;
-      resposta += `• Motivo: ${motivo}\n\n`;
-      
-      resposta += `🔍 *Análise:* `;
-      if (perfil.toLowerCase().includes('estudante')) {
-        resposta += `Como estudante, o consulado valoriza vínculos com o Brasil, como matrícula ativa e planejamento de retorno. `;
-      } else if (perfil.toLowerCase().includes('clt')) {
-        resposta += `Sua estabilidade como CLT é um ponto muito positivo. `;
-      } else {
-        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
-      }
-      
-      if (primeiraViagem) {
-        resposta += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra para demonstrar seus vínculos. `;
-      }
-      
-      resposta += `\n\n✅ *Podemos dar início ao seu processo?*\n`;
-      resposta += `Se sua resposta for *SIM*, te envio agora o link do formulário DS-160. 🚀`;
-      
-      console.log(`📝 Resposta humanizada para ${primeiroNome}: ${resposta.substring(0, 100)}...`);
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== LEAD NÃO EXISTE ====================
+    // ==================== 5. LEAD NÃO EXISTE ====================
     if (!lead) {
       const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                       `Olá! 👋 Seja bem-vindo(a)!\n\n` +
-                       `📋 *Faça sua avaliação gratuita de perfil:*\n` +
+                       `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
                        `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
                        `Em 2 minutos você descobre suas chances de aprovação! 🚀`;
-      
       await sendReply(cleanPhone, resposta);
-      console.log(`📝 Oferta de avaliação enviada para ${cleanPhone}`);
     }
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
-    console.error(error.stack);
   }
 });
 
@@ -3246,9 +3173,6 @@ app.post('/api/submit-simulador', async (req, res) => {
     }
   })();
 });
-
-// ==================== INICIALIZAÇÃO ====================
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
