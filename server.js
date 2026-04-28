@@ -1336,6 +1336,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
     
+    // ==================== 1. RESPOSTA "SIM" ====================
     if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
@@ -1347,6 +1348,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
+    // ==================== 2. RESPOSTA "NÃO" ====================
     if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
@@ -1362,34 +1364,43 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    if (lead && (messageText === '1' || messageText === '1️⃣')) {
-      const resposta = `📋 *Como funciona o processo?*\n\n` +
-                       `1️⃣ Análise do perfil (você já fez ✅)\n` +
-                       `2️⃣ Preenchimento do DS-160\n` +
-                       `3️⃣ Agendamento da entrevista\n` +
-                       `4️⃣ Preparação para entrevista\n` +
-                       `5️⃣ Acompanhamento até a aprovação\n\n` +
-                       `⏰ Prazo médio: 30 a 90 dias\n\n` +
-                       `Digite *SIM* para começar seu DS-160! 🚀`;
+    // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
+    if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
+                 messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
+                       `📋 *Como podemos ajudar você hoje?*\n\n` +
+                       `🔍 *Opções disponíveis:*\n` +
+                       `💰 *PREÇO* - Valores do processo\n` +
+                       `⏰ *PRAZO* - Tempos estimados\n` +
+                       `📄 *DOCUMENTOS* - O que é necessário\n` +
+                       `📋 *PROCESSO* - Passo a passo\n` +
+                       `⚠️ *VISTO NEGADO* - Casos de negativa\n` +
+                       `📞 *AJUDA* - Falar com especialista\n` +
+                       `✅ *SIM* - Iniciar meu processo\n\n` +
+                       `*Digite a opção desejada ou me diga o que você precisa!* 🚀`;
       await sendReply(cleanPhone, resposta);
+      console.log(`📝 Menu principal enviado para ${primeiroNome}`);
       return;
     }
     
-    if (lead && (messageText === '2' || messageText === '2️⃣')) {
+    // ==================== 4. BANCO DE PALAVRAS (preço, prazo, documentos, processo, ajuda, visto negado) ====================
+    if (lead && (messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
       const resposta = `💰 *Investimento:*\n\n` +
                        `🇺🇸 Taxa Consular: ~R$ 950\n` +
-                       `📋 Assessoria: R$ 350 (2x R$ 175)\n\n` +
+                       `📋 Assessoria: R$ 400 (ou 2x R$ 200)\n\n` +
                        `*O que inclui:*\n` +
                        `✅ Análise do perfil\n` +
                        `✅ Preenchimento do DS-160\n` +
                        `✅ Preparação para entrevista\n` +
-                       `✅ Acompanhamento total\n\n` +
+                       `✅ Acompanhamento até aprovação\n\n` +
+                       `Possui CNPJ? Consulte condições especiais!\n\n` +
                        `Digite *SIM* para começar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    if (lead && (messageText === '3' || messageText === '3️⃣')) {
+    if (lead && (messageText === 'prazo' || messageText === '⏰')) {
       const resposta = `⏰ *Prazos:*\n\n` +
                        `📅 Agendamento: 2 a 8 semanas\n` +
                        `🔍 Análise consular: 7 a 15 dias\n` +
@@ -1400,32 +1411,67 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    if (lead && (messageText === '4' || messageText === '4️⃣')) {
+    if (lead && (messageText === 'documentos' || messageText === '📄')) {
       const resposta = `📄 *Documentos necessários:*\n\n` +
                        `📌 *Obrigatórios:*\n` +
-                       `• Passaporte válido\n` +
-                       `• Foto 5x7\n` +
-                       `• Comprovante da taxa MRV\n` +
+                       `• Passaporte válido (mínimo 6 meses)\n` +
+                       `• Foto 5x7 recente (fundo branco)\n` +
+                       `• Comprovante da taxa MRV paga\n` +
                        `• DS-160 preenchido\n\n` +
-                       `📌 *Recomendados:*\n` +
-                       `• Comprovante de renda\n` +
-                       `• Extratos bancários\n` +
-                       `• Comprovante de vínculos\n\n` +
+                       `📌 *Recomendados (comprovar vínculos):*\n` +
+                       `• Comprovante de renda (3 últimos holerites)\n` +
+                       `• Extratos bancários (3-6 meses)\n` +
+                       `• Comprovante de imóvel/veículo\n` +
+                       `• Carteira de trabalho\n\n` +
                        `Digite *SIM* e te ajudo com a documentação! 📋`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    if (lead && (messageText === '5' || messageText === '5️⃣')) {
-      const resposta = `📞 *Falar com um especialista:*\n\n` +
-                       `https://wa.me/5521974601812\n\n` +
-                       `Ou agende uma consultoria gratuita:\n` +
-                       `https://calendly.com/getvisa/consultoria\n\n` +
-                       `Estamos aqui para te ajudar! 💬`;
+    if (lead && (messageText === 'processo' || messageText === '📋')) {
+      const resposta = `📋 *Passo a passo do processo:*\n\n` +
+                       `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
+                       `2️⃣ *Preenchimento do DS-160* (enviamos o link)\n` +
+                       `3️⃣ *Pagamento da taxa consular* (~R$ 950)\n` +
+                       `4️⃣ *Agendamento da entrevista* (ajudamos a agendar)\n` +
+                       `5️⃣ *Preparação para entrevista* (simulado e dicas)\n` +
+                       `6️⃣ *Acompanhamento* até a aprovação\n\n` +
+                       `⏰ Prazo médio: 30 a 90 dias\n\n` +
+                       `Digite *SIM* para iniciar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
+    if (lead && (messageText === 'ajuda' || messageText === 'especialista' || messageText === '📞')) {
+      const resposta = `📞 *Falar com um especialista:*\n\n` +
+                       `Meu nome é Moisés e estou aqui para te ajudar!\n\n` +
+                       `*Contato direto:*\n` +
+                       `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+                       `*Agende uma consultoria gratuita:*\n` +
+                       `📅 https://calendly.com/getvisa/consultoria\n\n` +
+                       `Estamos online de segunda a sexta, 9h às 18h 💬`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    if (lead && (messageText === 'visto negado' || messageText === 'negado' || messageText === 'rejeitado' || messageText === '⚠️')) {
+      const resposta = `⚠️ *Visto negado? Não desanime!*\n\n` +
+                       `*O que fazer após uma negativa:*\n` +
+                       `1️⃣ Entender o motivo da negativa (artigo 214b)\n` +
+                       `2️⃣ Reforçar vínculos com o Brasil\n` +
+                       `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
+                       `4️⃣ Nova documentação de suporte\n` +
+                       `5️⃣ Preparação intensiva para entrevista\n\n` +
+                       `*Nossa assessoria especializada em reversão:*\n` +
+                       `✅ Revisão do caso anterior\n` +
+                       `✅ Estratégia personalizada\n` +
+                       `✅ Acompanhamento até a aprovação\n\n` +
+                       `Digite *SIM* para agendar uma análise do seu caso! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== 5. LEAD EXISTE (mensagem padrão com perfil) ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
@@ -1438,7 +1484,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       
       let resposta = `Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
       resposta += `📊 *Seus dados:*\n• Perfil: ${perfil}\n• Renda: ${renda}\n• Histórico: ${historico}\n• Motivo: ${motivo}\n\n`;
-      resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 350)\n\n`;
+      resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 400)\n\n`;
       resposta += `✅ *Podemos iniciar seu processo?*\n`;
       resposta += `• Digite *SIM* para receber o link do DS-160\n`;
       resposta += `• Digite *NÃO* para tirar dúvidas\n\n`;
@@ -1448,6 +1494,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
+    // ==================== 6. LEAD NÃO EXISTE ====================
     if (!lead) {
       const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
                        `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
