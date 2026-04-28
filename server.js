@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.static('public')); 
 
 // ==================== SUPABASE CLIENT ====================
 const supabase = createClient(
@@ -1364,20 +1365,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
+   // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
 if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
              messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
   const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
   const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
                    `📋 *Como podemos ajudar você hoje?*\n\n` +
                    `🔍 *Opções disponíveis:*\n` +
-                   `1️⃣💰 *PREÇO* - Valores do processo\n` +
-                   `2️⃣⏰ *PRAZO* - Tempos estimados\n` +
-                   `3️⃣📄 *DOCUMENTOS* - O que é necessário\n` +
-                   `4️⃣📋 *PROCESSO* - Passo a passo\n` +
-                   `5️⃣⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                   `6️⃣📞 *AJUDA* - Falar com especialista\n` +
-                   `7️⃣✅ *SIM* - Iniciar meu processo\n\n` +
+                   `1️⃣  💰 *PREÇO* - Valores do processo\n` +
+                   `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
+                   `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
+                   `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
+                   `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
+                   `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
+                   `7️⃣  ✅ *SIM* - Iniciar meu processo\n\n` +
                    `*Digite o número da opção desejada (1 a 7):* 🚀`;
   await sendReply(cleanPhone, resposta);
   console.log(`📝 Menu principal enviado para ${primeiroNome}`);
