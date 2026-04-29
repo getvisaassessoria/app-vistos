@@ -1057,7 +1057,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         mensagemWhats += `✅ Correção do DS-160\n`;
         mensagemWhats += `✅ Documentação de suporte reforçada\n`;
         mensagemWhats += `✅ Preparação para entrevista\n\n`;
-        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 450)\n\n`;
+        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 380)\n\n`;
         mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
         mensagemWhats += `*Falar com especialista:* https://wa.me/5521974601812`;
         
@@ -1341,10 +1341,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `📋 *Acesse o formulário DS-160:*\n` +
+                       `📋 *Acesse o rascunho do formulário DS-160:*\n` +
                        `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
                        `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Estamos juntos nessa! 🇺🇸✨`;
+                       `Aguardamos seu formulario! 🇺🇸✨`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1484,14 +1484,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
                  messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
       const resposta = `💰 *INVESTIMENTO*\n\n` +
                        `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-                       `📋 *Assessoria:* R$ 400 (à vista) ou 2x R$ 200\n\n` +
+                       `📋 *Assessoria:* R$ 350,00\n\n` +
                        `*O que a assessoria inclui:*\n` +
                        `✅ Análise completa do perfil\n` +
                        `✅ Preenchimento do DS-160\n` +
                        `✅ Agendamento da entrevista\n` +
                        `✅ Preparação para entrevista (simulado)\n` +
-                       `✅ Acompanhamento até a aprovação\n\n` +
-                       `📌 *CNPJ?* Consulte condições especiais!\n\n` +
+                       `✅ Acompanhamento até o final do processo\n\n` +
+                       `📌 Plano especial para família \n\n` +
                        `Digite *7* ou *SIM* para começar seu processo! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
@@ -1502,11 +1502,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
                  messageText === 'prazo' || messageText === '⏰')) {
       const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
                        `📅 *Agendamento da entrevista:*\n` +
-                       `   • Por conta própria: 2 a 8 semanas\n` +
-                       `   • Com nossa assessoria: até 15 dias ⚡\n\n` +
-                       `🔍 *Análise consular:* 7 a 15 dias úteis\n\n` +
-                       `📬 *Retorno do passaporte:* 5 a 10 dias úteis\n\n` +
-                       `🕒 *TOTAL estimado:* 30 a 90 dias\n\n` +
+                       `   • Por conta própria: até 8 semanas\n` +
+                       `   • Com nossa assessoria: trabalhamos com antecipação de prazos ⚡\n\n` +
+                       `🔍 *Análise consular:* 7 a 10 dias úteis\n\n` +
+                       `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
+                       `🕒 *TOTAL estimado:* 30 a 40 dias\n\n` +
                        `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
@@ -1548,8 +1548,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
                        `5️⃣ *Preparação para entrevista*\n` +
                        `   → Simulado completo + dicas exclusivas\n\n` +
                        `6️⃣ *Acompanhamento*\n` +
-                       `   → Até a aprovação do visto!\n\n` +
-                       `⏰ *Prazo médio total:* 30 a 90 dias\n\n` +
+                       `   → Até o final do processo!\n\n` +
+                       `⏰ *Prazo médio total:* 30 a 40 dias\n\n` +
                        `Digite *7* ou *SIM* para iniciar agora! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
@@ -1570,8 +1570,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
                        `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
                        `✅ Revisão completa do caso anterior\n` +
                        `✅ Estratégia personalizada para sua situação\n` +
-                       `✅ Acompanhamento até a aprovação\n\n` +
-                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 450\n\n` +
+                       `✅ Acompanhamento até o final do processo\n\n` +
+                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 380\n\n` +
                        `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
