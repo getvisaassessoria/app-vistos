@@ -1359,150 +1359,242 @@ app.post('/api/webhook/zapi', async (req, res) => {
                        `3️⃣📄 *DOCUMENTOS* - O que é necessário\n` +
                        `4️⃣📋 *PROCESSO* - Passo a passo\n` +
                        `5️⃣⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣📞 *AJUDA* - Falar com especialista\n\n` +
-                       `Digite o número da opção (1 a 6) ou *SIM* para começar! 🚀`;
+                       `6️⃣📞 *AJUDA* - Falar com especialista\n` +
+                       `8️⃣📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
+                       `Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-   // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
-if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-             messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
-  const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-  const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-                   `📋 *Como podemos ajudar você hoje?*\n\n` +
-                   `🔍 *Opções disponíveis:*\n` +
-                   `1️⃣  💰 *PREÇO* - Valores do processo\n` +
-                   `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
-                   `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
-                   `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
-                   `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                   `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
-                   `7️⃣  ✅ *SIM* - Iniciar meu processo\n\n` +
-                   `*Digite o número da opção desejada (1 a 7):* 🚀`;
-  await sendReply(cleanPhone, resposta);
-  console.log(`📝 Menu principal enviado para ${primeiroNome}`);
-  return;
-}
+    // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
+    if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
+                 messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
+                       `📋 *Como podemos ajudar você hoje?*\n\n` +
+                       `🔍 *Opções disponíveis:*\n` +
+                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
+                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
+                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
+                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
+                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
+                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
+                       `7️⃣  ✅ *SIM* - Iniciar meu processo\n` +
+                       `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
+                       `*Digite o número da opção desejada (1 a 8):* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      console.log(`📝 Menu principal enviado para ${primeiroNome}`);
+      return;
+    }
     
-    // ==================== 4. RESPOSTAS POR NÚMERO ====================
-
-// Opção 1 - PREÇO
-if (lead && (messageText === '1' || messageText === '1️⃣' || 
-             messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
-  const resposta = `💰 *INVESTIMENTO*\n\n` +
-                   `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-                   `📋 *Assessoria:* R$ 400 (à vista) ou 2x R$ 200\n\n` +
-                   `*O que a assessoria inclui:*\n` +
-                   `✅ Análise completa do perfil\n` +
-                   `✅ Preenchimento do DS-160\n` +
-                   `✅ Agendamento da entrevista\n` +
-                   `✅ Preparação para entrevista (simulado)\n` +
-                   `✅ Acompanhamento até a aprovação\n\n` +
-                   `📌 *CNPJ?* Consulte condições especiais!\n\n` +
-                   `Digite *7* ou *SIM* para começar seu processo! 🚀`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
-
-// Opção 2 - PRAZO
-if (lead && (messageText === '2' || messageText === '2️⃣' || 
-             messageText === 'prazo' || messageText === '⏰')) {
-  const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
-                   `📅 *Agendamento da entrevista:*\n` +
-                   `   • Por conta própria: 2 a 8 semanas\n` +
-                   `   • Com nossa assessoria: até 15 dias ⚡\n\n` +
-                   `🔍 *Análise consular:* 7 a 15 dias úteis\n\n` +
-                   `📬 *Retorno do passaporte:* 5 a 10 dias úteis\n\n` +
-                   `🕒 *TOTAL estimado:* 30 a 90 dias\n\n` +
-                   `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
-
-// Opção 3 - DOCUMENTOS
-if (lead && (messageText === '3' || messageText === '3️⃣' || 
-             messageText === 'documentos' || messageText === '📄')) {
-  const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
-                   `📌 *OBRIGATÓRIOS:*\n` +
-                   `• Passaporte válido (mínimo 6 meses de validade)\n` +
-                   `• Foto 5x7 recente (fundo branco)\n` +
-                   `• Comprovante da taxa consular MRV paga\n` +
-                   `• DS-160 preenchido (nós ajudamos!)\n\n` +
-                   `📌 *RECOMENDADOS (comprovar vínculos):*\n` +
-                   `• 💰 Comprovante de renda (3 últimos holerites)\n` +
-                   `• 🏦 Extratos bancários (3-6 meses)\n` +
-                   `• 🏠 Comprovante de imóvel ou contrato de aluguel\n` +
-                   `• 🚗 Documento do veículo\n` +
-                   `• 📒 Carteira de trabalho\n` +
-                   `• 👨‍👩‍👧 Certidão de nascimento dos filhos\n\n` +
-                   `Digite *7* ou *SIM* e te ajudo com a documentação! 📋`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
-
-// Opção 4 - PROCESSO
-if (lead && (messageText === '4' || messageText === '4️⃣' || 
-             messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
-  const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
-                   `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
-                   `   → Avaliamos suas chances de aprovação\n\n` +
-                   `2️⃣ *Preenchimento do DS-160* (nós te enviamos o link)\n` +
-                   `   → Revisamos antes do envio\n\n` +
-                   `3️⃣ *Pagamento da taxa consular*\n` +
-                   `   → ~R$ 950 (taxa oficial do governo dos EUA)\n\n` +
-                   `4️⃣ *Agendamento da entrevista*\n` +
-                   `   → Conseguimos datas mais rápidas ⚡\n\n` +
-                   `5️⃣ *Preparação para entrevista*\n` +
-                   `   → Simulado completo + dicas exclusivas\n\n` +
-                   `6️⃣ *Acompanhamento*\n` +
-                   `   → Até a aprovação do visto!\n\n` +
-                   `⏰ *Prazo médio total:* 30 a 90 dias\n\n` +
-                   `Digite *7* ou *SIM* para iniciar agora! 🚀`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
-
-// Opção 5 - VISTO NEGADO
-if (lead && (messageText === '5' || messageText === '5️⃣' || 
-             messageText === 'visto negado' || messageText === 'negado' || 
-             messageText === 'rejeitado' || messageText === '⚠️')) {
-  const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
-                   `*O que fazer após uma negativa:*\n\n` +
-                   `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
-                   `2️⃣ Reforçar seus vínculos com o Brasil\n` +
-                   `   • Emprego estável, família, bens\n\n` +
-                   `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
-                   `4️⃣ Nova documentação de suporte\n` +
-                   `5️⃣ Preparação intensiva para entrevista\n\n` +
-                   `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
-                   `✅ Revisão completa do caso anterior\n` +
-                   `✅ Estratégia personalizada para sua situação\n` +
-                   `✅ Acompanhamento até a aprovação\n\n` +
-                   `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 450\n\n` +
-                   `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
-
-// Opção 6 - AJUDA / ESPECIALISTA
-if (lead && (messageText === '6' || messageText === '6️⃣' || 
-             messageText === 'ajuda' || messageText === 'especialista' || 
-             messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
-  const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
-                   `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
-                   `*Contato direto:*\n` +
-                   `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-                   `*📅 Agende uma consultoria gratuita:*\n` +
-                   `https://calendly.com/getvisa/consultoria\n\n` +
-                   `*Horário de atendimento:*\n` +
-                   `Segunda a Sexta, 9h às 18h\n\n` +
-                   `Te aguardo para tirar todas as suas dúvidas! 💬`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
+    // ==================== 4. CONSULTAR AGENDAMENTOS ====================
+    if (lead && (messageText === '8' || messageText === '8️⃣' || 
+                 messageText === 'meus agendamentos' || messageText === 'meus compromissos' || 
+                 messageText === 'minha entrevista' || messageText === 'quando' || 
+                 messageText === 'datas' || messageText === '📅' || messageText === 'agendamentos')) {
+      
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const nomeCompleto = lead.nome_cliente || '';
+      
+      console.log(`📅 Cliente ${primeiroNome} solicitou consulta de agendamentos`);
+      
+      // Buscar agendamentos do cliente pelo nome
+      const { data: agendamentos, error } = await supabase
+        .from('compromissos')
+        .select('*')
+        .ilike('cliente', `%${nomeCompleto}%`)
+        .order('data', { ascending: true });
+      
+      if (error) {
+        console.error('Erro ao buscar agendamentos:', error);
+        const resposta = `❌ *Desculpe, ${primeiroNome}!*\n\nTivemos um problema ao buscar seus agendamentos. Por favor, fale com um especialista: https://wa.me/5521974601812`;
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+      
+      if (agendamentos && agendamentos.length > 0) {
+        // Separar passados e futuros
+        const hoje = new Date().toISOString().split('T')[0];
+        const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido === 0);
+        const passados = agendamentos.filter(a => a.data < hoje || a.concluido === 1);
+        
+        let resposta = `📅 *Olá, ${primeiroNome}!* 📅\n\n`;
+        
+        if (futuros.length > 0) {
+          resposta += `*🔜 PRÓXIMOS COMPROMISSOS:*\n\n`;
+          for (const ag of futuros) {
+            const dataFormatada = formatarDataBR(ag.data);
+            const emoji = ag.atividade === 'ENTREVISTA' ? '🗣️' : 
+                          ag.atividade === 'CASV' ? '👆' : 
+                          ag.atividade.includes('TREINAMENTO') ? '💻' : 
+                          ag.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
+            
+            resposta += `${emoji} *${ag.atividade}*\n`;
+            resposta += `   📆 ${dataFormatada}\n`;
+            resposta += `   ⏰ ${ag.hora}\n`;
+            if (ag.local) resposta += `   📍 ${ag.local}\n`;
+            
+            // Dias restantes
+            const diasRestantes = Math.ceil((new Date(ag.data) - new Date()) / (1000 * 60 * 60 * 24));
+            if (diasRestantes === 0) {
+              resposta += `   ⚠️ *É HOJE!* ⚠️\n`;
+            } else if (diasRestantes === 1) {
+              resposta += `   ⚠️ *É AMANHÃ!* ⚠️\n`;
+            } else if (diasRestantes > 0) {
+              resposta += `   📊 Em ${diasRestantes} dias\n`;
+            }
+            resposta += `\n`;
+          }
+        } else {
+          resposta += `✅ *Você não tem compromissos futuros no momento.*\n\n`;
+        }
+        
+        if (passados.length > 0) {
+          resposta += `*✅ ÚLTIMOS COMPROMISSOS REALIZADOS:*\n\n`;
+          const ultimos = passados.slice(-3);
+          for (const ag of ultimos) {
+            const dataFormatada = formatarDataBR(ag.data);
+            const status = ag.concluido === 1 ? '✅' : '📅';
+            resposta += `${status} ${ag.atividade} - ${dataFormatada}\n`;
+          }
+          if (passados.length > 3) {
+            resposta += `\n_+ ${passados.length - 3} outros compromissos_\n`;
+          }
+        }
+        
+        resposta += `\n🔔 *Você receberá lembretes 3 dias e 1 dia antes de cada compromisso!*\n\n`;
+        resposta += `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
+        
+        await sendReply(cleanPhone, resposta);
+      } else {
+        const resposta = `📅 *Olá, ${primeiroNome}!*\n\n` +
+                         `Você não possui compromissos agendados no momento.\n\n` +
+                         `Gostaria de agendar uma consultoria gratuita?\n` +
+                         `👉 https://calendly.com/getvisa/consultoria\n\n` +
+                         `Digite *MENU* para ver outras opções! 🚀`;
+        await sendReply(cleanPhone, resposta);
+      }
+      return;
+    }
     
-    // ==================== 5. LEAD EXISTE (mensagem padrão com perfil - apenas para mensagens não reconhecidas) ====================
+    // ==================== 5. RESPOSTAS POR NÚMERO (1 a 6) ====================
+
+    // Opção 1 - PREÇO
+    if (lead && (messageText === '1' || messageText === '1️⃣' || 
+                 messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
+      const resposta = `💰 *INVESTIMENTO*\n\n` +
+                       `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
+                       `📋 *Assessoria:* R$ 400 (à vista) ou 2x R$ 200\n\n` +
+                       `*O que a assessoria inclui:*\n` +
+                       `✅ Análise completa do perfil\n` +
+                       `✅ Preenchimento do DS-160\n` +
+                       `✅ Agendamento da entrevista\n` +
+                       `✅ Preparação para entrevista (simulado)\n` +
+                       `✅ Acompanhamento até a aprovação\n\n` +
+                       `📌 *CNPJ?* Consulte condições especiais!\n\n` +
+                       `Digite *7* ou *SIM* para começar seu processo! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // Opção 2 - PRAZO
+    if (lead && (messageText === '2' || messageText === '2️⃣' || 
+                 messageText === 'prazo' || messageText === '⏰')) {
+      const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
+                       `📅 *Agendamento da entrevista:*\n` +
+                       `   • Por conta própria: 2 a 8 semanas\n` +
+                       `   • Com nossa assessoria: até 15 dias ⚡\n\n` +
+                       `🔍 *Análise consular:* 7 a 15 dias úteis\n\n` +
+                       `📬 *Retorno do passaporte:* 5 a 10 dias úteis\n\n` +
+                       `🕒 *TOTAL estimado:* 30 a 90 dias\n\n` +
+                       `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // Opção 3 - DOCUMENTOS
+    if (lead && (messageText === '3' || messageText === '3️⃣' || 
+                 messageText === 'documentos' || messageText === '📄')) {
+      const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
+                       `📌 *OBRIGATÓRIOS:*\n` +
+                       `• Passaporte válido (mínimo 6 meses de validade)\n` +
+                       `• Foto 5x7 recente (fundo branco)\n` +
+                       `• Comprovante da taxa consular MRV paga\n` +
+                       `• DS-160 preenchido (nós ajudamos!)\n\n` +
+                       `📌 *RECOMENDADOS (comprovar vínculos):*\n` +
+                       `• 💰 Comprovante de renda (3 últimos holerites)\n` +
+                       `• 🏦 Extratos bancários (3-6 meses)\n` +
+                       `• 🏠 Comprovante de imóvel ou contrato de aluguel\n` +
+                       `• 🚗 Documento do veículo\n` +
+                       `• 📒 Carteira de trabalho\n` +
+                       `• 👨‍👩‍👧 Certidão de nascimento dos filhos\n\n` +
+                       `Digite *7* ou *SIM* e te ajudo com a documentação! 📋`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // Opção 4 - PROCESSO
+    if (lead && (messageText === '4' || messageText === '4️⃣' || 
+                 messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
+      const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
+                       `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
+                       `   → Avaliamos suas chances de aprovação\n\n` +
+                       `2️⃣ *Preenchimento do DS-160* (nós te enviamos o link)\n` +
+                       `   → Revisamos antes do envio\n\n` +
+                       `3️⃣ *Pagamento da taxa consular*\n` +
+                       `   → ~R$ 950 (taxa oficial do governo dos EUA)\n\n` +
+                       `4️⃣ *Agendamento da entrevista*\n` +
+                       `   → Conseguimos datas mais rápidas ⚡\n\n` +
+                       `5️⃣ *Preparação para entrevista*\n` +
+                       `   → Simulado completo + dicas exclusivas\n\n` +
+                       `6️⃣ *Acompanhamento*\n` +
+                       `   → Até a aprovação do visto!\n\n` +
+                       `⏰ *Prazo médio total:* 30 a 90 dias\n\n` +
+                       `Digite *7* ou *SIM* para iniciar agora! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // Opção 5 - VISTO NEGADO
+    if (lead && (messageText === '5' || messageText === '5️⃣' || 
+                 messageText === 'visto negado' || messageText === 'negado' || 
+                 messageText === 'rejeitado' || messageText === '⚠️')) {
+      const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
+                       `*O que fazer após uma negativa:*\n\n` +
+                       `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
+                       `2️⃣ Reforçar seus vínculos com o Brasil\n` +
+                       `   • Emprego estável, família, bens\n\n` +
+                       `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
+                       `4️⃣ Nova documentação de suporte\n` +
+                       `5️⃣ Preparação intensiva para entrevista\n\n` +
+                       `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
+                       `✅ Revisão completa do caso anterior\n` +
+                       `✅ Estratégia personalizada para sua situação\n` +
+                       `✅ Acompanhamento até a aprovação\n\n` +
+                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 450\n\n` +
+                       `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // Opção 6 - AJUDA / ESPECIALISTA
+    if (lead && (messageText === '6' || messageText === '6️⃣' || 
+                 messageText === 'ajuda' || messageText === 'especialista' || 
+                 messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
+      const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
+                       `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
+                       `*Contato direto:*\n` +
+                       `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+                       `*📅 Agende uma consultoria gratuita:*\n` +
+                       `https://calendly.com/getvisa/consultoria\n\n` +
+                       `*Horário de atendimento:*\n` +
+                       `Segunda a Sexta, 9h às 18h\n\n` +
+                       `Te aguardo para tirar todas as suas dúvidas! 💬`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== 6. LEAD EXISTE (mensagem padrão) ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
@@ -1517,14 +1609,14 @@ if (lead && (messageText === '6' || messageText === '6️⃣' ||
       resposta += `📊 *Seus dados:*\n• Perfil: ${perfil}\n• Renda: ${renda}\n• Histórico: ${historico}\n• Motivo: ${motivo}\n\n`;
       resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 400)\n\n`;
       resposta += `📋 *Opções disponíveis:*\n`;
-      resposta += `1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ SIM\n\n`;
+      resposta += `1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ SIM | 8️⃣ MEUS AGENDAMENTOS\n\n`;
       resposta += `Digite o número da opção desejada! 🚀`;
       
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== 6. LEAD NÃO EXISTE ====================
+    // ==================== 7. LEAD NÃO EXISTE ====================
     if (!lead) {
       const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
                        `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
@@ -1611,6 +1703,171 @@ app.post('/api/submit-simulador', async (req, res) => {
     }
   })();
 });
+
+// ==================== SISTEMA DE LEMBRETES AUTOMÁTICOS ====================
+
+// Função para formatar data brasileira
+function formatarDataBR(dataISO) {
+  const [ano, mes, dia] = dataISO.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+// Função para buscar telefone do cliente pelo nome ou cliente_id
+async function buscarTelefoneCliente(clienteNome, clienteId) {
+  // Primeiro tenta buscar pelo cliente_id na tabela clientes
+  if (clienteId) {
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .select('telefone')
+      .eq('id', clienteId)
+      .single();
+    
+    if (cliente?.telefone) {
+      return cliente.telefone.replace(/\D/g, '');
+    }
+  }
+  
+  // Se não achou, tenta pelo nome na tabela leads_simulador
+  const { data: lead } = await supabase
+    .from('leads_simulador')
+    .select('telefone_whatsapp')
+    .ilike('nome_cliente', `%${clienteNome}%`)
+    .order('data_simulacao', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (lead?.telefone_whatsapp) {
+    return lead.telefone_whatsapp.replace(/\D/g, '');
+  }
+  
+  return null;
+}
+
+// Função para enviar lembrete via WhatsApp
+async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
+  const dataFormatada = formatarDataBR(agendamento.data);
+  const emoji = agendamento.atividade === 'ENTREVISTA' ? '🗣️' : 
+                agendamento.atividade === 'CASV' ? '👆' : 
+                agendamento.atividade.includes('TREINAMENTO') ? '💻' : 
+                agendamento.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
+  
+  const diasTexto = diasAntecedencia === 3 ? '3 dias' : '1 dia';
+  
+  let mensagem = `🔔 *LEMBRETE - GetVisa* 🔔\n\n`;
+  mensagem += `Olá, ${nomeCliente.split(' ')[0]}! 👋\n\n`;
+  mensagem += `Faltam *${diasTexto}* para seu compromisso:\n\n`;
+  mensagem += `${emoji} *${agendamento.atividade}*\n`;
+  mensagem += `📆 Data: ${dataFormatada}\n`;
+  mensagem += `⏰ Horário: ${agendamento.hora}\n`;
+  
+  if (agendamento.local) {
+    mensagem += `📍 Local: ${agendamento.local}\n`;
+  }
+  
+  // Dicas específicas por tipo de atividade
+  if (agendamento.atividade === 'ENTREVISTA') {
+    mensagem += `\n📋 *Dicas importantes:*\n`;
+    mensagem += `• Chegue com 30 minutos de antecedência\n`;
+    mensagem += `• Leve: passaporte, DS-160, foto 5x7\n`;
+    mensagem += `• Documentos comprobatórios (renda, vínculos)\n`;
+    mensagem += `• Esteja bem vestido(a) e confiante!\n`;
+  } else if (agendamento.atividade === 'CASV') {
+    mensagem += `\n📋 *Para a Coleta CASV:*\n`;
+    mensagem += `• Leve o passaporte original\n`;
+    mensagem += `• Confirme o local exato no dia\n`;
+    mensagem += `• Não precisa levar documentos comprobatórios\n`;
+  } else if (agendamento.atividade === 'RETIRADA PASSAPORTE') {
+    mensagem += `\n📋 *Retirada do passaporte:*\n`;
+    mensagem += `• Leve o comprovante de agendamento\n`;
+    mensagem += `• Documento de identificação original\n`;
+  }
+  
+  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
+  mensagem += `Digite *MEUS AGENDAMENTOS* para ver todos os seus compromissos.`;
+  
+  // Remove o 55 do início se existir
+  let telefoneLimpo = telefone.toString().replace(/\D/g, '');
+  if (telefoneLimpo.startsWith('55')) {
+    telefoneLimpo = telefoneLimpo.substring(2);
+  }
+  
+  await enviarWhatsApp(telefoneLimpo, mensagem);
+  console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade} em ${agendamento.data}`);
+}
+
+// Função principal para verificar e enviar lembretes
+async function verificarLembretes() {
+  console.log(`🔍 Verificando lembretes - ${new Date().toLocaleString('pt-BR')}`);
+  
+  try {
+    // Buscar agendamentos NÃO CONCLUÍDOS (concluido = 0) e futuros
+    const hoje = new Date().toISOString().split('T')[0];
+    
+    const { data: agendamentos, error } = await supabase
+      .from('compromissos')
+      .select('*')
+      .eq('concluido', 0)
+      .gte('data', hoje);
+    
+    if (error) {
+      console.error('❌ Erro ao buscar agendamentos:', error);
+      return;
+    }
+    
+    const dataAtual = new Date();
+    dataAtual.setHours(0, 0, 0, 0);
+    
+    for (const ag of agendamentos) {
+      const dataAgenda = new Date(ag.data);
+      dataAgenda.setHours(0, 0, 0, 0);
+      
+      const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
+      
+      // Buscar telefone do cliente
+      const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
+      
+      if (!telefone) {
+        console.log(`⚠️ Telefone não encontrado para ${ag.cliente}`);
+        continue;
+      }
+      
+      // Lembrete de 3 dias
+      if (diffDays === 3 && !ag.lembrete_3d_enviado) {
+        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
+        
+        // Marcar como enviado
+        await supabase
+          .from('compromissos')
+          .update({ lembrete_3d_enviado: true })
+          .eq('id', ag.id);
+          
+        console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
+      }
+      
+      // Lembrete de 1 dia
+      if (diffDays === 1 && !ag.lembrete_1d_enviado) {
+        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
+        
+        // Marcar como enviado
+        await supabase
+          .from('compromissos')
+          .update({ lembrete_1d_enviado: true })
+          .eq('id', ag.id);
+          
+        console.log(`✅ Lembrete 1 dia enviado para ${ag.cliente}`);
+      }
+    }
+    
+  } catch (err) {
+    console.error('❌ Erro no sistema de lembretes:', err);
+  }
+}
+
+// Executar verificação a cada 6 horas (ou ajuste conforme necessidade)
+setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
+
+// Executar uma vez ao iniciar
+verificarLembretes();
 
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
