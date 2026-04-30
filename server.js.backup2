@@ -12,106 +12,12 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static('public'));
 
 // ==================== SUPABASE CLIENT ====================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-// ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
-async function enviarWhatsApp(telefone, mensagem) {
-  try {
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-    
-    if (!instance || !token) {
-      console.log('⚠️ Z-API não configurada');
-      return false;
-    }
-    
-    const cleanPhone = telefone.toString().replace(/\D/g, '');
-    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Client-Token': securityToken || ''
-      },
-      body: JSON.stringify({ phone: cleanPhone, message: mensagem })
-    });
-    
-    console.log(`📱 WhatsApp enviado para ${cleanPhone}: ${response.status}`);
-    return response.status === 200;
-  } catch (error) {
-    console.error('❌ Erro ao enviar WhatsApp:', error.message);
-    return false;
-  }
-}
-
-// ==================== VALIDAÇÃO DS-160 OFICIAL ====================
-function validateDS160(data) {
-  const errors = [];
-  
-  // Validar perguntas obrigatórias sobre negativas
-  const requiredQuestions = [
-    { field: 'radio-visto-negado', message: 'Responda se já teve visto americano negado' },
-    { field: 'radio-entrada-negada', message: 'Responda se já teve entrada negada nos EUA' },
-    { field: 'radio-deportado', message: 'Responda se já foi deportado dos EUA' }
-  ];
-  
-  for (const q of requiredQuestions) {
-    if (!data[q.field] || data[q.field] === '') {
-      errors.push(q.message);
-    }
-  }
-  
-  // Validar campos condicionais quando resposta é SIM
-  if (data['radio-visto-negado'] === 'one') {
-    if (!data['text-visto-negado-ano'] || data['text-visto-negado-ano'] === '') {
-      errors.push('Ano da negativa do visto é obrigatório');
-    } else {
-      const ano = parseInt(data['text-visto-negado-ano']);
-      if (ano < 1900 || ano > 2026) {
-        errors.push('Ano da negativa do visto inválido (use entre 1900 e 2026)');
-      }
-    }
-  }
-  
-  if (data['radio-entrada-negada'] === 'one') {
-    if (!data['text-entrada-negada-ano'] || data['text-entrada-negada-ano'] === '') {
-      errors.push('Ano da negativa de entrada é obrigatório');
-    } else {
-      const ano = parseInt(data['text-entrada-negada-ano']);
-      if (ano < 1900 || ano > 2026) {
-        errors.push('Ano da negativa de entrada inválido (use entre 1900 e 2026)');
-      }
-    }
-  }
-  
-  if (data['radio-deportado'] === 'one') {
-    if (!data['text-deportado-ano'] || data['text-deportado-ano'] === '') {
-      errors.push('Ano da deportação é obrigatório');
-    } else {
-      const ano = parseInt(data['text-deportado-ano']);
-      if (ano < 1900 || ano > 2026) {
-        errors.push('Ano da deportação inválido (use entre 1900 e 2026)');
-      }
-    }
-    
-    if (!data['select-deportado-duracao'] || data['select-deportado-duracao'] === '') {
-      errors.push('Duração da deportação é obrigatória');
-    }
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    errors: errors
-  };
-}
 
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
 const radioMapping = {
@@ -145,13 +51,10 @@ const radioMapping = {
   'radio-residente': { 'one': 'Sim', 'two': 'Não' },
   'spouse-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' },
   'ex-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' },
-  'falecido-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' },
-  // NOVOS CAMPOS - HISTÓRICO DE NEGATIVAS
-  'radio-visto-negado': { 'one': 'Sim', 'two': 'Não' },
-  'radio-entrada-negada': { 'one': 'Sim', 'two': 'Não' },
-  'radio-deportado': { 'one': 'Sim', 'two': 'Não' }
+  'falecido-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' }
 };
 
+// Função para formatar data do padrão americano (YYYY-MM-DD) para brasileiro (DD/MM/YYYY)
 function formatDateToBrazilian(dateString) {
   if (!dateString || dateString === '') return null;
   
@@ -223,9 +126,17 @@ function groupTravels(data) {
   return result;
 }
 
+function drawSeparator(doc) {
+  doc.moveDown(0.5);
+  doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+  doc.moveDown(0.5);
+}
+
 function drawSectionTitle(doc, title) {
     doc.moveDown(1);
-    doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title.normalize('NFD').replace(/[\u0300-\u036f]/g, ''), { 
+        // Fallback: remover acentos como última alternativa
+    });
     doc.moveDown(0.3);
     doc.strokeColor('#003366').lineWidth(1.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.lineWidth(0.5);
@@ -233,22 +144,164 @@ function drawSectionTitle(doc, title) {
     doc.fillColor('#000000').fontSize(10).font('Helvetica');
 }
 
+const simpleFields = [
+  { name: 'consulado_cidade', label: 'Cidade do Consulado', group: 'iniciais' },
+  { name: 'radio-26', label: 'Indicado por agência/agente?', group: 'iniciais' },
+  { name: 'text-1', label: 'Nome da agência/agente', group: 'iniciais' },
+  { name: 'text-64', label: 'Idioma usado para preencher', group: 'iniciais' },
+  { name: 'full_name', label: 'Nome completo', group: 'pessoais' },
+  { name: 'radio-2', label: 'Já teve outro nome?', group: 'pessoais' },
+  { name: 'text-87', label: 'Nome anterior', group: 'pessoais' },
+  { name: 'radio-3', label: 'Sexo', group: 'pessoais' },
+  { name: 'select-4', label: 'Estado civil', group: 'pessoais' },
+  { name: 'text-5', label: 'Data de nascimento', group: 'pessoais' },
+  { name: 'text-7', label: 'Cidade de nascimento', group: 'pessoais' },
+  { name: 'text-6', label: 'Estado/Província', group: 'pessoais' },
+  { name: 'text-95', label: 'País de nacionalidade', group: 'pessoais' },
+  { name: 'radio-outra-nac', label: 'Possui outra nacionalidade?', group: 'pessoais' },
+  { name: 'outra_nacionalidade_text', label: 'Qual outra nacionalidade?', group: 'pessoais' },
+  { name: 'radio-residente', label: 'Residente permanente de outro país?', group: 'pessoais' },
+  { name: 'text-86', label: 'CPF', group: 'pessoais' },
+  { name: 'text-17', label: 'Número do Seguro Social (SSN)', group: 'pessoais' },
+  { name: 'text-18', label: 'Número do contribuinte dos EUA (TIN)', group: 'pessoais' },
+  { name: 'radio-28', label: 'Propósito da viagem', group: 'viagem' },
+  { name: 'radio-planos', label: 'Planos específicos?', group: 'viagem' },
+  { name: 'text-21', label: 'Data de chegada prevista', group: 'viagem' },
+  { name: 'text-34', label: 'Duração da estadia (dias)', group: 'viagem' },
+  { name: 'text-41', label: 'Endereço nos EUA', group: 'viagem' },
+  { name: 'text-42', label: 'Cidade (EUA)', group: 'viagem' },
+  { name: 'text-43', label: 'Estado (EUA)', group: 'viagem' },
+  { name: 'email-4', label: 'CEP (EUA)', group: 'viagem' },
+  { name: 'radio-6', label: 'Quem vai pagar?', group: 'viagem' },
+  { name: 'text-22', label: 'Nome do pagador', group: 'viagem' },
+  { name: 'text-25', label: 'Relacionamento com pagador', group: 'viagem' },
+  { name: 'phone-1', label: 'Telefone do pagador', group: 'viagem' },
+  { name: 'text-24', label: 'E-mail do pagador', group: 'viagem' },
+  { name: 'text-26', label: 'Endereço do pagador', group: 'viagem' },
+  { name: 'text-27', label: 'Cidade do pagador', group: 'viagem' },
+  { name: 'text-96', label: 'UF do pagador', group: 'viagem' },
+  { name: 'text-29', label: 'CEP do pagador', group: 'viagem' },
+  { name: 'text-30', label: 'País do pagador', group: 'viagem' },
+  { name: 'radio-7', label: 'Há acompanhantes?', group: 'acompanhantes' },
+  { name: 'radio-8', label: 'Já esteve nos EUA?', group: 'previousTravel' },
+  { name: 'radio-23', label: 'Já teve visto americano?', group: 'previousTravel' },
+  { name: 'text-35', label: 'Data de emissão do visto', group: 'previousTravel' },
+  { name: 'text-68', label: 'Número do visto', group: 'previousTravel' },
+  { name: 'text-69', label: 'Data de expiração', group: 'previousTravel' },
+  { name: 'radio-33', label: 'Impressões digitais coletadas?', group: 'previousTravel' },
+  { name: 'radio-29', label: 'Mesmo tipo de visto?', group: 'previousTravel' },
+  { name: 'radio-30', label: 'Mesmo país de emissão?', group: 'previousTravel' },
+  { name: 'text-71', label: 'Logradouro', group: 'endereco' },
+  { name: 'text-72', label: 'Complemento', group: 'endereco' },
+  { name: 'text-73', label: 'CEP', group: 'endereco' },
+  { name: 'text-74', label: 'Cidade', group: 'endereco' },
+  { name: 'text-75', label: 'Estado', group: 'endereco' },
+  { name: 'text-76', label: 'País', group: 'endereco' },
+  { name: 'radio-9', label: 'Endereço de correspondência é o mesmo?', group: 'endereco' },
+  { name: 'text-80', label: 'Logradouro (correspondência)', group: 'endereco' },
+  { name: 'text-81', label: 'Complemento (correspondência)', group: 'endereco' },
+  { name: 'text-82', label: 'CEP (correspondência)', group: 'endereco' },
+  { name: 'text-83', label: 'Cidade (correspondência)', group: 'endereco' },
+  { name: 'text-84', label: 'Estado (correspondência)', group: 'endereco' },
+  { name: 'text-85', label: 'País (correspondência)', group: 'endereco' },
+  { name: 'text-77', label: 'Telefone principal', group: 'telefones' },
+  { name: 'text-78', label: 'Telefone comercial', group: 'telefones' },
+  { name: 'radio-10', label: 'Usou outros números?', group: 'telefones' },
+  { name: 'email-1', label: 'E-mail principal', group: 'emails' },
+  { name: 'radio-11', label: 'Usou outros e-mails?', group: 'emails' },
+  { name: 'radio-12', label: 'Presença em mídias sociais?', group: 'midias' },
+  { name: 'text-38', label: 'Número do passaporte', group: 'passaporte' },
+  { name: 'text-40', label: 'País que emitiu', group: 'passaporte' },
+  { name: 'text-39', label: 'Cidade de emissão', group: 'passaporte' },
+  { name: 'text-88', label: 'Estado de emissão', group: 'passaporte' },
+  { name: 'text-66', label: 'Data de emissão', group: 'passaporte' },
+  { name: 'text-67', label: 'Data de validade', group: 'passaporte' },
+  { name: 'radio-13', label: 'Passaporte perdido/roubado?', group: 'passaporte' },
+  { name: 'name-2', label: 'Contato nos EUA (nome)', group: 'contato' },
+  { name: 'text-41_contato', label: 'Endereço (EUA)', group: 'contato' },
+  { name: 'text-42_contato', label: 'Cidade (EUA)', group: 'contato' },
+  { name: 'text-43_contato', label: 'Estado (EUA)', group: 'contato' },
+  { name: 'email-4_contato', label: 'CEP (EUA)', group: 'contato' },
+  { name: 'checkbox-15[]', label: 'Relacionamento com contato', group: 'contato' },
+  { name: 'email-5', label: 'Telefone do contato (EUA)', group: 'contato' },
+  { name: 'email-3', label: 'E-mail do contato (EUA)', group: 'contato' },
+  { name: 'nome_pai', label: 'Nome do pai', group: 'familiares' },
+  { name: 'text-44', label: 'Data de nascimento do pai', group: 'familiares' },
+  { name: 'radio-14', label: 'Pai nos EUA?', group: 'familiares' },
+  { name: 'checkbox-16[]', label: 'Status do pai', group: 'familiares' },
+  { name: 'nome_mae', label: 'Nome da mãe', group: 'familiares' },
+  { name: 'text-45', label: 'Data de nascimento da mãe', group: 'familiares' },
+  { name: 'radio-15', label: 'Mãe nos EUA?', group: 'familiares' },
+  { name: 'checkbox-17[]', label: 'Status da mãe', group: 'familiares' },
+  { name: 'radio-16', label: 'Parentes imediatos nos EUA?', group: 'familiares' },
+  { name: 'spouse_fullname', label: 'Nome do cônjuge', group: 'conjuge' },
+  { name: 'spouse-dob', label: 'Data de nascimento do cônjuge', group: 'conjuge' },
+  { name: 'spouse-nationality', label: 'Nacionalidade do cônjuge', group: 'conjuge' },
+  { name: 'spouse-city', label: 'Cidade de nascimento do cônjuge', group: 'conjuge' },
+  { name: 'spouse-country', label: 'País de nascimento do cônjuge', group: 'conjuge' },
+  { name: 'spouse-address-same', label: 'Endereço do cônjuge', group: 'conjuge' },
+  { name: 'spouse_endereco', label: 'Endereço (diferente)', group: 'conjuge' },
+  { name: 'spouse_cidade', label: 'Cidade', group: 'conjuge' },
+  { name: 'spouse_estado', label: 'Estado', group: 'conjuge' },
+  { name: 'spouse_cep', label: 'CEP', group: 'conjuge' },
+  { name: 'spouse_pais', label: 'País', group: 'conjuge' },
+  { name: 'ex_fullname', label: 'Nome do ex‑cônjuge', group: 'exConjuge' },
+  { name: 'ex_dob', label: 'Data de nascimento', group: 'exConjuge' },
+  { name: 'ex_nationality', label: 'Nacionalidade', group: 'exConjuge' },
+  { name: 'ex_city', label: 'Cidade de nascimento', group: 'exConjuge' },
+  { name: 'ex_country', label: 'País de nascimento', group: 'exConjuge' },
+  { name: 'data_casamento_div', label: 'Data do Casamento', group: 'exConjuge' },
+  { name: 'data_divorcio', label: 'Data do Divórcio', group: 'exConjuge' },
+  { name: 'cidade_divorcio', label: 'Cidade do Divórcio', group: 'exConjuge' },
+  { name: 'como_divorcio', label: 'Como se deu o Divórcio', group: 'exConjuge' },
+  { name: 'falecido_fullname', label: 'Nome do cônjuge falecido', group: 'viuvo' },
+  { name: 'falecido_dob', label: 'Data de nascimento', group: 'viuvo' },
+  { name: 'falecido_nationality', label: 'Nacionalidade', group: 'viuvo' },
+  { name: 'falecido_city', label: 'Cidade de nascimento', group: 'viuvo' },
+  { name: 'falecido_country', label: 'País de nascimento', group: 'viuvo' },
+  { name: 'data_falecimento', label: 'Data do Falecimento', group: 'viuvo' },
+  { name: 'radio-27', label: 'Ocupação principal', group: 'trabalhoAtual' },
+  { name: 'text-49', label: 'Empregador / escola', group: 'trabalhoAtual' },
+  { name: 'text-101', label: 'Endereço', group: 'trabalhoAtual' },
+  { name: 'text-102', label: 'Cidade', group: 'trabalhoAtual' },
+  { name: 'text-104', label: 'Estado', group: 'trabalhoAtual' },
+  { name: 'text-103', label: 'CEP', group: 'trabalhoAtual' },
+  { name: 'phone-8', label: 'Telefone', group: 'trabalhoAtual' },
+  { name: 'text-50', label: 'Data início', group: 'trabalhoAtual' },
+  { name: 'text-51', label: 'Renda mensal (R$)', group: 'trabalhoAtual' },
+  { name: 'text-52', label: 'Descrição das funções', group: 'trabalhoAtual' },
+  { name: 'radio-17', label: 'Teve empregos anteriores?', group: 'empregosAnteriores' },
+  { name: 'radio-18', label: 'Escolaridade secundário/superior?', group: 'escolaridade' },
+  { name: 'text-59', label: 'Instituição de ensino', group: 'escolaridade' },
+  { name: 'text-60', label: 'Curso', group: 'escolaridade' },
+  { name: 'text-111', label: 'Endereço da instituição', group: 'escolaridade' },
+  { name: 'text-112', label: 'Cidade', group: 'escolaridade' },
+  { name: 'text-114', label: 'Estado', group: 'escolaridade' },
+  { name: 'text-113', label: 'CEP', group: 'escolaridade' },
+  { name: 'text-61', label: 'Data início', group: 'escolaridade' },
+  { name: 'text-62', label: 'Data conclusão', group: 'escolaridade' },
+  { name: 'radio-19', label: 'Fala outros idiomas?', group: 'idiomas' },
+  { name: 'radio-20', label: 'Viajou para outros países?', group: 'paises' },
+  { name: 'servico_militar', label: 'Serviu nas forcas armadas?', group: 'military' },
+  { name: 'military_country', label: 'Pais', group: 'military' },
+  { name: 'military_branch', label: 'Ramo das Forcas Armadas', group: 'military' },
+  { name: 'military_rank', label: 'Patente / Posicao', group: 'military' },
+  { name: 'military_specialty', label: 'Especialidade Militar', group: 'military' },
+  { name: 'military_date_from', label: 'Data de inicio', group: 'military' },
+  { name: 'military_date_to', label: 'Data de termino', group: 'military' },
+  { name: 'treinamento_especializado', label: 'Treinamento especializado?', group: 'training' },
+  { name: 'treinamento_descricao', label: 'Descricao do treinamento', group: 'training' },
+  { name: 'antecedentes_criminais', label: 'Antecedentes criminais?', group: 'security' },
+  { name: 'antecedentes_descricao', label: 'Descricao dos antecedentes', group: 'security' },
+  { name: 'antecedentes_data', label: 'Data do ocorrido', group: 'security' },
+  { name: 'antecedentes_local', label: 'Local', group: 'security' },
+  { name: 'antecedentes_resolucao', label: 'Resolucao do caso', group: 'security' }
+];
+
 // ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
-  
-  // ========== VALIDAÇÃO OBRIGATÓRIA ==========
-  const validation = validateDS160(data);
-  if (!validation.isValid) {
-    console.error('❌ Erro de validação:', validation.errors);
-    return res.status(400).json({ 
-      success: false, 
-      errors: validation.errors,
-      message: 'Por favor, responda todas as perguntas obrigatórias corretamente.'
-    });
-  }
-  
-  console.log('📥 Dados recebidos (DS-160) - VALIDAÇÃO OK');
+  console.log('📥 Dados recebidos (DS-160)');
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
@@ -298,6 +351,11 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
+        const fieldLabelMap = {};
+        for (const f of simpleFields) {
+          fieldLabelMap[f.name] = f.label;
+        }
+
         let currentSection = null;
         let hasContentInSection = false;
 
@@ -324,6 +382,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = false;
         }
 
+        // ==================== SEÇÃO 1: INFORMAÇÕES INICIAIS ====================
         startSection('INFORMACOES INICIAIS');
         renderField('consulado_cidade', 'Cidade do Consulado');
         if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
@@ -332,6 +391,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-64', 'Idioma usado para preencher');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 2: INFORMAÇÕES PESSOAIS ====================
         startSection('INFORMACOES PESSOAIS');
         renderField('full_name', 'Nome completo');
         if (renderField('radio-2', 'Ja teve outro nome?') && data['radio-2'] === 'one') {
@@ -352,6 +412,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 3: INFORMAÇÕES DA VIAGEM ====================
         startSection('INFORMACOES DA VIAGEM');
         renderField('radio-28', 'Proposito da viagem');
         renderField('radio-planos', 'Planos especificos?');
@@ -363,6 +424,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('email-4', 'CEP (EUA)');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 4: PAGADOR DA VIAGEM ====================
         startSection('PAGADOR DA VIAGEM');
         renderField('radio-6', 'Quem vai pagar?');
         renderField('text-22', 'Nome do pagador');
@@ -376,6 +438,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-30', 'Pais do pagador');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 5: ACOMPANHANTES ====================
         if (data['radio-7'] === 'one') {
           startSection('ACOMPANHANTES');
           renderField('radio-7', 'Ha acompanhantes?');
@@ -388,6 +451,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 6: HISTÓRICO DE VIAGENS AOS EUA ====================
         if (data['radio-8'] === 'one') {
           startSection('HISTORICO DE VIAGENS AOS EUA');
           renderField('radio-8', 'Ja esteve nos EUA?');
@@ -400,6 +464,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 7: INFORMAÇÕES DO VISTO ====================
         if (data['radio-23'] === 'one') {
           startSection('INFORMACOES DO VISTO');
           renderField('radio-23', 'Ja teve visto americano?');
@@ -412,6 +477,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 8: ENDEREÇO RESIDENCIAL ====================
         startSection('ENDERECO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
         renderField('text-72', 'Complemento');
@@ -421,6 +487,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-76', 'Pais');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 9: ENDEREÇO DE CORRESPONDÊNCIA ====================
         startSection('ENDERECO DE CORRESPONDENCIA');
         renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
         if (data['radio-9'] === 'Não, é diferente') {
@@ -435,6 +502,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 10: TELEFONES ====================
         startSection('TELEFONES');
         renderField('text-77', 'Telefone principal');
         renderField('text-78', 'Telefone comercial');
@@ -448,6 +516,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 11: E-MAILS ====================
         startSection('E-MAILS');
         renderField('email-1', 'E-mail principal');
         if (renderField('radio-11', 'Usou outros e-mails?') && data['radio-11'] === 'one') {
@@ -460,6 +529,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 12: MIDIAS SOCIAIS ====================
         startSection('MIDIAS SOCIAIS');
         if (renderField('radio-12', 'Presenca em midias sociais?') && data['radio-12'] === 'one') {
           const plataformas = data['midia_plataforma[]'] || [];
@@ -478,6 +548,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 13: PASSAPORTE ====================
         startSection('PASSAPORTE');
         renderField('text-38', 'Numero do passaporte');
         renderField('text-40', 'Pais que emitiu');
@@ -488,6 +559,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('radio-13', 'Passaporte perdido/roubado?');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 14: CONTATO NOS EUA ====================
         startSection('CONTATO NOS EUA');
         renderField('name-2', 'Contato nos EUA (nome)');
         renderField('text-41_contato', 'Endereco (EUA)');
@@ -499,6 +571,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('email-3', 'E-mail do contato (EUA)');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 15: FAMILIARES ====================
         startSection('FAMILIARES');
         renderField('nome_pai', 'Nome do pai');
         renderField('text-44', 'Data de nascimento do pai');
@@ -520,6 +593,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 16: CÔNJUGE ====================
         if (data['spouse_fullname']) {
           startSection('CONJUGE');
           renderField('spouse_fullname', 'Nome do conjuge');
@@ -537,6 +611,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 17: EX-CÔNJUGE ====================
         if (data['ex_fullname']) {
           startSection('EX-CONJUGE');
           renderField('ex_fullname', 'Nome do ex-conjuge');
@@ -551,6 +626,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 18: CÔNJUGE FALECIDO ====================
         if (data['falecido_fullname']) {
           startSection('CONJUGE FALECIDO');
           renderField('falecido_fullname', 'Nome do conjuge falecido');
@@ -562,6 +638,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 19: OCUPAÇÃO ATUAL ====================
         startSection('OCUPACAO ATUAL');
         renderField('radio-27', 'Ocupacao principal');
         renderField('text-49', 'Empregador / escola');
@@ -575,6 +652,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-52', 'Descricao das funcoes');
         hasContentInSection = true;
 
+        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA ====================
         const extra_descricoes = data['extra_descricao[]'] || [];
         if (extra_descricoes.length > 0) {
           startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
@@ -604,6 +682,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 20: EMPREGOS ANTERIORES ====================
         if (data['radio-17'] === 'one') {
           const empNomes = data['emprego_anterior_nome[]'] || [];
           if (empNomes.length > 0) {
@@ -626,7 +705,7 @@ app.post('/api/submit-ds160', async (req, res) => {
             hasContentInSection = true;
           }
         }
-
+// ==================== SEÇÃO 22: ESCOLARIDADE ====================
         if (data['radio-18'] === 'one') {
           startSection('ESCOLARIDADE');
           renderField('text-59', 'Instituicao de ensino');
@@ -640,6 +719,8 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+
+        // ==================== SEÇÃO 23: SERVIÇO MILITAR ====================
         startSection('SERVICO MILITAR');
         if (data['servico_militar'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
@@ -658,6 +739,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 24: TREINAMENTO ESPECIALIZADO ====================
         startSection('TREINAMENTO ESPECIALIZADO');
         if (data['treinamento_especializado'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
@@ -671,6 +753,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 25: SEGURANÇA ====================
         startSection('SEGURANCA');
         if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
@@ -687,36 +770,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
-        // ========== NOVA SEÇÃO: HISTÓRICO DE NEGATIVAS ==========
-        startSection('HISTORICO DE NEGATIVAS NOS EUA');
         
-        // Visto Negado
-        renderField('radio-visto-negado', 'Ja teve visto americano NEGADO?');
-        if (data['radio-visto-negado'] === 'one') {
-          renderField('text-visto-negado-ano', 'Ano da negativa do visto');
-          renderField('text-visto-negado-consulado', 'Consulado da negativa');
-          renderField('select-visto-negado-tipo', 'Tipo de visto negado');
-        }
-        
-        // Entrada Negada
-        renderField('radio-entrada-negada', 'Ja teve entrada NEGADA nos EUA na imigracao?');
-        if (data['radio-entrada-negada'] === 'one') {
-          renderField('text-entrada-negada-ano', 'Ano da negativa de entrada');
-          renderField('text-entrada-negada-local', 'Porto de entrada');
-          renderField('textarea-entrada-negada-motivo', 'Motivo da negativa');
-        }
-        
-        // Deportado
-        renderField('radio-deportado', 'Ja foi deportado ou removido dos EUA?');
-        if (data['radio-deportado'] === 'one') {
-          renderField('text-deportado-ano', 'Ano da deportacao');
-          renderField('select-deportado-duracao', 'Duracao da deportacao');
-        }
-        
-        // Detalhes adicionais
-        renderField('textarea-detalhes-negativa', 'Detalhes adicionais sobre negativas');
-        hasContentInSection = true;
-
+        // ==================== SEÇÃO 26: IDIOMAS ====================
         startSection('IDIOMAS');
         if (data['radio-19'] === 'one') {
           const idiomas = data['idiomas[]'] || [];
@@ -728,6 +783,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 27: VIAGENS INTERNACIONAIS ====================
         startSection('VIAGENS INTERNACIONAIS');
         if (data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
@@ -767,66 +823,6 @@ app.post('/api/submit-ds160', async (req, res) => {
       }
     } catch (err) {
       console.error('❌ Erro no processamento DS-160 (background):', err);
-    }
-  })();
-});
-
-// ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
-app.post('/api/submit-avaliacao', async (req, res) => {
-  const data = req.body;
-  console.log('📥 Dados da Avaliação Normal recebidos:', JSON.stringify(data, null, 2));
-  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
-
-  (async () => {
-    try {
-      const nome = data['nome'] || 'Cliente_Sem_Nome';
-      const emailCliente = data['email'] || null;
-      
-      let telefoneCliente = data['telefone'] || data['whatsapp'] || null;
-      if (telefoneCliente) {
-        telefoneCliente = telefoneCliente.toString().replace(/\D/g, '');
-        if (telefoneCliente.startsWith('55')) {
-          telefoneCliente = telefoneCliente.substring(2);
-        }
-        if (telefoneCliente.length === 12) {
-          telefoneCliente = telefoneCliente.substring(1);
-        }
-        console.log(`📞 Telefone original: ${data['telefone']} → normalizado: ${telefoneCliente}`);
-      }
-      
-      const score = data['score'] || data['pontuacao'] || 0;
-      const classificacao = data['classificacao'] || data['classificacao_perfil'] || 
-                           (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
-      
-      if (telefoneCliente) {
-        const { data: inserted, error: insertError } = await supabase
-          .from('leads_simulador')
-          .insert({
-            nome_cliente: nome,
-            telefone_whatsapp: telefoneCliente,
-            email: emailCliente,
-            pontuacao_total: score,
-            classificacao_perfil: classificacao,
-            respostas_simulador: data,
-            data_simulacao: new Date(),
-            status_lead: 'novo'
-          })
-          .select();
-        
-        if (insertError) {
-          console.error('❌ Erro ao salvar lead:', insertError);
-        } else {
-          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
-          
-          const primeiroNome = nome.split(' ')[0];
-          let mensagemWhats = `Olá, ${primeiroNome}! Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\nComo posso ajudar? 🚀`;
-          
-          await enviarWhatsApp(telefoneCliente, mensagemWhats);
-        }
-      }
-    } catch (err) {
-      console.error('❌ Erro:', err);
     }
   })();
 });
@@ -985,34 +981,10 @@ app.post('/api/submit-visto-negado', async (req, res) => {
     try {
       const nome = data['nome'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email'] || null;
-      const telefoneCliente = data['telefone'] || null;
       const score = data['score'] || null;
       const classificacaoTipo = data['classificacao_tipo'] || '';
       const classificacaoTitulo = data['classificacao_titulo'] || '';
       const classificacaoMensagem = data['classificacao_mensagem'] || '';
-
-      if (telefoneCliente && score !== null) {
-        const primeiroNome = nome.split(' ')[0];
-        const classificacaoTexto = classificacaoTipo === 'urgent' ? 'que Requer Atenção Urgente' 
-                                 : classificacaoTipo === 'moderate' ? 'com Potencial Moderado' 
-                                 : 'com Forte Potencial';
-        
-        let mensagemWhats = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, faço parte da equipe GETVISA e vou te acompanhar por todo o processo.\n\n`;
-        mensagemWhats += `Recebemos sua análise específica para *VISTO AMERICANO NEGADO*. Seu perfil foi classificado como ${classificacaoTexto} (${score}/100).\n\n`;
-        mensagemWhats += `*O que identificamos:*\n`;
-        mensagemWhats += `• Última negativa: ${data['quando_negado'] || 'recentemente'}\n`;
-        mensagemWhats += `• Motivo: ${data['motivo_negativa'] || 'não informado'}\n\n`;
-        mensagemWhats += `*Nossa estratégia para REVERTER seu caso:*\n`;
-        mensagemWhats += `✅ Revisão completa do histórico de negativas\n`;
-        mensagemWhats += `✅ Correção do DS-160\n`;
-        mensagemWhats += `✅ Documentação de suporte reforçada\n`;
-        mensagemWhats += `✅ Preparação para entrevista\n\n`;
-        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 380)\n\n`;
-        mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
-        mensagemWhats += `*Falar com especialista:* https://wa.me/5521974601812`;
-        
-        await enviarWhatsApp(telefoneCliente, mensagemWhats);
-      }
 
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
@@ -1236,554 +1208,137 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API (WHATSAPP) ====================
+// Webhook para Z-API (WhatsApp)
 app.post('/api/webhook/zapi', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
-
-  const body = req.body;
+  console.log('[ZAPI] Webhook recebido:', JSON.stringify(req.body, null, 2));
   
-  if (body.fromMe === true) return;
-  const connectedPhone = body.connectedPhone;
-  const senderPhone = body.phone || body.from;
-  if (senderPhone === connectedPhone) return;
-  if (body.isStatusReply === true || body.waitingMessage === true) return;
-
   try {
-    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
-    if (!messageText) return;
-
-    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
-
-    let lead = null;
-    const { data: leads } = await supabase
-      .from('leads_simulador')
-      .select('*')
-      .eq('telefone_whatsapp', cleanPhone)
-      .order('data_simulacao', { ascending: false });
+    // Responder imediatamente para evitar timeout (sempre 200)
+    res.status(200).json({ 
+      status: 'received',
+      timestamp: new Date().toISOString()
+    });
     
-    if (leads && leads.length > 0) {
-      lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
-    } else {
-      console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
-    }
+    // Extrair dados de forma segura
+    const body = req.body;
     
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    // Extrair telefone (vários formatos possíveis)
+    const phone = body.phone || body.from || body.sender || body.remoteJid || null;
     
-    const sendReply = async (phone, message) => {
-      if (!instance || !token) return;
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-        body: JSON.stringify({ phone, message })
-      });
-      console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
-    };
-    
-    // ==================== 1. RESPOSTA "SIM" ====================
-    if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `📋 *Acesse o rascunho do formulário DS-160:*\n` +
-                       `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
-                       `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Aguardamos seu formulario! 🇺🇸✨`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 2. RESPOSTA "NÃO" ====================
-    if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
-                       `🔍 *O que você gostaria de saber?*\n\n` +
-                       `1️⃣💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣📞 *AJUDA* - Falar com especialista\n` +
-                       `8️⃣📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 3. SAUDAÇÃO ====================
-    if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-                 messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-                       `📋 *Como podemos ajudar você hoje?*\n\n` +
-                       `🔍 *Opções disponíveis:*\n` +
-                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
-                       `7️⃣  ✅ *SIM* - Iniciar meu processo\n` +
-                       `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `*Digite o número da opção desejada (1 a 8):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log(`📝 Menu principal enviado para ${primeiroNome}`);
-      return;
-    }
-    
-    // ==================== 4. CONSULTAR AGENDAMENTOS ====================
-    if (lead && (messageText === '8' || messageText === '8️⃣' || 
-                 messageText === 'meus agendamentos' || messageText === 'meus compromissos' || 
-                 messageText === 'minha entrevista' || messageText === 'quando' || 
-                 messageText === 'datas' || messageText === '📅' || messageText === 'agendamentos')) {
-      
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const nomeCompleto = lead.nome_cliente || '';
-      
-      console.log(`📅 Cliente ${primeiroNome} solicitou consulta de agendamentos`);
-      
-      const { data: agendamentos, error } = await supabase
-        .from('compromissos')
-        .select('*')
-        .ilike('cliente', `%${nomeCompleto}%`)
-        .order('data', { ascending: true });
-      
-      if (error) {
-        console.error('Erro ao buscar agendamentos:', error);
-        const resposta = `❌ *Desculpe, ${primeiroNome}!*\n\nTivemos um problema ao buscar seus agendamentos. Por favor, fale com um especialista: https://wa.me/5521974601812`;
-        await sendReply(cleanPhone, resposta);
-        return;
+    // Extrair mensagem de forma segura (objeto ou string)
+    let messageText = '';
+    if (body.message) {
+      if (typeof body.message === 'string') {
+        messageText = body.message;
+      } else if (body.message.text) {
+        messageText = body.message.text;
+      } else if (body.message.content) {
+        messageText = body.message.content;
       }
-      
-      if (agendamentos && agendamentos.length > 0) {
-        const hoje = new Date().toISOString().split('T')[0];
-        const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido === 0);
-        const passados = agendamentos.filter(a => a.data < hoje || a.concluido === 1);
-        
-        let resposta = `📅 *Olá, ${primeiroNome}!* 📅\n\n`;
-        
-        if (futuros.length > 0) {
-          resposta += `*🔜 PRÓXIMOS COMPROMISSOS:*\n\n`;
-          for (const ag of futuros) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const emoji = ag.atividade === 'ENTREVISTA' ? '🗣️' : 
-                          ag.atividade === 'CASV' ? '👆' : 
-                          ag.atividade.includes('TREINAMENTO') ? '💻' : 
-                          ag.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-            
-            resposta += `${emoji} *${ag.atividade}*\n`;
-            resposta += `   📆 ${dataFormatada}\n`;
-            resposta += `   ⏰ ${ag.hora}\n`;
-            if (ag.local) resposta += `   📍 ${ag.local}\n`;
-            
-            const diasRestantes = Math.ceil((new Date(ag.data) - new Date()) / (1000 * 60 * 60 * 24));
-            if (diasRestantes === 0) {
-              resposta += `   ⚠️ *É HOJE!* ⚠️\n`;
-            } else if (diasRestantes === 1) {
-              resposta += `   ⚠️ *É AMANHÃ!* ⚠️\n`;
-            } else if (diasRestantes > 0) {
-              resposta += `   📊 Em ${diasRestantes} dias\n`;
-            }
-            resposta += `\n`;
-          }
-        } else {
-          resposta += `✅ *Você não tem compromissos futuros no momento.*\n\n`;
-        }
-        
-        if (passados.length > 0) {
-          resposta += `*✅ ÚLTIMOS COMPROMISSOS REALIZADOS:*\n\n`;
-          const ultimos = passados.slice(-3);
-          for (const ag of ultimos) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const status = ag.concluido === 1 ? '✅' : '📅';
-            resposta += `${status} ${ag.atividade} - ${dataFormatada}\n`;
-          }
-          if (passados.length > 3) {
-            resposta += `\n_+ ${passados.length - 3} outros compromissos_\n`;
-          }
-        }
-        
-        resposta += `\n🔔 *Você receberá lembretes 3 dias e 1 dia antes de cada compromisso!*\n\n`;
-        resposta += `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
-        
-        await sendReply(cleanPhone, resposta);
-      } else {
-        const resposta = `📅 *Olá, ${primeiroNome}!*\n\n` +
-                         `Você não possui compromissos agendados no momento.\n\n` +
-                         `Gostaria de agendar uma consultoria gratuita?\n` +
-                         `👉 https://calendly.com/getvisa/consultoria\n\n` +
-                         `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
-        await sendReply(cleanPhone, resposta);
-      }
+    } else if (body.text) {
+      messageText = body.text;
+    } else if (body.body) {
+      messageText = body.body;
+    }
+    
+    // Validar dados mínimos
+    if (!phone || !messageText) {
+      console.log('[ZAPI] Dados incompletos - phone:', phone, 'message:', messageText);
       return;
     }
     
-    // ==================== 5. RESPOSTAS POR NÚMERO (1 a 6) ====================
-
-    if (lead && (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
-      const resposta = `💰 *INVESTIMENTO*\n\n` +
-                       `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-                       `📋 *Assessoria:* R$ 350,00\n\n` +
-                       `*O que a assessoria inclui:*\n` +
-                       `✅ Análise completa do perfil\n` +
-                       `✅ Preenchimento do DS-160\n` +
-                       `✅ Agendamento da entrevista\n` +
-                       `✅ Preparação para entrevista (simulado)\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `📌 Plano especial para família \n\n` +
-                       `Digite *7* ou *SIM* para começar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '2' || messageText === '2️⃣' || messageText === 'prazo' || messageText === '⏰')) {
-      const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
-                       `📅 *Agendamento da entrevista:*\n` +
-                       `   • Por conta própria: até 8 semanas\n` +
-                       `   • Com nossa assessoria: trabalhamos com antecipação de prazos ⚡\n\n` +
-                       `🔍 *Análise consular:* 7 a 10 dias úteis\n\n` +
-                       `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
-                       `🕒 *TOTAL estimado:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '3' || messageText === '3️⃣' || messageText === 'documentos' || messageText === '📄')) {
-      const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
-                       `📌 *OBRIGATÓRIOS:*\n` +
-                       `• Passaporte válido (mínimo 6 meses de validade)\n` +
-                       `• Foto 5x7 recente (fundo branco)\n` +
-                       `• Comprovante da taxa consular MRV paga\n` +
-                       `• DS-160 preenchido (nós ajudamos!)\n\n` +
-                       `📌 *RECOMENDADOS (comprovar vínculos):*\n` +
-                       `• 💰 Comprovante de renda (3 últimos holerites)\n` +
-                       `• 🏦 Extratos bancários (3-6 meses)\n` +
-                       `• 🏠 Comprovante de imóvel ou contrato de aluguel\n` +
-                       `• 🚗 Documento do veículo\n` +
-                       `• 📒 Carteira de trabalho\n` +
-                       `• 👨‍👩‍👧 Certidão de nascimento dos filhos\n\n` +
-                       `Digite *7* ou *SIM* e te ajudo com a documentação! 📋`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
-      const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
-                       `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
-                       `   → Avaliamos suas chances de aprovação\n\n` +
-                       `2️⃣ *Preenchimento do DS-160* (nós te enviamos o link)\n` +
-                       `   → Revisamos antes do envio\n\n` +
-                       `3️⃣ *Pagamento da taxa consular*\n` +
-                       `   → ~R$ 950 (taxa oficial do governo dos EUA)\n\n` +
-                       `4️⃣ *Agendamento da entrevista*\n` +
-                       `   → Conseguimos datas mais rápidas ⚡\n\n` +
-                       `5️⃣ *Preparação para entrevista*\n` +
-                       `   → Simulado completo + dicas exclusivas\n\n` +
-                       `6️⃣ *Acompanhamento*\n` +
-                       `   → Até o final do processo!\n\n` +
-                       `⏰ *Prazo médio total:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para iniciar agora! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '5' || messageText === '5️⃣' || messageText === 'visto negado' || messageText === 'negado' || messageText === 'rejeitado' || messageText === '⚠️')) {
-      const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
-                       `*O que fazer após uma negativa:*\n\n` +
-                       `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
-                       `2️⃣ Reforçar seus vínculos com o Brasil\n` +
-                       `   • Emprego estável, família, bens\n\n` +
-                       `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
-                       `4️⃣ Nova documentação de suporte\n` +
-                       `5️⃣ Preparação intensiva para entrevista\n\n` +
-                       `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
-                       `✅ Revisão completa do caso anterior\n` +
-                       `✅ Estratégia personalizada para sua situação\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 380\n\n` +
-                       `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
-      const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
-                       `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
-                       `*Contato direto:*\n` +
-                       `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-                       `*📅 Agende uma consultoria gratuita:*\n` +
-                       `https://calendly.com/getvisa/consultoria\n\n` +
-                       `*Horário de atendimento:*\n` +
-                       `Segunda a Sexta, 9h às 18h\n\n` +
-                       `Te aguardo para tirar todas as suas dúvidas! 💬`;
-      await sendReply(cleanPhone, resposta);
-      return;
+    console.log(`[ZAPI] Mensagem de ${phone}: ${messageText}`);
+    
+    // Processar resposta automática
+    let resposta = 'Olá! Obrigado por entrar em contato com a GetVisa. Em breve um especialista te atenderá.';
+    const msg = messageText.toLowerCase();
+    
+    if (msg.includes('oi') || msg.includes('olá') || msg.includes('boa tarde') || msg.includes('bom dia')) {
+      resposta = 'Olá! Eu sou o atendimento automatizado da GetVisa. Como posso ajudar?\n\n' +
+                 'Você pode perguntar sobre:\n' +
+                 '• Visto negado\n' +
+                 '• Preços e valores\n' +
+                 '• Prazos e agendamentos\n' +
+                 '• Documentação necessária';
+                 
+    } else if (msg.includes('visto negado') || msg.includes('negado')) {
+      resposta = '⚠️ *Sobre visto americano negado*\n\n' +
+                 'Podemos ajudar! Preencha nosso simulador gratuito:\n' +
+                 'https://getvisa.com.br/visto-negado\n\n' +
+                 'Você receberá uma pontuação personalizada e orientações.';
+                 
+    } else if (msg.includes('preço') || msg.includes('valor') || msg.includes('custo') || msg.includes('quanto custa')) {
+      resposta = '💰 *Valores dos serviços*\n\n' +
+                 'Os valores variam conforme o perfil do solicitante.\n\n' +
+                 '📋 Preencha nosso formulário DS-160 para um orçamento personalizado:\n' +
+                 'https://getvisa.com.br/ds-160';
+                 
+    } else if (msg.includes('prazo') || msg.includes('demora') || msg.includes('tempo') || msg.includes('agendamento')) {
+      resposta = '⏰ *Prazos e agendamentos*\n\n' +
+                 'Os prazos dependem da agenda do consulado (geralmente 15-90 dias).\n\n' +
+                 'Recomendamos iniciar o processo o quanto antes para garantir a melhor data.';
+                 
+    } else if (msg.includes('documento') || msg.includes('documentação') || msg.includes('necessário')) {
+      resposta = '📄 *Documentação necessária:*\n\n' +
+                 '• Passaporte válido\n' +
+                 '• Foto 5x7 recente\n' +
+                 '• Comprovante de renda\n' +
+                 '• Comprovante de vínculos com o Brasil\n\n' +
+                 'Preencha nosso formulário para lista completa.';
     }
     
-    // ==================== 6. LEAD EXISTE (mensagem padrão) ====================
-    if (lead) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const classificacao = lead.classificacao_perfil || 'Analisado';
-      const pontuacao = lead.pontuacao_total || 0;
-      const respostas = lead.respostas_simulador || {};
-      const perfil = respostas.situacao_profissional || 'não informado';
-      const renda = respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || 'não informado';
-      const motivo = respostas.proposito_viagem || 'não informado';
-      
-      let resposta = `Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
-      resposta += `📊 *Seus dados:*\n• Perfil: ${perfil}\n• Renda: ${renda}\n• Histórico: ${historico}\n• Motivo: ${motivo}\n\n`;
-      resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 400)\n\n`;
-      resposta += `📋 *Opções disponíveis:*\n`;
-      resposta += `1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ SIM | 8️⃣ MEUS AGENDAMENTOS\n\n`;
-      resposta += `Digite o número da opção desejada! 🚀`;
-      
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 7. LEAD NÃO EXISTE ====================
-    if (!lead) {
-      const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                       `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
-                       `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                       `Em 2 minutos você descobre suas chances de aprovação! 🚀`;
-      await sendReply(cleanPhone, resposta);
-    }
+    // Enviar resposta via Z-API
+    await sendWhatsAppMessage(phone, resposta);
     
   } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
+    console.error('[ZAPI] Erro no processamento:', error);
   }
 });
 
-// ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
-app.post('/api/submit-simulador', async (req, res) => {
-  const data = req.body;
-  console.log('📥 Simulador 5 etapas recebido:', data);
-  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
-
-  (async () => {
-    try {
-      const nome = data['nome'] || 'Cliente_Sem_Nome';
-      const telefoneCliente = data['telefone'] || null;
-      const emailCliente = data['email'] || null;
-      const situacaoProfissional = data['situacao_profissional'] || '';
-      const renda = data['renda'] || '';
-      const historicoViagens = data['historico_viagens'] || '';
-      const propositoViagem = data['proposito_viagem'] || '';
-      
-      let score = 65;
-      let classificacao = 'Potencial Moderado';
-      
-      if (situacaoProfissional === 'Desempregado(a) no momento') {
-        score = 45;
-        classificacao = 'Requer Atenção';
-      } else if (renda === 'Acima de R$ 15.000') {
-        score = 85;
-        classificacao = 'Forte Potencial';
-      }
-      
-      if (telefoneCliente) {
-        const { error } = await supabase
-          .from('leads_simulador')
-          .insert({
-            nome_cliente: nome,
-            telefone_whatsapp: telefoneCliente,
-            email: emailCliente,
-            pontuacao_total: score,
-            classificacao_perfil: classificacao,
-            respostas_simulador: data,
-            data_simulacao: new Date(),
-            status_lead: 'novo'
-          });
-        
-        if (error) {
-          console.error('❌ Erro ao salvar:', error);
-        } else {
-          console.log(`✅ Lead salvo: ${nome} - ${telefoneCliente}`);
-          
-          const primeiroNome = nome.split(' ')[0];
-          const primeiraViagem = historicoViagens === 'Nunca viajei para fora do Brasil';
-          
-          let mensagem = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e vou te acompanhar.\n\n`;
-          mensagem += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-          mensagem += `📊 *Seus dados:*\n`;
-          mensagem += `• Situação: ${situacaoProfissional}\n`;
-          mensagem += `• Renda: ${renda}\n`;
-          mensagem += `• Histórico: ${historicoViagens}\n`;
-          mensagem += `• Motivo: ${propositoViagem}\n\n`;
-          
-          if (primeiraViagem) {
-            mensagem += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra.\n\n`;
-          }
-          
-          mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
-          mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160. 🚀`;
-          
-          await enviarWhatsApp(telefoneCliente, mensagem);
-        }
-      }
-      
-    } catch (err) {
-      console.error('❌ Erro:', err);
-    }
-  })();
-});
-
-// ==================== SISTEMA DE LEMBRETES AUTOMÁTICOS ====================
-
-function formatarDataBR(dataISO) {
-  const [ano, mes, dia] = dataISO.split('-');
-  return `${dia}/${mes}/${ano}`;
-}
-
-async function buscarTelefoneCliente(clienteNome, clienteId) {
-  if (clienteId) {
-    const { data: cliente } = await supabase
-      .from('clientes')
-      .select('telefone')
-      .eq('id', clienteId)
-      .single();
-    
-    if (cliente?.telefone) {
-      return cliente.telefone.replace(/\D/g, '');
-    }
-  }
-  
-  const { data: lead } = await supabase
-    .from('leads_simulador')
-    .select('telefone_whatsapp')
-    .ilike('nome_cliente', `%${clienteNome}%`)
-    .order('data_simulacao', { ascending: false })
-    .limit(1)
-    .single();
-  
-  if (lead?.telefone_whatsapp) {
-    return lead.telefone_whatsapp.replace(/\D/g, '');
-  }
-  
-  return null;
-}
-
-async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
-  const dataFormatada = formatarDataBR(agendamento.data);
-  const emoji = agendamento.atividade === 'ENTREVISTA' ? '🗣️' : 
-                agendamento.atividade === 'CASV' ? '👆' : 
-                agendamento.atividade.includes('TREINAMENTO') ? '💻' : 
-                agendamento.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-  
-  const diasTexto = diasAntecedencia === 3 ? '3 dias' : '1 dia';
-  
-  let mensagem = `🔔 *LEMBRETE - GetVisa* 🔔\n\n`;
-  mensagem += `Olá, ${nomeCliente.split(' ')[0]}! 👋\n\n`;
-  mensagem += `Faltam *${diasTexto}* para seu compromisso:\n\n`;
-  mensagem += `${emoji} *${agendamento.atividade}*\n`;
-  mensagem += `📆 Data: ${dataFormatada}\n`;
-  mensagem += `⏰ Horário: ${agendamento.hora}\n`;
-  
-  if (agendamento.local) {
-    mensagem += `📍 Local: ${agendamento.local}\n`;
-  }
-  
-  if (agendamento.atividade === 'ENTREVISTA') {
-    mensagem += `\n📋 *Dicas importantes:*\n`;
-    mensagem += `• Chegue com 30 minutos de antecedência\n`;
-    mensagem += `• Leve: passaporte, DS-160, foto 5x7\n`;
-    mensagem += `• Documentos comprobatórios (renda, vínculos)\n`;
-    mensagem += `• Esteja bem vestido(a) e confiante!\n`;
-  } else if (agendamento.atividade === 'CASV') {
-    mensagem += `\n📋 *Para a Coleta CASV:*\n`;
-    mensagem += `• Leve o passaporte original\n`;
-    mensagem += `• Confirme o local exato no dia\n`;
-    mensagem += `• Não precisa levar documentos comprobatórios\n`;
-  } else if (agendamento.atividade === 'RETIRADA PASSAPORTE') {
-    mensagem += `\n📋 *Retirada do passaporte:*\n`;
-    mensagem += `• Leve o comprovante de agendamento\n`;
-    mensagem += `• Documento de identificação original\n`;
-  }
-  
-  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
-  mensagem += `Digite *MEUS AGENDAMENTOS* para ver todos os seus compromissos.`;
-  
-  let telefoneLimpo = telefone.toString().replace(/\D/g, '');
-  if (telefoneLimpo.startsWith('55')) {
-    telefoneLimpo = telefoneLimpo.substring(2);
-  }
-  
-  await enviarWhatsApp(telefoneLimpo, mensagem);
-  console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade} em ${agendamento.data}`);
-}
-
-async function verificarLembretes() {
-  console.log(`🔍 Verificando lembretes - ${new Date().toLocaleString('pt-BR')}`);
-  
+// Função auxiliar para enviar mensagem WhatsApp
+async function sendWhatsAppMessage(phone, message) {
   try {
-    const hoje = new Date().toISOString().split('T')[0];
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
     
-    const { data: agendamentos, error } = await supabase
-      .from('compromissos')
-      .select('*')
-      .eq('concluido', 0)
-      .gte('data', hoje);
-    
-    if (error) {
-      console.error('❌ Erro ao buscar agendamentos:', error);
+    if (!instance || !token) {
+      console.error('[ZAPI] Credenciais não configuradas');
       return;
     }
     
-    const dataAtual = new Date();
-    dataAtual.setHours(0, 0, 0, 0);
-    
-    for (const ag of agendamentos) {
-      const dataAgenda = new Date(ag.data);
-      dataAgenda.setHours(0, 0, 0, 0);
-      
-      const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
-      
-      const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
-      
-      if (!telefone) {
-        console.log(`⚠️ Telefone não encontrado para ${ag.cliente}`);
-        continue;
-      }
-      
-      if (diffDays === 3 && !ag.lembrete_3d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
-        
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_3d_enviado: true })
-          .eq('id', ag.id);
-          
-        console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
-      }
-      
-      if (diffDays === 1 && !ag.lembrete_1d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
-        
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_1d_enviado: true })
-          .eq('id', ag.id);
-          
-        console.log(`✅ Lembrete 1 dia enviado para ${ag.cliente}`);
-      }
+    // Limpar número (remover caracteres especiais)
+    let cleanPhone = phone.toString().replace(/\D/g, '');
+    if (!cleanPhone.startsWith('55')) {
+      cleanPhone = '55' + cleanPhone;
     }
     
-  } catch (err) {
-    console.error('❌ Erro no sistema de lembretes:', err);
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    
+    const payload = {
+      phone: cleanPhone,
+      message: message
+    };
+    
+    console.log('[ZAPI] Enviando mensagem para:', cleanPhone);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Client-Token': process.env.ZAPI_SECURITY_TOKEN || ''
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await response.json();
+    console.log('[ZAPI] Resposta do envio:', data);
+    
+    return data;
+  } catch (error) {
+    console.error('[ZAPI] Erro ao enviar mensagem:', error);
   }
 }
-
-setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
-verificarLembretes();
 
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
