@@ -429,8 +429,69 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
-              // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
-        startSection('HISTORICO DE NEGATIVAS - ATENCAO');
+         
+        startSection('INFORMACOES DA VIAGEM');
+        renderField('radio-28', 'Proposito da viagem');
+        renderField('radio-planos', 'Planos especificos?');
+        renderField('text-21', 'Data de chegada prevista');
+        renderField('text-34', 'Duracao da estadia (dias)');
+        renderField('text-41', 'Endereco nos EUA');
+        renderField('text-42', 'Cidade (EUA)');
+        renderField('text-43', 'Estado (EUA)');
+        renderField('email-4', 'CEP (EUA)');
+        hasContentInSection = true;
+
+        startSection('PAGADOR DA VIAGEM');
+        renderField('radio-6', 'Quem vai pagar?');
+        renderField('text-22', 'Nome do pagador');
+        renderField('text-25', 'Relacionamento com pagador');
+        renderField('phone-1', 'Telefone do pagador');
+        renderField('text-24', 'E-mail do pagador');
+        renderField('text-26', 'Endereco do pagador');
+        renderField('text-27', 'Cidade do pagador');
+        renderField('text-96', 'UF do pagador');
+        renderField('text-29', 'CEP do pagador');
+        renderField('text-30', 'Pais do pagador');
+        hasContentInSection = true;
+
+        if (data['radio-7'] === 'one') {
+          startSection('ACOMPANHANTES');
+          renderField('radio-7', 'Ha acompanhantes?');
+          const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
+          if (acompanhantes.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
+            acompanhantes.forEach(acc => doc.font('Helvetica').text(`  - ${acc}`));
+            doc.moveDown(0.6);
+          }
+          hasContentInSection = true;
+        }
+
+        if (data['radio-8'] === 'one') {
+          startSection('HISTORICO DE VIAGENS AOS EUA');
+          renderField('radio-8', 'Ja esteve nos EUA?');
+          const viagens = groupTravels(data);
+          if (viagens.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
+            viagens.forEach(viagem => doc.font('Helvetica').text(`  - ${viagem}`));
+            doc.moveDown(0.6);
+          }
+          hasContentInSection = true;
+        }
+
+        if (data['radio-23'] === 'one') {
+          startSection('INFORMACOES DO VISTO');
+          renderField('radio-23', 'Ja teve visto americano?');
+          renderField('text-35', 'Data de emissao do visto');
+          renderField('text-68', 'Numero do visto');
+          renderField('text-69', 'Data de expiracao');
+          renderField('radio-33', 'Impressoes digitais coletadas?');
+          renderField('radio-29', 'Mesmo tipo de visto?');
+          renderField('radio-30', 'Mesmo pais de emissao?');
+          hasContentInSection = true;
+        }
+
+             // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
+        startSection('HISTORICO DE NEGATIVAS');
         doc.fillColor('#666666').fontSize(9).font('Helvetica').text('Estas perguntas sao obrigatorias no formulario DS-160 oficial. Responder falsamente constitui fraude.', { align: 'center' });
         doc.moveDown(0.5);
         doc.fillColor('#000000').fontSize(10);
@@ -497,67 +558,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.moveDown(0.5);
         doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(0.5);
+
         
-        startSection('INFORMACOES DA VIAGEM');
-        renderField('radio-28', 'Proposito da viagem');
-        renderField('radio-planos', 'Planos especificos?');
-        renderField('text-21', 'Data de chegada prevista');
-        renderField('text-34', 'Duracao da estadia (dias)');
-        renderField('text-41', 'Endereco nos EUA');
-        renderField('text-42', 'Cidade (EUA)');
-        renderField('text-43', 'Estado (EUA)');
-        renderField('email-4', 'CEP (EUA)');
-        hasContentInSection = true;
-
-        startSection('PAGADOR DA VIAGEM');
-        renderField('radio-6', 'Quem vai pagar?');
-        renderField('text-22', 'Nome do pagador');
-        renderField('text-25', 'Relacionamento com pagador');
-        renderField('phone-1', 'Telefone do pagador');
-        renderField('text-24', 'E-mail do pagador');
-        renderField('text-26', 'Endereco do pagador');
-        renderField('text-27', 'Cidade do pagador');
-        renderField('text-96', 'UF do pagador');
-        renderField('text-29', 'CEP do pagador');
-        renderField('text-30', 'Pais do pagador');
-        hasContentInSection = true;
-
-        if (data['radio-7'] === 'one') {
-          startSection('ACOMPANHANTES');
-          renderField('radio-7', 'Ha acompanhantes?');
-          const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
-          if (acompanhantes.length > 0) {
-            doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
-            acompanhantes.forEach(acc => doc.font('Helvetica').text(`  - ${acc}`));
-            doc.moveDown(0.6);
-          }
-          hasContentInSection = true;
-        }
-
-        if (data['radio-8'] === 'one') {
-          startSection('HISTORICO DE VIAGENS AOS EUA');
-          renderField('radio-8', 'Ja esteve nos EUA?');
-          const viagens = groupTravels(data);
-          if (viagens.length > 0) {
-            doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
-            viagens.forEach(viagem => doc.font('Helvetica').text(`  - ${viagem}`));
-            doc.moveDown(0.6);
-          }
-          hasContentInSection = true;
-        }
-
-        if (data['radio-23'] === 'one') {
-          startSection('INFORMACOES DO VISTO');
-          renderField('radio-23', 'Ja teve visto americano?');
-          renderField('text-35', 'Data de emissao do visto');
-          renderField('text-68', 'Numero do visto');
-          renderField('text-69', 'Data de expiracao');
-          renderField('radio-33', 'Impressoes digitais coletadas?');
-          renderField('radio-29', 'Mesmo tipo de visto?');
-          renderField('radio-30', 'Mesmo pais de emissao?');
-          hasContentInSection = true;
-        }
-
         startSection('ENDERECO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
         renderField('text-72', 'Complemento');
