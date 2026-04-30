@@ -429,73 +429,74 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
-        // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
-startSection('⚠️ HISTÓRICO DE NEGATIVAS - ATENÇÃO');
-doc.fillColor('#dc2626').fontSize(9).text('Estas perguntas são obrigatórias no formulário DS-160 oficial. Responder falsamente constitui fraude.', { align: 'center' });
-doc.moveDown(0.5);
-doc.fillColor('#000000').fontSize(10);
-
-// Pergunta 1: Visto Negado
-let vistoNegado = data['radio-visto-negado'];
-if (vistoNegado === 'one') vistoNegado = 'Sim';
-else if (vistoNegado === 'two') vistoNegado = 'Não';
-doc.font('Helvetica-Bold').text('1. Já teve visto americano NEGADO anteriormente?: ', { continued: true });
-doc.font('Helvetica').text(vistoNegado || 'Não informado');
-doc.moveDown(0.3);
-
-if (data['radio-visto-negado'] === 'one') {
-    doc.font('Helvetica').text(`   • Ano da negativa: ${data['text-visto-negado-ano'] || 'Não informado'}`);
-    doc.font('Helvetica').text(`   • Consulado: ${data['text-visto-negado-consulado'] || 'Não informado'}`);
-    doc.font('Helvetica').text(`   • Tipo de visto: ${data['select-visto-negado-tipo'] || 'Não informado'}`);
-    doc.moveDown(0.3);
-}
-
-// Pergunta 2: Entrada Negada
-let entradaNegada = data['radio-entrada-negada'];
-if (entradaNegada === 'one') entradaNegada = 'Sim';
-else if (entradaNegada === 'two') entradaNegada = 'Não';
-doc.font('Helvetica-Bold').text('2. Já teve a entrada NEGADA nos EUA pelo oficial de imigração?: ', { continued: true });
-doc.font('Helvetica').text(entradaNegada || 'Não informado');
-doc.moveDown(0.3);
-
-if (data['radio-entrada-negada'] === 'one') {
-    doc.font('Helvetica').text(`   • Ano da negativa: ${data['text-entrada-negada-ano'] || 'Não informado'}`);
-    doc.font('Helvetica').text(`   • Porto de entrada: ${data['text-entrada-negada-local'] || 'Não informado'}`);
-    doc.font('Helvetica').text(`   • Motivo: ${data['textarea-entrada-negada-motivo'] || 'Não informado'}`);
-    doc.moveDown(0.3);
-}
-
-// Pergunta 3: Deportação
-let deportado = data['radio-deportado'];
-if (deportado === 'one') deportado = 'Sim';
-else if (deportado === 'two') deportado = 'Não';
-doc.font('Helvetica-Bold').text('3. Já foi deportado ou removido dos Estados Unidos?: ', { continued: true });
-doc.font('Helvetica').text(deportado || 'Não informado');
-doc.moveDown(0.3);
-
-if (data['radio-deportado'] === 'one') {
-    doc.font('Helvetica').text(`   • Ano da deportação: ${data['text-deportado-ano'] || 'Não informado'}`);
-    let duracao = data['select-deportado-duracao'] || '';
-    if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
-    else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
-    else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
-    else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
-    doc.font('Helvetica').text(`   • Duração: ${duracao || 'Não informado'}`);
-    doc.moveDown(0.3);
-}
-
-// Detalhes adicionais
-if (data['textarea-detalhes-negativa']) {
-    doc.font('Helvetica-Bold').text('Detalhes adicionais sobre negativas:');
-    doc.font('Helvetica').text(`   ${data['textarea-detalhes-negativa']}`);
-    doc.moveDown(0.3);
-}
-
-doc.moveDown(0.5);
-doc.strokeColor('#dc2626').lineWidth(1).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-doc.lineWidth(0.5);
-doc.moveDown(0.8);
-hasContentInSection = true;
+              // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
+        startSection('HISTORICO DE NEGATIVAS - ATENCAO');
+        doc.fillColor('#666666').fontSize(9).font('Helvetica').text('Estas perguntas sao obrigatorias no formulario DS-160 oficial. Responder falsamente constitui fraude.', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10);
+        
+        // Pergunta 1: Visto Negado
+        let vistoNegado = data['radio-visto-negado'];
+        if (vistoNegado === 'one') vistoNegado = 'Sim';
+        else if (vistoNegado === 'two') vistoNegado = 'Nao';
+        doc.font('Helvetica-Bold').text('1. Ja teve visto americano NEGADO anteriormente?: ', { continued: true });
+        doc.font('Helvetica').text(vistoNegado || 'Nao informado');
+        doc.moveDown(0.3);
+        
+        if (data['radio-visto-negado'] === 'one') {
+            doc.font('Helvetica').text(`   - Ano da negativa: ${data['text-visto-negado-ano'] || 'Nao informado'}`);
+            doc.font('Helvetica').text(`   - Consulado: ${data['text-visto-negado-consulado'] || 'Nao informado'}`);
+            doc.font('Helvetica').text(`   - Tipo de visto: ${data['select-visto-negado-tipo'] || 'Nao informado'}`);
+            doc.moveDown(0.3);
+        }
+        
+        // Pergunta 2: Entrada Negada
+        let entradaNegada = data['radio-entrada-negada'];
+        if (entradaNegada === 'one') entradaNegada = 'Sim';
+        else if (entradaNegada === 'two') entradaNegada = 'Nao';
+        doc.font('Helvetica-Bold').text('2. Ja teve a entrada NEGADA nos EUA pelo oficial de imigracao?: ', { continued: true });
+        doc.font('Helvetica').text(entradaNegada || 'Nao informado');
+        doc.moveDown(0.3);
+        
+        if (data['radio-entrada-negada'] === 'one') {
+            doc.font('Helvetica').text(`   - Ano da negativa: ${data['text-entrada-negada-ano'] || 'Nao informado'}`);
+            doc.font('Helvetica').text(`   - Porto de entrada: ${data['text-entrada-negada-local'] || 'Nao informado'}`);
+            doc.font('Helvetica').text(`   - Motivo: ${data['textarea-entrada-negada-motivo'] || 'Nao informado'}`);
+            doc.moveDown(0.3);
+        }
+        
+        // Pergunta 3: Deportacao
+        let deportado = data['radio-deportado'];
+        if (deportado === 'one') deportado = 'Sim';
+        else if (deportado === 'two') deportado = 'Nao';
+        doc.font('Helvetica-Bold').text('3. Ja foi deportado ou removido dos Estados Unidos?: ', { continued: true });
+        doc.font('Helvetica').text(deportado || 'Nao informado');
+        doc.moveDown(0.3);
+        
+        if (data['radio-deportado'] === 'one') {
+            doc.font('Helvetica').text(`   - Ano da deportacao: ${data['text-deportado-ano'] || 'Nao informado'}`);
+            let duracao = data['select-deportado-duracao'] || '';
+            if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
+            else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
+            else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
+            else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
+            doc.font('Helvetica').text(`   - Duracao: ${duracao || 'Nao informado'}`);
+            doc.moveDown(0.3);
+        }
+        
+        // Detalhes adicionais
+        if (data['textarea-detalhes-negativa']) {
+            doc.font('Helvetica-Bold').text('Detalhes adicionais sobre negativas:');
+            doc.font('Helvetica').text(`${data['textarea-detalhes-negativa']}`);
+            doc.moveDown(0.3);
+        }
+        
+        hasContentInSection = true;
+        
+        // Linha separadora sem cor vermelha
+        doc.moveDown(0.5);
+        doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
         
         startSection('INFORMACOES DA VIAGEM');
         renderField('radio-28', 'Proposito da viagem');
