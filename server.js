@@ -20,6 +20,88 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ==================== PROTEÇÃO CONTRA ATAQUE DE REQUISIÇÕES ====================
+const requestCounts = new Map();
+
+// Middleware de rate limiting GLOBAL
+app.use((req, res, next) => {
+    // Ignora endpoints de webhook que precisam receber mensagens
+    if (req.path === '/api/webhook/zapi' || req.path === '/ping') {
+        return next();
+    }
+    
+    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const minuteKey = Math.floor(now / 60000); // Minuto atual
+    const key = `${ip}:${minuteKey}`;
+    
+    const currentCount = (requestCounts.get(key) || 0) + 1;
+    requestCounts.set(key, currentCount);
+    
+    // Limpa registros antigos a cada minuto
+    setTimeout(() => {
+        for (const k of requestCounts.keys()) {
+            const kMinute = parseInt(k.split(':')[1]);
+            if (kMinute < minuteKey - 1) {
+                requestCounts.delete(k);
+            }
+        }
+    }, 60000);
+    
+    // Se mais de 10 requisições por minuto do mesmo IP, bloqueia
+    if (currentCount > 10) {
+        console.log(`🚨 BLOQUEADO: IP ${ip} fez ${currentCount} requisições neste minuto`);
+        return res.status(429).json({ 
+            error: 'Muitas requisições. Tente novamente em alguns minutos.' 
+        });
+    }
+    
+    next();
+});
+
+// Proteção específica para rotas que disparam e-mails (limite mais baixo)
+const emailRateLimits = new Map();
+
+function checkEmailRateLimit(ip, routeName) {
+    const now = Date.now();
+    const minuteKey = Math.floor(now / 60000);
+    const key = `${routeName}:${ip}:${minuteKey}`;
+    
+    const currentCount = (emailRateLimits.get(key) || 0) + 1;
+    emailRateLimits.set(key, currentCount);
+    
+    // Limpeza periódica
+    setTimeout(() => {
+        for (const k of emailRateLimits.keys()) {
+            const kMinute = parseInt(k.split(':')[2]);
+            if (kMinute < minuteKey - 1) {
+                emailRateLimits.delete(k);
+            }
+        }
+    }, 60000);
+    
+    // Máximo 3 requisições por minuto para rotas de e-mail
+    return currentCount <= 3;
+}
+
+// Aplica proteção específica nas rotas que disparam e-mail
+const protectedRoutes = ['/api/submit-ds160', '/api/submit-passaporte', '/api/submit-avaliacao', '/api/submit-simulador', '/api/submit-visto-negado'];
+
+app.use((req, res, next) => {
+    if (protectedRoutes.includes(req.path)) {
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        if (!checkEmailRateLimit(ip, req.path)) {
+            console.log(`🚨 BLOQUEADO ROTA EMAIL: IP ${ip} excedeu limite na ${req.path}`);
+            return res.status(429).json({ 
+                error: 'Limite de envios excedido. Tente novamente em alguns minutos.' 
+            });
+        }
+    }
+    next();
+});
+// ==================== FIM DA PROTEÇÃO ====================
+
+
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
   try {
