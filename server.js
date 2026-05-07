@@ -200,31 +200,79 @@ function isDominioPermitido(email) {
     return DOMINIOS_PERMITIDOS.includes(dominio);
 }
 
-function isEmailClienteValido(email, nomeCliente) {
-    // 1. Verifica se é e-mail do sistema (sempre permitido)
-    if (EMAILS_SISTEMA.includes(email?.toLowerCase())) {
-        return true;
+// ==================== VALIDAÇÃO DE E-MAIL ====================
+const DOMINIOS_PERMITIDOS = [
+    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
+    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
+];
+
+// 🔥 LISTA NEGRA - Apenas e-mails de atacantes conhecidos
+const EMAILS_BLOQUEADOS = [
+    'phillipratylor29@gmail.com',
+    'davidjonietz@gmail.com',
+    'faisal.johnson@hmga.com',
+    'faisal.johnson@hmgma.com'
+];
+
+// 🔥 Domínios falsos/bloqueados (atacantes usam domínios inválidos)
+const DOMINIOS_BLOQUEADOS = [
+    'mailxw.com',
+    'hmga.com',
+    'hmgma.com'
+];
+
+function isDominioPermitido(email) {
+    if (!email || typeof email !== 'string') return false;
+    const dominio = email.split('@')[1]?.toLowerCase();
+    
+    // Verifica se é domínio bloqueado
+    if (DOMINIOS_BLOQUEADOS.includes(dominio)) {
+        console.log(`🚨 Domínio bloqueado: ${dominio}`);
+        return false;
     }
     
-    // 2. Verifica se está na lista negra (atacantes)
-    if (EMAILS_BLOQUEADOS.includes(email?.toLowerCase())) {
+    // Verifica se tem formato básico de e-mail
+    if (!dominio || !dominio.includes('.')) {
+        console.log(`🚨 Domínio inválido: ${dominio}`);
+        return false;
+    }
+    
+    return true; // Permite qualquer domínio com formato válido
+}
+
+function isEmailClienteValido(email, nomeCliente) {
+    // 1. Verifica se é um e-mail válido (formato básico)
+    if (!email || typeof email !== 'string') {
+        console.log(`🚨 E-mail inválido: ${email}`);
+        return false;
+    }
+    
+    const emailLower = email.toLowerCase().trim();
+    
+    // 2. Verifica se está na lista negra (atacantes conhecidos)
+    if (EMAILS_BLOQUEADOS.includes(emailLower)) {
         console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
     }
     
-    // 3. Verifica domínio permitido
-    if (!email || !isDominioPermitido(email)) {
-        console.log(`🚨 Domínio não permitido: ${email}`);
+    // 3. Verifica domínio (permitido ou bloqueado)
+    const parteDominio = emailLower.split('@')[1];
+    if (!parteDominio) {
+        console.log(`🚨 E-mail sem domínio: ${email}`);
         return false;
     }
     
-    // 4. Impede e-mails com padrões suspeitos de ATACANTE (não bloqueia clientes reais)
-    //    Clientes reais NÃO usam esses padrões
+    // Verifica se o domínio é bloqueado
+    if (DOMINIOS_BLOQUEADOS.includes(parteDominio)) {
+        console.log(`🚨 Domínio bloqueado: ${email}`);
+        return false;
+    }
+    
+    // 4. Impede e-mails com padrões suspeitos de ATACANTE
     const padroesSuspeitos = [
         'test', 'fake', 'invasor', 'hacker', 'admin', 'root',
         'bomb', 'spam', 'mailer', 'noreply', 'no-reply'
     ];
-    const emailLower = email.toLowerCase();
     const nomeLower = (nomeCliente || '').toLowerCase();
     
     for (const padrao of padroesSuspeitos) {
@@ -234,7 +282,7 @@ function isEmailClienteValido(email, nomeCliente) {
         }
     }
     
-    // 5. Verifica se é um formato de e-mail real (regex básico)
+    // 5. Verifica se tem formato de e-mail real (regex)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         console.log(`🚨 Formato de e-mail inválido: ${email}`);
