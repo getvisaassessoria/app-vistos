@@ -172,16 +172,76 @@ const EMAILS_PERMITIDOS = [
     // Adicione aqui os e-mails dos seus clientes legítimos
 ];
 
+// ==================== VALIDAÇÃO DE E-MAIL PARA CLIENTES REAIS ====================
+const DOMINIOS_PERMITIDOS = [
+    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
+    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
+];
+
+// 🔥 E-mails que SÃO do sistema/equipe (nunca bloquear)
+const EMAILS_SISTEMA = [
+    'getvisa.assessoria@gmail.com',
+    'contato@getvisa.com.br'
+];
+
+// 🔥 LISTA NEGRA - E-mails de atacantes conhecidos
+const EMAILS_BLOQUEADOS = [
+    'phillipratylor29@gmail.com',
+    'davidjonietz@gmail.com',
+    'faisal.johnson@hmga.com',
+    'faisal.johnson@hmgma.com',
+    'test@test.com',
+    'teste@teste.com'
+];
+
+function isDominioPermitido(email) {
+    if (!email || typeof email !== 'string') return false;
+    const dominio = email.split('@')[1]?.toLowerCase();
+    return DOMINIOS_PERMITIDOS.includes(dominio);
+}
+
 function isEmailClienteValido(email, nomeCliente) {
-    if (!email) return false;
+    // 1. Verifica se é e-mail do sistema (sempre permitido)
+    if (EMAILS_SISTEMA.includes(email?.toLowerCase())) {
+        return true;
+    }
     
-    // 🔥 MODO RESTRITO: só envia se e-mail estiver na lista branca
-    if (EMAILS_PERMITIDOS.length > 0 && !EMAILS_PERMITIDOS.includes(email.toLowerCase())) {
-        console.log(`🚨 E-mail NÃO AUTORIZADO (lista branca): ${email} - Cliente: ${nomeCliente}`);
+    // 2. Verifica se está na lista negra (atacantes)
+    if (EMAILS_BLOQUEADOS.includes(email?.toLowerCase())) {
+        console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
     }
     
-    console.log(`✅ E-mail autorizado: ${email}`);
+    // 3. Verifica domínio permitido
+    if (!email || !isDominioPermitido(email)) {
+        console.log(`🚨 Domínio não permitido: ${email}`);
+        return false;
+    }
+    
+    // 4. Impede e-mails com padrões suspeitos de ATACANTE (não bloqueia clientes reais)
+    //    Clientes reais NÃO usam esses padrões
+    const padroesSuspeitos = [
+        'test', 'fake', 'invasor', 'hacker', 'admin', 'root',
+        'bomb', 'spam', 'mailer', 'noreply', 'no-reply'
+    ];
+    const emailLower = email.toLowerCase();
+    const nomeLower = (nomeCliente || '').toLowerCase();
+    
+    for (const padrao of padroesSuspeitos) {
+        if (emailLower.includes(padrao) || nomeLower.includes(padrao)) {
+            console.log(`🚨 Padrão suspeito detectado: ${email} (nome: ${nomeCliente})`);
+            return false;
+        }
+    }
+    
+    // 5. Verifica se é um formato de e-mail real (regex básico)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        console.log(`🚨 Formato de e-mail inválido: ${email}`);
+        return false;
+    }
+    
+    console.log(`✅ E-mail válido (cliente legítimo): ${email}`);
     return true;
 }
 // ==================== FIM DA PROTEÇÃO ====================
