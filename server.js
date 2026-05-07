@@ -201,7 +201,8 @@ function isDominioPermitido(email) {
 } */ 
 
 // ==================== VALIDAÇÃO DE E-MAIL ====================
-// LISTA NEGRA - Apenas e-mails de atacantes conhecidos (NÂO é lista branca!)
+// ==================== VALIDAÇÃO DE E-MAIL ====================
+// LISTA NEGRA - Apenas e-mails de atacantes conhecidos
 const EMAILS_BLOQUEADOS = [
     'phillipratylor29@gmail.com',
     'davidjonietz@gmail.com',
@@ -209,13 +210,14 @@ const EMAILS_BLOQUEADOS = [
     'faisal.johnson@hmgma.com'
 ];
 
-// Domínios falsos/bloqueados (atacantes usam domínios inválidos)
+// Domínios falsos/bloqueados
 const DOMINIOS_BLOQUEADOS = [
     'mailxw.com',
     'hmga.com',
     'hmgma.com'
 ];
 
+// FUNÇÃO DE VALIDAÇÃO (deve estar definida ANTES de ser usada)
 function isEmailClienteValido(email, nomeCliente) {
     // Verifica se é um e-mail válido
     if (!email || typeof email !== 'string') {
@@ -225,7 +227,7 @@ function isEmailClienteValido(email, nomeCliente) {
     
     const emailLower = email.toLowerCase().trim();
     
-    // 1. Verifica se está na LISTA NEGRA (atacantes conhecidos)
+    // 1. Verifica se está na LISTA NEGRA
     if (EMAILS_BLOQUEADOS.includes(emailLower)) {
         console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
@@ -250,12 +252,12 @@ function isEmailClienteValido(email, nomeCliente) {
         return false;
     }
     
-    // 4. Verifica se tem nome suspeito (apenas para atacantes, não bloqueia clientes)
-    const padroesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam', 'mailer'];
+    // 4. Impede nomes MUITO suspeitos (não bloqueia clientes reais)
     const nomeLower = (nomeCliente || '').toLowerCase();
+    const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam'];
     
-    for (const padrao of padroesSuspeitos) {
-        if (nomeLower.includes(padrao)) {
+    for (const suspeito of nomesSuspeitos) {
+        if (nomeLower.includes(suspeito)) {
             console.log(`🚨 Nome suspeito bloqueado: ${nomeCliente}`);
             return false;
         }
