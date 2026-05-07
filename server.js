@@ -165,22 +165,23 @@ function isDominioPermitido(email) {
     return DOMINIOS_PERMITIDOS.includes(dominio);
 }
 
+// 🔥 MODO RESTRITO - LISTA BRANCA (só aceita e-mails que você adicionar)
+const EMAILS_PERMITIDOS = [
+    'getvisa.assessoria@gmail.com',  // seu e-mail da equipe
+    'moises.barreto@getvisa.com.br', // seu e-mail profissional
+    // Adicione aqui os e-mails dos seus clientes legítimos
+];
+
 function isEmailClienteValido(email, nomeCliente) {
-    // Verificações básicas
-    if (!email || !isDominioPermitido(email)) return false;
+    if (!email) return false;
     
-    // Impede e-mails com padrões suspeitos (teste, atacante, etc.)
-    const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root'];
-    const emailLower = email.toLowerCase();
-    const nomeLower = (nomeCliente || '').toLowerCase();
-    
-    for (const suspeito of nomesSuspeitos) {
-        if (emailLower.includes(suspeito) || nomeLower.includes(suspeito)) {
-            console.log(`🚨 E-mail suspeito bloqueado: ${email} (nome: ${nomeCliente})`);
-            return false;
-        }
+    // 🔥 MODO RESTRITO: só envia se e-mail estiver na lista branca
+    if (EMAILS_PERMITIDOS.length > 0 && !EMAILS_PERMITIDOS.includes(email.toLowerCase())) {
+        console.log(`🚨 E-mail NÃO AUTORIZADO (lista branca): ${email} - Cliente: ${nomeCliente}`);
+        return false;
     }
     
+    console.log(`✅ E-mail autorizado: ${email}`);
     return true;
 }
 // ==================== FIM DA PROTEÇÃO ====================
