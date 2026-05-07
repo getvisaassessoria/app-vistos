@@ -107,7 +107,9 @@ const protectedRoutes = [
     '/api/submit-passaporte', 
     '/api/submit-avaliacao', 
     '/api/submit-simulador', 
-    '/api/submit-visto-negado'
+    '/api/submit-visto-negado',
+    '/api/submit-australia' 
+    
 ];
 
 app.use((req, res, next) => {
@@ -969,6 +971,7 @@ app.post('/api/submit-ds160', async (req, res) => {
   })();
 });
 
+
 // ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
@@ -1432,6 +1435,112 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       
     } catch (err) {
       console.error('❌ Erro no processamento do visto negado (background):', err);
+    }
+  })();
+});
+
+// ==================== ROTA VISTO AUSTRALIANO ====================
+app.post('/api/submit-australia', async (req, res) => {
+  const data = req.body;
+  console.log('📥 Dados de Visto Australiano recebidos:', JSON.stringify({
+    nome: data['full_name'],
+    email: data['email'],
+    telefone: data['telefone']
+  }));
+  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
+
+  (async () => {
+    try {
+      const nome = data['full_name'] || 'Cliente_Sem_Nome';
+      const emailCliente = data['email'] || null;
+      const telefoneCliente = data['telefone'] || null;
+
+      // ==================== SALVAR NO SUPABASE ====================
+      try {
+        const { data: cliente, error: clienteError } = await supabase
+          .from('clientes')
+          .upsert({
+            email: emailCliente,
+            nome_completo: nome,
+            telefone: telefoneCliente
+          }, { onConflict: 'email' })
+          .select()
+          .single();
+        
+        if (clienteError) {
+          console.error('❌ Erro ao salvar cliente (Austrália):', clienteError.message);
+        } else if (cliente) {
+          console.log(`✅ Cliente salvo. ID: ${cliente.id}`);
+          
+          const { data: solicitacao, error: solError } = await supabase
+            .from('solicitacoes')
+            .insert({
+              cliente_id: cliente.id,
+              tipo: 'australia',
+              dados: data,
+              status: 'pendente',
+              created_at: new Date()
+            })
+            .select()
+            .single();
+          
+          if (solError) {
+            console.error('❌ Erro ao salvar solicitação (Austrália):', solError.message);
+          } else {
+            console.log(`✅ Visto Australiano salvo! ID: ${solicitacao.id}`);
+          }
+        }
+      } catch (supabaseErr) {
+        console.error('⚠️ Erro no Supabase (Austrália):', supabaseErr.message);
+      }
+
+      // ==================== ENVIAR E-MAIL PARA EQUIPE ====================
+      const dataChegada = data['data_chegada'] ? new Date(data['data_chegada']).toLocaleDateString('pt-BR') : 'Não informada';
+      const dataSaida = data['data_saida'] ? new Date(data['data_saida']).toLocaleDateString('pt-BR') : 'Não informada';
+      
+      await resend.emails.send({
+        from: 'GetVisa <contato@getvisa.com.br>',
+        to: ['getvisa.assessoria@gmail.com'],
+        subject: `🇦🇺 Visto Australiano: ${nome}`,
+        html: `<strong>Solicitação de Visto Australiano recebida.</strong><br>
+               <p><strong>Cliente:</strong> ${nome}</p>
+               <p><strong>E-mail:</strong> ${emailCliente || 'não informado'}</p>
+               <p><strong>Telefone:</strong> ${telefoneCliente || 'não informado'}</p>
+               <p><strong>Período da viagem:</strong> ${dataChegada} a ${dataSaida}</p>
+               <p><strong>Motivo:</strong> ${data['motivo_viagem'] || 'não informado'}</p>`
+      });
+      console.log('✅ E-mail enviado para a equipe (Austrália)');
+
+      // ==================== ENVIAR E-MAIL PARA CLIENTE ====================
+      if (emailCliente && emailCliente.trim() !== '') {
+          if (isEmailClienteValido(emailCliente, nome)) {
+              try {
+                  await resend.emails.send({
+                      from: 'GetVisa <contato@getvisa.com.br>',
+                      to: [emailCliente],
+                      subject: `Sua solicitação de Visto Australiano foi recebida - ${nome}`,
+                      html: `<strong>Olá ${nome},</strong><br>
+                             <p>Recebemos sua solicitação de assessoria para o Visto Australiano.</p>
+                             <p>Em breve nossa equipe entrará em contato para dar continuidade ao seu processo.</p>
+                             <p><strong>Resumo da sua solicitação:</strong></p>
+                             <ul>
+                               <li>📅 Período: ${dataChegada} a ${dataSaida}</li>
+                               <li>✈️ Motivo: ${data['motivo_viagem'] || 'não informado'}</li>
+                             </ul>
+                             <br>
+                             <p>Atenciosamente,<br>Equipe GetVisa</p>`
+                  });
+                  console.log(`✅ E-mail enviado para cliente (Austrália): ${emailCliente}`);
+              } catch (emailErr) {
+                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
+              }
+          } else {
+              console.log(`🚨 E-mail bloqueado: ${emailCliente}`);
+          }
+      }
+      
+    } catch (err) {
+      console.error('❌ Erro no processamento do Visto Australiano:', err);
     }
   })();
 });
