@@ -715,7 +715,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        if (data['radio-8'] === 'one') {
+        /*if (data['radio-8'] === 'one') {
           startSection('HISTORICO DE VIAGENS AOS EUA');
           renderField('radio-8', 'Ja esteve nos EUA?');
           const viagens = groupTravels(data);
@@ -725,7 +725,7 @@ app.post('/api/submit-ds160', async (req, res) => {
             doc.moveDown(0.6);
           }
           hasContentInSection = true;
-        }
+        } */
 
         if (data['radio-23'] === 'one') {
           startSection('INFORMACOES DO VISTO');
@@ -739,7 +739,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-            // ==================== INFORMAÇÕES DE VIAGENS AOS EUA ====================
+            // ==================== INFORMAÇÕES DE VIAGENS AOS EUA (VERSÃO AMIGÁVEL) ====================
 startSection('INFORMAÇÕES DE VIAGENS AOS EUA');
 doc.fillColor('#2c7da0').fontSize(9).font('Helvetica').text('O formulário DS-160 oficial do governo americano solicita estas informações para completar seu cadastro.', { align: 'center' });
 doc.fillColor('#61a5c2').fontSize(8).font('Helvetica').text('Responder com honestidade ajuda a demonstrar transparência no seu processo.', { align: 'center' });
@@ -814,11 +814,10 @@ if (data['textarea-detalhes-negativa']) {
 
 hasContentInSection = true;
 
-// Linha separadora
+// Linha separadora suave
 doc.moveDown(0.3);
 doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
 doc.moveDown(0.3);
-
         
         startSection('ENDERECO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
