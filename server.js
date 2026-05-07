@@ -146,7 +146,7 @@ app.use((req, res, next) => {
 });
 
 // ==================== VALIDAÇÃO DE E-MAIL (SÓ ENVIA PARA DOMÍNIOS PERMITIDOS) ====================
-const DOMINIOS_PERMITIDOS = [
+/* const DOMINIOS_PERMITIDOS = [
     'gmail.com', 
     'yahoo.com', 
     'outlook.com', 
@@ -265,7 +265,7 @@ function isEmailClienteValido(email, nomeCliente) {
     return true;
 }
 // ==================== FIM DA VALIDAÇÃO ====================
-// ==================== FIM DA PROTEÇÃO ====================
+// ==================== FIM DA PROTEÇÃO ====================*/
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
