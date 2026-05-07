@@ -201,14 +201,12 @@ function isDominioPermitido(email) {
 }
 
 // ==================== VALIDAÇÃO DE E-MAIL ====================
-// LISTA NEGRA - Apenas e-mails de atacantes conhecidos
+// LISTA NEGRA - Apenas e-mails de atacantes conhecidos (NÂO é lista branca!)
 const EMAILS_BLOQUEADOS = [
     'phillipratylor29@gmail.com',
     'davidjonietz@gmail.com',
     'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com',
-    'test@test.com',
-    'teste@teste.com'
+    'faisal.johnson@hmgma.com'
 ];
 
 // Domínios falsos/bloqueados (atacantes usam domínios inválidos)
@@ -219,7 +217,7 @@ const DOMINIOS_BLOQUEADOS = [
 ];
 
 function isEmailClienteValido(email, nomeCliente) {
-    // 1. Verifica se é um e-mail válido (formato básico)
+    // Verifica se é um e-mail válido
     if (!email || typeof email !== 'string') {
         console.log(`🚨 E-mail inválido: ${email}`);
         return false;
@@ -227,13 +225,13 @@ function isEmailClienteValido(email, nomeCliente) {
     
     const emailLower = email.toLowerCase().trim();
     
-    // 2. Verifica se está na lista negra (atacantes conhecidos)
+    // 1. Verifica se está na LISTA NEGRA (atacantes conhecidos)
     if (EMAILS_BLOQUEADOS.includes(emailLower)) {
         console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
     }
     
-    // 3. Verifica domínio bloqueado
+    // 2. Verifica domínio bloqueado
     const dominio = emailLower.split('@')[1];
     if (!dominio) {
         console.log(`🚨 E-mail sem domínio: ${email}`);
@@ -245,31 +243,28 @@ function isEmailClienteValido(email, nomeCliente) {
         return false;
     }
     
-    // 4. Impede e-mails com padrões suspeitos de ATACANTE
-    const padroesSuspeitos = [
-        'test', 'fake', 'invasor', 'hacker', 'admin', 'root',
-        'bomb', 'spam', 'mailer', 'noreply', 'no-reply'
-    ];
-    const nomeLower = (nomeCliente || '').toLowerCase();
-    
-    for (const padrao of padroesSuspeitos) {
-        if (emailLower.includes(padrao) || nomeLower.includes(padrao)) {
-            console.log(`🚨 Padrão suspeito detectado: ${email} (nome: ${nomeCliente})`);
-            return false;
-        }
-    }
-    
-    // 5. Verifica se tem formato de e-mail real (regex)
+    // 3. Verifica formato básico de e-mail
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         console.log(`🚨 Formato de e-mail inválido: ${email}`);
         return false;
     }
     
-    console.log(`✅ E-mail válido (cliente legítimo): ${email}`);
+    // 4. Verifica se tem nome suspeito (apenas para atacantes, não bloqueia clientes)
+    const padroesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam', 'mailer'];
+    const nomeLower = (nomeCliente || '').toLowerCase();
+    
+    for (const padrao of padroesSuspeitos) {
+        if (nomeLower.includes(padrao)) {
+            console.log(`🚨 Nome suspeito bloqueado: ${nomeCliente}`);
+            return false;
+        }
+    }
+    
+    console.log(`✅ E-mail válido: ${email}`);
     return true;
 }
-// ==================== FIM DA VALIDAÇÃO DE E-MAIL ====================
+// ==================== FIM DA VALIDAÇÃO ====================
 // ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
