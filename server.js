@@ -19,14 +19,13 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
 // ==================== PROTEÇÃO CONTRA ATAQUE ====================
 const requestCounts = new Map();
 const emailRateLimits = new Map();
-const BLOCKED_IPS = new Set(); // IPs permanentemente bloqueados
+const BLOCKED_IPS = new Set();
 
-// Função para obter IP real do cliente (considerando proxies)
 function getRealIp(req) {
-    // Verifica headers de proxy (Render, Cloudflare, etc.)
     const forwarded = req.headers['x-forwarded-for'];
     if (forwarded) {
         const ips = forwarded.split(',');
@@ -35,16 +34,13 @@ function getRealIp(req) {
     return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
 }
 
-// Middleware de bloqueio global
 app.use((req, res, next) => {
     const ip = getRealIp(req);
     
-    // 🔥 LIBERA IPs internos do Render
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === '::ffff:127.0.0.1') {
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
         return next();
     }
     
-    // 🔥 IP permanentemente bloqueado? (reincidentes)
     if (BLOCKED_IPS.has(ip)) {
         console.log(`🚨 BLOQUEADO PERMANENTE: IP ${ip} tentou acessar`);
         return res.status(403).json({ error: 'Acesso bloqueado. Contate o suporte.' });
@@ -57,7 +53,6 @@ app.use((req, res, next) => {
     const currentCount = (requestCounts.get(key) || 0) + 1;
     requestCounts.set(key, currentCount);
     
-    // Limpa registros antigos a cada minuto
     setTimeout(() => {
         for (const k of requestCounts.keys()) {
             const kMinute = parseInt(k.split(':')[1]);
@@ -67,11 +62,9 @@ app.use((req, res, next) => {
         }
     }, 60000);
     
-    // Limite: 20 requisições por minuto (aumentado para humanos legítimos)
     if (currentCount > 20) {
         console.log(`🚨 BLOQUEADO TEMPORÁRIO: IP ${ip} fez ${currentCount} req/min`);
         
-        // Se for a 3ª vez que bloqueia, bane permanentemente
         const blockKey = `block:${ip}`;
         const blockCount = (requestCounts.get(blockKey) || 0) + 1;
         requestCounts.set(blockKey, blockCount);
@@ -89,7 +82,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Verifica limite específico para rotas críticas
 function checkEmailRateLimit(ip, routeName) {
     const now = Date.now();
     const minuteKey = Math.floor(now / 60000);
@@ -107,11 +99,9 @@ function checkEmailRateLimit(ip, routeName) {
         }
     }, 60000);
     
-    // Limite: 2 envios por MINUTO por rota (mais seguro)
     return currentCount <= 2;
 }
 
-// Rotas protegidas (onde o ataque está acontecendo)
 const protectedRoutes = [
     '/api/submit-ds160', 
     '/api/submit-passaporte', 
@@ -127,7 +117,6 @@ app.use((req, res, next) => {
         if (!checkEmailRateLimit(ip, req.path)) {
             console.log(`🚨 BLOQUEADO ROTA EMAIL: IP ${ip} excedeu limite na ${req.path}`);
             
-            // Marca IP como suspeito para bloqueio futuro
             const suspectKey = `suspect:${ip}`;
             const suspectCount = (requestCounts.get(suspectKey) || 0) + 1;
             requestCounts.set(suspectKey, suspectCount);
@@ -145,18 +134,10 @@ app.use((req, res, next) => {
     next();
 });
 
-// ==================== VALIDAÇÃO DE E-MAIL (SÓ ENVIA PARA DOMÍNIOS PERMITIDOS) ====================
+// ==================== VALIDAÇÃO DE E-MAIL ====================
 const DOMINIOS_PERMITIDOS = [
-    'gmail.com', 
-    'yahoo.com', 
-    'outlook.com', 
-    'hotmail.com', 
-    'hotmail.com.br',
-    'uol.com.br', 
-    'bol.com.br', 
-    'ig.com.br', 
-    'terra.com.br',
-    'getvisa.com.br'
+    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
+    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
 ];
 
 function isDominioPermitido(email) {
@@ -165,44 +146,6 @@ function isDominioPermitido(email) {
     return DOMINIOS_PERMITIDOS.includes(dominio);
 }
 
-// 🔥 MODO RESTRITO - LISTA BRANCA (só aceita e-mails que você adicionar)
-const EMAILS_PERMITIDOS = [
-    'getvisa.assessoria@gmail.com',  // seu e-mail da equipe
-    'moises.barreto@getvisa.com.br', // seu e-mail profissional
-    // Adicione aqui os e-mails dos seus clientes legítimos
-];
-
-// ==================== VALIDAÇÃO DE E-MAIL PARA CLIENTES REAIS ====================
-/* const DOMINIOS_PERMITIDOS = [
-    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
-    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
-];
-
-// 🔥 E-mails que SÃO do sistema/equipe (nunca bloquear)
-const EMAILS_SISTEMA = [
-    'getvisa.assessoria@gmail.com',
-    'contato@getvisa.com.br'
-];
-
-// 🔥 LISTA NEGRA - E-mails de atacantes conhecidos
-const EMAILS_BLOQUEADOS = [
-    'phillipratylor29@gmail.com',
-    'davidjonietz@gmail.com',
-    'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com',
-    'test@test.com',
-    'teste@teste.com'
-];
-
-function isDominioPermitido(email) {
-    if (!email || typeof email !== 'string') return false;
-    const dominio = email.split('@')[1]?.toLowerCase();
-    return DOMINIOS_PERMITIDOS.includes(dominio);
-} */ 
-
-// ==================== VALIDAÇÃO DE E-MAIL ====================
-// ==================== VALIDAÇÃO DE E-MAIL ====================
-// LISTA NEGRA - Apenas e-mails de atacantes conhecidos
 const EMAILS_BLOQUEADOS = [
     'phillipratylor29@gmail.com',
     'davidjonietz@gmail.com',
@@ -210,16 +153,13 @@ const EMAILS_BLOQUEADOS = [
     'faisal.johnson@hmgma.com'
 ];
 
-// Domínios falsos/bloqueados
 const DOMINIOS_BLOQUEADOS = [
     'mailxw.com',
     'hmga.com',
     'hmgma.com'
 ];
 
-// FUNÇÃO DE VALIDAÇÃO (deve estar definida ANTES de ser usada)
 function isEmailClienteValido(email, nomeCliente) {
-    // Verifica se é um e-mail válido
     if (!email || typeof email !== 'string') {
         console.log(`🚨 E-mail inválido: ${email}`);
         return false;
@@ -227,13 +167,11 @@ function isEmailClienteValido(email, nomeCliente) {
     
     const emailLower = email.toLowerCase().trim();
     
-    // 1. Verifica se está na LISTA NEGRA
     if (EMAILS_BLOQUEADOS.includes(emailLower)) {
         console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
     }
     
-    // 2. Verifica domínio bloqueado
     const dominio = emailLower.split('@')[1];
     if (!dominio) {
         console.log(`🚨 E-mail sem domínio: ${email}`);
@@ -245,14 +183,12 @@ function isEmailClienteValido(email, nomeCliente) {
         return false;
     }
     
-    // 3. Verifica formato básico de e-mail
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         console.log(`🚨 Formato de e-mail inválido: ${email}`);
         return false;
     }
     
-    // 4. Impede nomes MUITO suspeitos (não bloqueia clientes reais)
     const nomeLower = (nomeCliente || '').toLowerCase();
     const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam'];
     
@@ -266,8 +202,6 @@ function isEmailClienteValido(email, nomeCliente) {
     console.log(`✅ E-mail válido: ${email}`);
     return true;
 }
-// ==================== FIM DA VALIDAÇÃO ====================
-// ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
@@ -417,160 +351,6 @@ function drawSectionTitle(doc, title) {
     doc.fillColor('#000000').fontSize(10).font('Helvetica');
 }
 
-const simpleFields = [
-  { name: 'consulado_cidade', label: 'Cidade do Consulado', group: 'iniciais' },
-  { name: 'radio-26', label: 'Indicado por agência/agente?', group: 'iniciais' },
-  { name: 'text-1', label: 'Nome da agência/agente', group: 'iniciais' },
-  { name: 'text-64', label: 'Idioma usado para preencher', group: 'iniciais' },
-  { name: 'full_name', label: 'Nome completo', group: 'pessoais' },
-  { name: 'radio-2', label: 'Já teve outro nome?', group: 'pessoais' },
-  { name: 'text-87', label: 'Nome anterior', group: 'pessoais' },
-  { name: 'radio-3', label: 'Sexo', group: 'pessoais' },
-  { name: 'select-4', label: 'Estado civil', group: 'pessoais' },
-  { name: 'text-5', label: 'Data de nascimento', group: 'pessoais' },
-  { name: 'text-7', label: 'Cidade de nascimento', group: 'pessoais' },
-  { name: 'text-6', label: 'Estado/Província', group: 'pessoais' },
-  { name: 'text-95', label: 'País de nacionalidade', group: 'pessoais' },
-  { name: 'radio-outra-nac', label: 'Possui outra nacionalidade?', group: 'pessoais' },
-  { name: 'outra_nacionalidade_text', label: 'Qual outra nacionalidade?', group: 'pessoais' },
-  { name: 'radio-residente', label: 'Residente permanente de outro país?', group: 'pessoais' },
-  { name: 'text-86', label: 'CPF', group: 'pessoais' },
-  { name: 'text-17', label: 'Número do Seguro Social (SSN)', group: 'pessoais' },
-  { name: 'text-18', label: 'Número do contribuinte dos EUA (TIN)', group: 'pessoais' },
-  { name: 'radio-28', label: 'Propósito da viagem', group: 'viagem' },
-  { name: 'radio-planos', label: 'Planos específicos?', group: 'viagem' },
-  { name: 'text-21', label: 'Data de chegada prevista', group: 'viagem' },
-  { name: 'text-34', label: 'Duração da estadia (dias)', group: 'viagem' },
-  { name: 'text-41', label: 'Endereço nos EUA', group: 'viagem' },
-  { name: 'text-42', label: 'Cidade (EUA)', group: 'viagem' },
-  { name: 'text-43', label: 'Estado (EUA)', group: 'viagem' },
-  { name: 'email-4', label: 'CEP (EUA)', group: 'viagem' },
-  { name: 'radio-6', label: 'Quem vai pagar?', group: 'viagem' },
-  { name: 'text-22', label: 'Nome do pagador', group: 'viagem' },
-  { name: 'text-25', label: 'Relacionamento com pagador', group: 'viagem' },
-  { name: 'phone-1', label: 'Telefone do pagador', group: 'viagem' },
-  { name: 'text-24', label: 'E-mail do pagador', group: 'viagem' },
-  { name: 'text-26', label: 'Endereço do pagador', group: 'viagem' },
-  { name: 'text-27', label: 'Cidade do pagador', group: 'viagem' },
-  { name: 'text-96', label: 'UF do pagador', group: 'viagem' },
-  { name: 'text-29', label: 'CEP do pagador', group: 'viagem' },
-  { name: 'text-30', label: 'País do pagador', group: 'viagem' },
-  { name: 'radio-7', label: 'Há acompanhantes?', group: 'acompanhantes' },
-  { name: 'radio-8', label: 'Já esteve nos EUA?', group: 'previousTravel' },
-  { name: 'radio-23', label: 'Já teve visto americano?', group: 'previousTravel' },
-  { name: 'text-35', label: 'Data de emissão do visto', group: 'previousTravel' },
-  { name: 'text-68', label: 'Número do visto', group: 'previousTravel' },
-  { name: 'text-69', label: 'Data de expiração', group: 'previousTravel' },
-  { name: 'radio-33', label: 'Impressões digitais coletadas?', group: 'previousTravel' },
-  { name: 'radio-29', label: 'Mesmo tipo de visto?', group: 'previousTravel' },
-  { name: 'radio-30', label: 'Mesmo país de emissão?', group: 'previousTravel' },
-  { name: 'text-71', label: 'Logradouro', group: 'endereco' },
-  { name: 'text-72', label: 'Complemento', group: 'endereco' },
-  { name: 'text-73', label: 'CEP', group: 'endereco' },
-  { name: 'text-74', label: 'Cidade', group: 'endereco' },
-  { name: 'text-75', label: 'Estado', group: 'endereco' },
-  { name: 'text-76', label: 'País', group: 'endereco' },
-  { name: 'radio-9', label: 'Endereço de correspondência é o mesmo?', group: 'endereco' },
-  { name: 'text-80', label: 'Logradouro (correspondência)', group: 'endereco' },
-  { name: 'text-81', label: 'Complemento (correspondência)', group: 'endereco' },
-  { name: 'text-82', label: 'CEP (correspondência)', group: 'endereco' },
-  { name: 'text-83', label: 'Cidade (correspondência)', group: 'endereco' },
-  { name: 'text-84', label: 'Estado (correspondência)', group: 'endereco' },
-  { name: 'text-85', label: 'País (correspondência)', group: 'endereco' },
-  { name: 'text-77', label: 'Telefone principal', group: 'telefones' },
-  { name: 'text-78', label: 'Telefone comercial', group: 'telefones' },
-  { name: 'radio-10', label: 'Usou outros números?', group: 'telefones' },
-  { name: 'email-1', label: 'E-mail principal', group: 'emails' },
-  { name: 'radio-11', label: 'Usou outros e-mails?', group: 'emails' },
-  { name: 'radio-12', label: 'Presença em mídias sociais?', group: 'midias' },
-  { name: 'text-38', label: 'Número do passaporte', group: 'passaporte' },
-  { name: 'text-40', label: 'País que emitiu', group: 'passaporte' },
-  { name: 'text-39', label: 'Cidade de emissão', group: 'passaporte' },
-  { name: 'text-88', label: 'Estado de emissão', group: 'passaporte' },
-  { name: 'text-66', label: 'Data de emissão', group: 'passaporte' },
-  { name: 'text-67', label: 'Data de validade', group: 'passaporte' },
-  { name: 'radio-13', label: 'Passaporte perdido/roubado?', group: 'passaporte' },
-  { name: 'name-2', label: 'Contato nos EUA (nome)', group: 'contato' },
-  { name: 'text-41_contato', label: 'Endereço (EUA)', group: 'contato' },
-  { name: 'text-42_contato', label: 'Cidade (EUA)', group: 'contato' },
-  { name: 'text-43_contato', label: 'Estado (EUA)', group: 'contato' },
-  { name: 'email-4_contato', label: 'CEP (EUA)', group: 'contato' },
-  { name: 'checkbox-15[]', label: 'Relacionamento com contato', group: 'contato' },
-  { name: 'email-5', label: 'Telefone do contato (EUA)', group: 'contato' },
-  { name: 'email-3', label: 'E-mail do contato (EUA)', group: 'contato' },
-  { name: 'nome_pai', label: 'Nome do pai', group: 'familiares' },
-  { name: 'text-44', label: 'Data de nascimento do pai', group: 'familiares' },
-  { name: 'radio-14', label: 'Pai nos EUA?', group: 'familiares' },
-  { name: 'checkbox-16[]', label: 'Status do pai', group: 'familiares' },
-  { name: 'nome_mae', label: 'Nome da mãe', group: 'familiares' },
-  { name: 'text-45', label: 'Data de nascimento da mãe', group: 'familiares' },
-  { name: 'radio-15', label: 'Mãe nos EUA?', group: 'familiares' },
-  { name: 'checkbox-17[]', label: 'Status da mãe', group: 'familiares' },
-  { name: 'radio-16', label: 'Parentes imediatos nos EUA?', group: 'familiares' },
-  { name: 'spouse_fullname', label: 'Nome do cônjuge', group: 'conjuge' },
-  { name: 'spouse-dob', label: 'Data de nascimento do cônjuge', group: 'conjuge' },
-  { name: 'spouse-nationality', label: 'Nacionalidade do cônjuge', group: 'conjuge' },
-  { name: 'spouse-city', label: 'Cidade de nascimento do cônjuge', group: 'conjuge' },
-  { name: 'spouse-country', label: 'País de nascimento do cônjuge', group: 'conjuge' },
-  { name: 'spouse-address-same', label: 'Endereço do cônjuge', group: 'conjuge' },
-  { name: 'spouse_endereco', label: 'Endereço (diferente)', group: 'conjuge' },
-  { name: 'spouse_cidade', label: 'Cidade', group: 'conjuge' },
-  { name: 'spouse_estado', label: 'Estado', group: 'conjuge' },
-  { name: 'spouse_cep', label: 'CEP', group: 'conjuge' },
-  { name: 'spouse_pais', label: 'País', group: 'conjuge' },
-  { name: 'ex_fullname', label: 'Nome do ex‑cônjuge', group: 'exConjuge' },
-  { name: 'ex_dob', label: 'Data de nascimento', group: 'exConjuge' },
-  { name: 'ex_nationality', label: 'Nacionalidade', group: 'exConjuge' },
-  { name: 'ex_city', label: 'Cidade de nascimento', group: 'exConjuge' },
-  { name: 'ex_country', label: 'País de nascimento', group: 'exConjuge' },
-  { name: 'data_casamento_div', label: 'Data do Casamento', group: 'exConjuge' },
-  { name: 'data_divorcio', label: 'Data do Divórcio', group: 'exConjuge' },
-  { name: 'cidade_divorcio', label: 'Cidade do Divórcio', group: 'exConjuge' },
-  { name: 'como_divorcio', label: 'Como se deu o Divórcio', group: 'exConjuge' },
-  { name: 'falecido_fullname', label: 'Nome do cônjuge falecido', group: 'viuvo' },
-  { name: 'falecido_dob', label: 'Data de nascimento', group: 'viuvo' },
-  { name: 'falecido_nationality', label: 'Nacionalidade', group: 'viuvo' },
-  { name: 'falecido_city', label: 'Cidade de nascimento', group: 'viuvo' },
-  { name: 'falecido_country', label: 'País de nascimento', group: 'viuvo' },
-  { name: 'data_falecimento', label: 'Data do Falecimento', group: 'viuvo' },
-  { name: 'radio-27', label: 'Ocupação principal', group: 'trabalhoAtual' },
-  { name: 'text-49', label: 'Empregador / escola', group: 'trabalhoAtual' },
-  { name: 'text-101', label: 'Endereço', group: 'trabalhoAtual' },
-  { name: 'text-102', label: 'Cidade', group: 'trabalhoAtual' },
-  { name: 'text-104', label: 'Estado', group: 'trabalhoAtual' },
-  { name: 'text-103', label: 'CEP', group: 'trabalhoAtual' },
-  { name: 'phone-8', label: 'Telefone', group: 'trabalhoAtual' },
-  { name: 'text-50', label: 'Data início', group: 'trabalhoAtual' },
-  { name: 'text-51', label: 'Renda mensal (R$)', group: 'trabalhoAtual' },
-  { name: 'text-52', label: 'Descrição das funções', group: 'trabalhoAtual' },
-  { name: 'radio-17', label: 'Teve empregos anteriores?', group: 'empregosAnteriores' },
-  { name: 'radio-18', label: 'Escolaridade secundário/superior?', group: 'escolaridade' },
-  { name: 'text-59', label: 'Instituição de ensino', group: 'escolaridade' },
-  { name: 'text-60', label: 'Curso', group: 'escolaridade' },
-  { name: 'text-111', label: 'Endereço da instituição', group: 'escolaridade' },
-  { name: 'text-112', label: 'Cidade', group: 'escolaridade' },
-  { name: 'text-114', label: 'Estado', group: 'escolaridade' },
-  { name: 'text-113', label: 'CEP', group: 'escolaridade' },
-  { name: 'text-61', label: 'Data início', group: 'escolaridade' },
-  { name: 'text-62', label: 'Data conclusão', group: 'escolaridade' },
-  { name: 'radio-19', label: 'Fala outros idiomas?', group: 'idiomas' },
-  { name: 'radio-20', label: 'Viajou para outros países?', group: 'paises' },
-  { name: 'servico_militar', label: 'Serviu nas forcas armadas?', group: 'military' },
-  { name: 'military_country', label: 'Pais', group: 'military' },
-  { name: 'military_branch', label: 'Ramo das Forcas Armadas', group: 'military' },
-  { name: 'military_rank', label: 'Patente / Posicao', group: 'military' },
-  { name: 'military_specialty', label: 'Especialidade Militar', group: 'military' },
-  { name: 'military_date_from', label: 'Data de inicio', group: 'military' },
-  { name: 'military_date_to', label: 'Data de termino', group: 'military' },
-  { name: 'treinamento_especializado', label: 'Treinamento especializado?', group: 'training' },
-  { name: 'treinamento_descricao', label: 'Descricao do treinamento', group: 'training' },
-  { name: 'antecedentes_criminais', label: 'Antecedentes criminais?', group: 'security' },
-  { name: 'antecedentes_descricao', label: 'Descricao dos antecedentes', group: 'security' },
-  { name: 'antecedentes_data', label: 'Data do ocorrido', group: 'security' },
-  { name: 'antecedentes_local', label: 'Local', group: 'security' },
-  { name: 'antecedentes_resolucao', label: 'Resolucao do caso', group: 'security' }
-];
-
 // ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
@@ -618,8 +398,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        doc.fillColor('#003366').fontSize(22).text('SOLICITACAO DE VISTO DS-160', { align: 'center' });
-        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentacao Consular', { align: 'center' });
+        doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE VISTO DS-160', { align: 'center' });
+        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
         doc.moveDown(2);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
@@ -650,41 +430,40 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = false;
         }
 
-        startSection('INFORMACOES INICIAIS');
+        startSection('INFORMAÇÕES INICIAIS');
         renderField('consulado_cidade', 'Cidade do Consulado');
-        if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
-          renderField('text-1', 'Nome da agencia/agente');
+        if (renderField('radio-26', 'Indicado por agência/agente?') && data['radio-26'] === 'one') {
+          renderField('text-1', 'Nome da agência/agente');
         }
         renderField('text-64', 'Idioma usado para preencher');
         hasContentInSection = true;
 
-        startSection('INFORMACOES PESSOAIS');
+        startSection('INFORMAÇÕES PESSOAIS');
         renderField('full_name', 'Nome completo');
-        if (renderField('radio-2', 'Ja teve outro nome?') && data['radio-2'] === 'one') {
+        if (renderField('radio-2', 'Já teve outro nome?') && data['radio-2'] === 'one') {
           renderField('text-87', 'Nome anterior');
         }
         renderField('radio-3', 'Sexo');
         renderField('select-4', 'Estado civil');
         renderField('text-5', 'Data de nascimento');
         renderField('text-7', 'Cidade de nascimento');
-        renderField('text-6', 'Estado/Provincia');
-        renderField('text-95', 'Pais de nacionalidade');
+        renderField('text-6', 'Estado/Província');
+        renderField('text-95', 'País de nacionalidade');
         if (renderField('radio-outra-nac', 'Possui outra nacionalidade?') && data['radio-outra-nac'] === 'one') {
           renderField('outra_nacionalidade_text', 'Qual outra nacionalidade?');
         }
-        renderField('radio-residente', 'Residente permanente de outro pais?');
+        renderField('radio-residente', 'Residente permanente de outro país?');
         renderField('text-86', 'CPF');
-        renderField('text-17', 'Numero do Seguro Social (SSN)');
-        renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
+        renderField('text-17', 'Número do Seguro Social (SSN)');
+        renderField('text-18', 'Número do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
-         
-        startSection('INFORMACOES DA VIAGEM');
-        renderField('radio-28', 'Proposito da viagem');
-        renderField('radio-planos', 'Planos especificos?');
+        startSection('INFORMAÇÕES DA VIAGEM');
+        renderField('radio-28', 'Propósito da viagem');
+        renderField('radio-planos', 'Planos específicos?');
         renderField('text-21', 'Data de chegada prevista');
-        renderField('text-34', 'Duracao da estadia (dias)');
-        renderField('text-41', 'Endereco nos EUA');
+        renderField('text-34', 'Duração da estadia (dias)');
+        renderField('text-41', 'Endereço nos EUA');
         renderField('text-42', 'Cidade (EUA)');
         renderField('text-43', 'Estado (EUA)');
         renderField('email-4', 'CEP (EUA)');
@@ -696,16 +475,16 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-25', 'Relacionamento com pagador');
         renderField('phone-1', 'Telefone do pagador');
         renderField('text-24', 'E-mail do pagador');
-        renderField('text-26', 'Endereco do pagador');
+        renderField('text-26', 'Endereço do pagador');
         renderField('text-27', 'Cidade do pagador');
         renderField('text-96', 'UF do pagador');
         renderField('text-29', 'CEP do pagador');
-        renderField('text-30', 'Pais do pagador');
+        renderField('text-30', 'País do pagador');
         hasContentInSection = true;
 
         if (data['radio-7'] === 'one') {
           startSection('ACOMPANHANTES');
-          renderField('radio-7', 'Ha acompanhantes?');
+          renderField('radio-7', 'Há acompanhantes?');
           const acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
           if (acompanhantes.length > 0) {
             doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
@@ -715,9 +494,9 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-        /*if (data['radio-8'] === 'one') {
-          startSection('HISTORICO DE VIAGENS AOS EUA');
-          renderField('radio-8', 'Ja esteve nos EUA?');
+        if (data['radio-8'] === 'one') {
+          startSection('HISTÓRICO DE VIAGENS AOS EUA');
+          renderField('radio-8', 'Já esteve nos EUA?');
           const viagens = groupTravels(data);
           if (viagens.length > 0) {
             doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
@@ -725,127 +504,131 @@ app.post('/api/submit-ds160', async (req, res) => {
             doc.moveDown(0.6);
           }
           hasContentInSection = true;
-        } */
+        }
 
         if (data['radio-23'] === 'one') {
-          startSection('INFORMACOES DO VISTO');
-          renderField('radio-23', 'Ja teve visto americano?');
-          renderField('text-35', 'Data de emissao do visto');
-          renderField('text-68', 'Numero do visto');
-          renderField('text-69', 'Data de expiracao');
-          renderField('radio-33', 'Impressoes digitais coletadas?');
+          startSection('INFORMAÇÕES DO VISTO');
+          renderField('radio-23', 'Já teve visto americano?');
+          renderField('text-35', 'Data de emissão do visto');
+          renderField('text-68', 'Número do visto');
+          renderField('text-69', 'Data de expiração');
+          renderField('radio-33', 'Impressões digitais coletadas?');
           renderField('radio-29', 'Mesmo tipo de visto?');
-          renderField('radio-30', 'Mesmo pais de emissao?');
+          renderField('radio-30', 'Mesmo país de emissão?');
           hasContentInSection = true;
         }
 
-            // ==================== INFORMAÇÕES DE VIAGENS AOS EUA (VERSÃO AMIGÁVEL) ====================
-startSection('INFORMAÇÕES DE VIAGENS AOS EUA');
-doc.fillColor('#2c7da0').fontSize(9).font('Helvetica').text('O formulário DS-160 oficial do governo americano solicita estas informações para completar seu cadastro.', { align: 'center' });
-doc.fillColor('#61a5c2').fontSize(8).font('Helvetica').text('Responder com honestidade ajuda a demonstrar transparência no seu processo.', { align: 'center' });
-doc.moveDown(0.5);
-doc.fillColor('#000000').fontSize(10);
-
-// Pergunta 1: Visto Negado
-let vistoNegado = data['radio-visto-negado'];
-if (vistoNegado === 'one') vistoNegado = 'Sim';
-else if (vistoNegado === 'two') vistoNegado = 'Não';
-
-doc.font('Helvetica-Bold').text('1. Você já teve um visto americano negado anteriormente?');
-doc.font('Helvetica').text(`   Resposta: ${vistoNegado || 'Não informado'}`);
-doc.moveDown(0.3);
-
-if (data['radio-visto-negado'] === 'one') {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-visto-negado-ano'] || 'Não informado'}`);
-    doc.text(`   • Consulado: ${data['text-visto-negado-consulado'] || 'Não informado'}`);
-    doc.text(`   • Tipo de visto: ${data['select-visto-negado-tipo'] || 'Não informado'}`);
-    doc.fillColor('#000000');
-}
-
-doc.moveDown(0.3);
-
-// Pergunta 2: Entrada Negada
-let entradaNegada = data['radio-entrada-negada'];
-if (entradaNegada === 'one') entradaNegada = 'Sim';
-else if (entradaNegada === 'two') entradaNegada = 'Não';
-
-doc.font('Helvetica-Bold').text('2. Você já teve a entrada negada nos EUA pelo oficial de imigração?');
-doc.font('Helvetica').text(`   Resposta: ${entradaNegada || 'Não informado'}`);
-doc.moveDown(0.3);
-
-if (data['radio-entrada-negada'] === 'one') {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-entrada-negada-ano'] || 'Não informado'}`);
-    doc.text(`   • Local: ${data['text-entrada-negada-local'] || 'Não informado'}`);
-    doc.text(`   • Motivo: ${data['textarea-entrada-negada-motivo'] || 'Não informado'}`);
-    doc.fillColor('#000000');
-}
-
-doc.moveDown(0.3);
-
-// Pergunta 3: Deportacao
-let deportado = data['radio-deportado'];
-if (deportado === 'one') deportado = 'Sim';
-else if (deportado === 'two') deportado = 'Não';
-
-doc.font('Helvetica-Bold').text('3. Você já foi deportado ou removido dos Estados Unidos?');
-doc.font('Helvetica').text(`   Resposta: ${deportado || 'Não informado'}`);
-doc.moveDown(0.3);
-
-if (data['radio-deportado'] === 'one') {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-deportado-ano'] || 'Não informado'}`);
-    let duracao = data['select-deportado-duracao'] || '';
-    if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
-    else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
-    else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
-    else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
-    doc.text(`   • Período: ${duracao || 'Não informado'}`);
-    doc.fillColor('#000000');
-}
-
-doc.moveDown(0.5);
-
-// Detalhes adicionais
-if (data['textarea-detalhes-negativa']) {
-    doc.fillColor('#2c7da0').fontSize(9).font('Helvetica-Bold').text('📝 Informações adicionais:');
-    doc.fillColor('#555555').fontSize(9).font('Helvetica').text(data['textarea-detalhes-negativa']);
-    doc.fillColor('#000000');
-    doc.moveDown(0.3);
-}
-
-hasContentInSection = true;
-
-// Linha separadora suave
-doc.moveDown(0.3);
-doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-doc.moveDown(0.3);
+        // ==================== SEÇÃO AMIGÁVEL - INFORMAÇÕES COMPLEMENTARES ====================
+        startSection('INFORMAÇÕES COMPLEMENTARES');
         
-        startSection('ENDERECO RESIDENCIAL');
+        doc.fillColor('#2c7da0').fontSize(9).font('Helvetica').text('Estas informações fazem parte do formulário DS-160 oficial.', { align: 'center' });
+        doc.fillColor('#61a5c2').fontSize(8).font('Helvetica').text('Responder com transparência é sempre o melhor caminho para o seu processo.', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10);
+
+        // Pergunta 1: Visto Negado
+        let vistoNegado = data['radio-visto-negado'];
+        if (vistoNegado === 'one') vistoNegado = 'Sim';
+        else if (vistoNegado === 'two') vistoNegado = 'Não';
+
+        doc.font('Helvetica-Bold').text('1. Você já teve um visto americano negado anteriormente?');
+        doc.font('Helvetica').text(`   Resposta: ${vistoNegado || 'Não informado'}`);
+        doc.moveDown(0.3);
+
+        if (data['radio-visto-negado'] === 'one') {
+            doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-visto-negado-ano'] || 'Não informado'}`);
+            doc.text(`   • Consulado: ${data['text-visto-negado-consulado'] || 'Não informado'}`);
+            doc.text(`   • Tipo de visto: ${data['select-visto-negado-tipo'] || 'Não informado'}`);
+            doc.fillColor('#000000');
+        }
+
+        doc.moveDown(0.3);
+
+        // Pergunta 2: Entrada Negada
+        let entradaNegada = data['radio-entrada-negada'];
+        if (entradaNegada === 'one') entradaNegada = 'Sim';
+        else if (entradaNegada === 'two') entradaNegada = 'Não';
+
+        doc.font('Helvetica-Bold').text('2. Você já teve a entrada negada nos EUA pelo oficial de imigração?');
+        doc.font('Helvetica').text(`   Resposta: ${entradaNegada || 'Não informado'}`);
+        doc.moveDown(0.3);
+
+        if (data['radio-entrada-negada'] === 'one') {
+            doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-entrada-negada-ano'] || 'Não informado'}`);
+            doc.text(`   • Local: ${data['text-entrada-negada-local'] || 'Não informado'}`);
+            doc.text(`   • Motivo: ${data['textarea-entrada-negada-motivo'] || 'Não informado'}`);
+            doc.fillColor('#000000');
+        }
+
+        doc.moveDown(0.3);
+
+        // Pergunta 3: Deportação
+        let deportado = data['radio-deportado'];
+        if (deportado === 'one') deportado = 'Sim';
+        else if (deportado === 'two') deportado = 'Não';
+
+        doc.font('Helvetica-Bold').text('3. Você já foi deportado ou removido dos Estados Unidos?');
+        doc.font('Helvetica').text(`   Resposta: ${deportado || 'Não informado'}`);
+        doc.moveDown(0.3);
+
+        if (data['radio-deportado'] === 'one') {
+            doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-deportado-ano'] || 'Não informado'}`);
+            let duracao = data['select-deportado-duracao'] || '';
+            if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
+            else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
+            else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
+            else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
+            doc.text(`   • Período: ${duracao || 'Não informado'}`);
+            doc.fillColor('#000000');
+        }
+
+        doc.moveDown(0.5);
+
+        // Detalhes adicionais
+        if (data['textarea-detalhes-negativa']) {
+            doc.fillColor('#2c7da0').fontSize(9).font('Helvetica-Bold').text('📝 Informações adicionais:');
+            doc.fillColor('#555555').fontSize(9).font('Helvetica').text(data['textarea-detalhes-negativa']);
+            doc.fillColor('#000000');
+            doc.moveDown(0.3);
+        }
+
+        doc.fillColor('#2d6a4f').fontSize(9).font('Helvetica-Bold').text('✅ A transparência fortalece o seu processo!', { align: 'center' });
+        doc.fillColor('#666666').fontSize(8).font('Helvetica').text('Estas informações são exigidas pelo formulário oficial do governo dos EUA', { align: 'center' });
+
+        hasContentInSection = true;
+
+        // Linha separadora suave
+        doc.moveDown(0.3);
+        doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.3);
+
+        startSection('ENDEREÇO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
         renderField('text-72', 'Complemento');
         renderField('text-73', 'CEP');
         renderField('text-74', 'Cidade');
         renderField('text-75', 'Estado');
-        renderField('text-76', 'Pais');
+        renderField('text-76', 'País');
         hasContentInSection = true;
 
-        startSection('ENDERECO DE CORRESPONDENCIA');
-        renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
+        startSection('ENDEREÇO DE CORRESPONDÊNCIA');
+        renderField('radio-9', 'Endereço de correspondência é o mesmo?');
         if (data['radio-9'] === 'Não, é diferente') {
-          doc.font('Helvetica-Bold').fontSize(10).text('Endereco de correspondencia (diferente):');
+          doc.font('Helvetica-Bold').fontSize(10).text('Endereço de correspondência (diferente):');
           doc.moveDown(0.3);
           renderField('text-80', '  Logradouro');
           renderField('text-81', '  Complemento');
           renderField('text-82', '  CEP');
           renderField('text-83', '  Cidade');
           renderField('text-84', '  Estado');
-          renderField('text-85', '  Pais');
+          renderField('text-85', '  País');
         }
         hasContentInSection = true;
 
         startSection('TELEFONES');
         renderField('text-77', 'Telefone principal');
         renderField('text-78', 'Telefone comercial');
-        if (renderField('radio-10', 'Usou outros numeros?') && data['radio-10'] === 'one') {
+        if (renderField('radio-10', 'Usou outros números?') && data['radio-10'] === 'one') {
           const telefones = data['telefones_anteriores[]'] || [];
           if (telefones.length > 0) {
             doc.font('Helvetica-Bold').fontSize(10).text('Telefones anteriores: ', { continued: true });
@@ -867,8 +650,8 @@ doc.moveDown(0.3);
         }
         hasContentInSection = true;
 
-        startSection('MIDIAS SOCIAIS');
-        if (renderField('radio-12', 'Presenca em midias sociais?') && data['radio-12'] === 'one') {
+        startSection('MÍDIAS SOCIAIS');
+        if (renderField('radio-12', 'Presença em mídias sociais?') && data['radio-12'] === 'one') {
           const plataformas = data['midia_plataforma[]'] || [];
           const identificadores = data['midia_identificador[]'] || [];
           const midias = [];
@@ -878,7 +661,7 @@ doc.moveDown(0.3);
             }
           }
           if (midias.length > 0) {
-            doc.font('Helvetica-Bold').fontSize(10).text('Midias sociais: ', { continued: true });
+            doc.font('Helvetica-Bold').fontSize(10).text('Mídias sociais: ', { continued: true });
             doc.font('Helvetica').text(midias.join('; '));
             doc.moveDown(0.6);
           }
@@ -886,18 +669,18 @@ doc.moveDown(0.3);
         hasContentInSection = true;
 
         startSection('PASSAPORTE');
-        renderField('text-38', 'Numero do passaporte');
-        renderField('text-40', 'Pais que emitiu');
-        renderField('text-39', 'Cidade de emissao');
-        renderField('text-88', 'Estado de emissao');
-        renderField('text-66', 'Data de emissao');
+        renderField('text-38', 'Número do passaporte');
+        renderField('text-40', 'País que emitiu');
+        renderField('text-39', 'Cidade de emissão');
+        renderField('text-88', 'Estado de emissão');
+        renderField('text-66', 'Data de emissão');
         renderField('text-67', 'Data de validade');
         renderField('radio-13', 'Passaporte perdido/roubado?');
         hasContentInSection = true;
 
         startSection('CONTATO NOS EUA');
         renderField('name-2', 'Contato nos EUA (nome)');
-        renderField('text-41_contato', 'Endereco (EUA)');
+        renderField('text-41_contato', 'Endereço (EUA)');
         renderField('text-42_contato', 'Cidade (EUA)');
         renderField('text-43_contato', 'Estado (EUA)');
         renderField('email-4_contato', 'CEP (EUA)');
@@ -912,10 +695,10 @@ doc.moveDown(0.3);
         if (renderField('radio-14', 'Pai nos EUA?') && data['radio-14'] === 'one') {
           renderField('checkbox-16[]', 'Status do pai');
         }
-        renderField('nome_mae', 'Nome da mae');
-        renderField('text-45', 'Data de nascimento da mae');
-        if (renderField('radio-15', 'Mae nos EUA?') && data['radio-15'] === 'one') {
-          renderField('checkbox-17[]', 'Status da mae');
+        renderField('nome_mae', 'Nome da mãe');
+        renderField('text-45', 'Data de nascimento da mãe');
+        if (renderField('radio-15', 'Mãe nos EUA?') && data['radio-15'] === 'one') {
+          renderField('checkbox-17[]', 'Status da mãe');
         }
         if (renderField('radio-16', 'Parentes imediatos nos EUA?') && data['radio-16'] === 'one') {
           const parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
@@ -928,63 +711,63 @@ doc.moveDown(0.3);
         hasContentInSection = true;
 
         if (data['spouse_fullname']) {
-          startSection('CONJUGE');
-          renderField('spouse_fullname', 'Nome do conjuge');
-          renderField('spouse-dob', 'Data de nascimento do conjuge');
-          renderField('spouse-nationality', 'Nacionalidade do conjuge');
-          renderField('spouse-city', 'Cidade de nascimento do conjuge');
-          renderField('spouse-country', 'Pais de nascimento do conjuge');
-          if (renderField('spouse-address-same', 'Endereco do conjuge') && data['spouse-address-same'] === 'Diferente') {
-            renderField('spouse_endereco', 'Endereco (diferente)');
+          startSection('CÔNJUGE');
+          renderField('spouse_fullname', 'Nome do cônjuge');
+          renderField('spouse-dob', 'Data de nascimento do cônjuge');
+          renderField('spouse-nationality', 'Nacionalidade do cônjuge');
+          renderField('spouse-city', 'Cidade de nascimento do cônjuge');
+          renderField('spouse-country', 'País de nascimento do cônjuge');
+          if (renderField('spouse-address-same', 'Endereço do cônjuge') && data['spouse-address-same'] === 'Diferente') {
+            renderField('spouse_endereco', 'Endereço (diferente)');
             renderField('spouse_cidade', 'Cidade');
             renderField('spouse_estado', 'Estado');
             renderField('spouse_cep', 'CEP');
-            renderField('spouse_pais', 'Pais');
+            renderField('spouse_pais', 'País');
           }
           hasContentInSection = true;
         }
 
         if (data['ex_fullname']) {
-          startSection('EX-CONJUGE');
-          renderField('ex_fullname', 'Nome do ex-conjuge');
+          startSection('EX-CÔNJUGE');
+          renderField('ex_fullname', 'Nome do ex-cônjuge');
           renderField('ex_dob', 'Data de nascimento');
           renderField('ex_nationality', 'Nacionalidade');
           renderField('ex_city', 'Cidade de nascimento');
-          renderField('ex_country', 'Pais de nascimento');
+          renderField('ex_country', 'País de nascimento');
           renderField('data_casamento_div', 'Data do Casamento');
-          renderField('data_divorcio', 'Data do Divorcio');
-          renderField('cidade_divorcio', 'Cidade do Divorcio');
-          renderField('como_divorcio', 'Como se deu o Divorcio');
+          renderField('data_divorcio', 'Data do Divórcio');
+          renderField('cidade_divorcio', 'Cidade do Divórcio');
+          renderField('como_divorcio', 'Como se deu o Divórcio');
           hasContentInSection = true;
         }
 
         if (data['falecido_fullname']) {
-          startSection('CONJUGE FALECIDO');
-          renderField('falecido_fullname', 'Nome do conjuge falecido');
+          startSection('CÔNJUGE FALECIDO');
+          renderField('falecido_fullname', 'Nome do cônjuge falecido');
           renderField('falecido_dob', 'Data de nascimento');
           renderField('falecido_nationality', 'Nacionalidade');
           renderField('falecido_city', 'Cidade de nascimento');
-          renderField('falecido_country', 'Pais de nascimento');
+          renderField('falecido_country', 'País de nascimento');
           renderField('data_falecimento', 'Data do Falecimento');
           hasContentInSection = true;
         }
 
-        startSection('OCUPACAO ATUAL');
-        renderField('radio-27', 'Ocupacao principal');
+        startSection('OCUPAÇÃO ATUAL');
+        renderField('radio-27', 'Ocupação principal');
         renderField('text-49', 'Empregador / escola');
-        renderField('text-101', 'Endereco');
+        renderField('text-101', 'Endereço');
         renderField('text-102', 'Cidade');
         renderField('text-104', 'Estado');
         renderField('text-103', 'CEP');
         renderField('phone-8', 'Telefone');
-        renderField('text-50', 'Data inicio');
+        renderField('text-50', 'Data início');
         renderField('text-51', 'Renda mensal (R$)');
-        renderField('text-52', 'Descricao das funcoes');
+        renderField('text-52', 'Descrição das funções');
         hasContentInSection = true;
 
         const extra_descricoes = data['extra_descricao[]'] || [];
         if (extra_descricoes.length > 0) {
-          startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
+          startSection('OUTRAS OCUPAÇÕES / FONTES DE RENDA');
           const extra_rendas = data['extra_renda[]'] || [];
           const extra_empregadores = data['extra_empregador[]'] || [];
           const extra_inicios = data['extra_data_inicio[]'] || [];
@@ -995,14 +778,14 @@ doc.moveDown(0.3);
           const extra_ceps = data['extra_cep[]'] || [];
           
           for (let i = 0; i < extra_descricoes.length; i++) {
-            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupacao adicional ${i+1}: ${extra_descricoes[i] || '(nao informado)'}`);
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text(`Ocupação adicional ${i+1}: ${extra_descricoes[i] || '(não informado)'}`);
             if (extra_empregadores[i]) doc.font('Helvetica').text(`  Empregador: ${extra_empregadores[i]}`);
             if (extra_rendas[i]) doc.font('Helvetica').text(`  Renda mensal: ${extra_rendas[i]}`);
             if (extra_inicios[i]) {
               const dataInicioFormatada = formatDateToBrazilian(extra_inicios[i]);
-              doc.font('Helvetica').text(`  Data inicio: ${dataInicioFormatada}`);
+              doc.font('Helvetica').text(`  Data início: ${dataInicioFormatada}`);
             }
-            if (extra_enderecos[i]) doc.font('Helvetica').text(`  Endereco: ${extra_enderecos[i]}`);
+            if (extra_enderecos[i]) doc.font('Helvetica').text(`  Endereço: ${extra_enderecos[i]}`);
             if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text(`  Cidade/UF: ${extra_cidades[i]} / ${extra_estados[i]}`);
             if (extra_ceps[i]) doc.font('Helvetica').text(`  CEP: ${extra_ceps[i]}`);
             if (extra_telefones[i]) doc.font('Helvetica').text(`  Telefone: ${extra_telefones[i]}`);
@@ -1026,7 +809,7 @@ doc.moveDown(0.3);
                 doc.font('Helvetica-Bold').fontSize(10).text(`Emprego anterior ${i+1}:`);
                 if (empNomes[i]) doc.font('Helvetica').text(`  Empregador: ${empNomes[i]}`);
                 if (empCargos[i]) doc.font('Helvetica').text(`  Cargo: ${empCargos[i]}`);
-                if (empInicios[i] || empFins[i]) doc.font('Helvetica').text(`  Periodo: ${inicio} a ${fim}`);
+                if (empInicios[i] || empFins[i]) doc.font('Helvetica').text(`  Período: ${inicio} a ${fim}`);
                 doc.moveDown(0.4);
               }
             }
@@ -1036,60 +819,60 @@ doc.moveDown(0.3);
 
         if (data['radio-18'] === 'one') {
           startSection('ESCOLARIDADE');
-          renderField('text-59', 'Instituicao de ensino');
+          renderField('text-59', 'Instituição de ensino');
           renderField('text-60', 'Curso');
-          renderField('text-111', 'Endereco da instituicao');
+          renderField('text-111', 'Endereço da instituição');
           renderField('text-112', 'Cidade');
           renderField('text-114', 'Estado');
           renderField('text-113', 'CEP');
-          renderField('text-61', 'Data inicio');
-          renderField('text-62', 'Data conclusao');
+          renderField('text-61', 'Data início');
+          renderField('text-62', 'Data conclusão');
           hasContentInSection = true;
         }
 
-        startSection('SERVICO MILITAR');
+        startSection('SERVIÇO MILITAR');
         if (data['servico_militar'] === 'Sim') {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
+          doc.font('Helvetica-Bold').fontSize(10).text('Você já serviu nas forças armadas?: ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
-          renderField('military_country', 'Pais');
-          renderField('military_branch', 'Ramo das Forcas Armadas');
-          renderField('military_rank', 'Patente / Posicao');
+          renderField('military_country', 'País');
+          renderField('military_branch', 'Ramo das Forças Armadas');
+          renderField('military_rank', 'Patente / Posição');
           renderField('military_specialty', 'Especialidade Militar');
-          renderField('military_date_from', 'Data de inicio');
-          renderField('military_date_to', 'Data de termino');
+          renderField('military_date_from', 'Data de início');
+          renderField('military_date_to', 'Data de término');
         } else {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
-          doc.font('Helvetica').text('Nao');
+          doc.font('Helvetica-Bold').fontSize(10).text('Você já serviu nas forças armadas?: ', { continued: true });
+          doc.font('Helvetica').text('Não');
           doc.moveDown(0.6);
         }
         hasContentInSection = true;
 
         startSection('TREINAMENTO ESPECIALIZADO');
         if (data['treinamento_especializado'] === 'Sim') {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
+          doc.font('Helvetica-Bold').fontSize(10).text('Você tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biológica ou química): ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
-          renderField('treinamento_descricao', 'Descricao do treinamento');
+          renderField('treinamento_descricao', 'Descrição do treinamento');
         } else {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
-          doc.font('Helvetica').text('Nao');
+          doc.font('Helvetica-Bold').fontSize(10).text('Você tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biológica ou química): ', { continued: true });
+          doc.font('Helvetica').text('Não');
           doc.moveDown(0.6);
         }
         hasContentInSection = true;
 
-        startSection('SEGURANCA');
+        startSection('SEGURANÇA');
         if (data['antecedentes_criminais'] === 'Sim') {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
+          doc.font('Helvetica-Bold').fontSize(10).text('Você já foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
           doc.font('Helvetica').text('Sim');
           doc.moveDown(0.6);
-          renderField('antecedentes_descricao', 'Descricao dos antecedentes');
+          renderField('antecedentes_descricao', 'Descrição dos antecedentes');
           renderField('antecedentes_data', 'Data do ocorrido');
           renderField('antecedentes_local', 'Local');
-          renderField('antecedentes_resolucao', 'Resolucao do caso');
+          renderField('antecedentes_resolucao', 'Resolução do caso');
         } else {
-          doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
-          doc.font('Helvetica').text('Nao');
+          doc.font('Helvetica-Bold').fontSize(10).text('Você já foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
+          doc.font('Helvetica').text('Não');
           doc.moveDown(0.6);
         }
         hasContentInSection = true;
@@ -1109,7 +892,7 @@ doc.moveDown(0.3);
         if (data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
           if (paises.length > 0) {
-            doc.font('Helvetica-Bold').fontSize(10).text('Paises visitados (ultimos 5 anos): ', { continued: true });
+            doc.font('Helvetica-Bold').fontSize(10).text('Países visitados (últimos 5 anos): ', { continued: true });
             doc.font('Helvetica').text(paises.join(', '));
             doc.moveDown(0.6);
           }
@@ -1127,20 +910,19 @@ doc.moveDown(0.3);
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `🇺🇸 DS-160: ${nome}`,
-        html: `<strong>Formulario DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
+        html: `<strong>Formulário DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
         attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
       });
       console.log('✅ E-mail enviado para a equipe');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
           if (isEmailClienteValido(emailCliente, nome)) {
               try {
                   await resend.emails.send({
                       from: 'GetVisa <contato@getvisa.com.br>',
                       to: [emailCliente],
-                      subject: `Seu formulario DS-160 foi recebido - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>`,
+                      subject: `Seu formulário DS-160 foi recebido - ${nome}`,
+                      html: `<strong>Olá ${nome},</strong><br><p>Recebemos seu formulário. Segue em anexo uma cópia.</p><p>Em breve nossa equipe entrará em contato.</p>`,
                       attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
                   console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
@@ -1149,7 +931,6 @@ doc.moveDown(0.3);
               }
           } else {
               console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
           }
       } else {
           console.log(`⚠️ Cliente sem e-mail: ${nome}`);
@@ -1171,15 +952,12 @@ app.post('/api/submit-avaliacao', async (req, res) => {
       const nome = data['nome'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email'] || null;
       
-      // 🔥 CORREÇÃO: Normalizar telefone
       let telefoneCliente = data['telefone'] || data['whatsapp'] || null;
       if (telefoneCliente) {
         telefoneCliente = telefoneCliente.toString().replace(/\D/g, '');
-        // Remove 55 do início se existir
         if (telefoneCliente.startsWith('55')) {
           telefoneCliente = telefoneCliente.substring(2);
         }
-        // Se ainda tiver 12 dígitos (com 9 extra), ajusta
         if (telefoneCliente.length === 12) {
           telefoneCliente = telefoneCliente.substring(1);
         }
@@ -1270,8 +1048,8 @@ app.post('/api/submit-passaporte', async (req, res) => {
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        doc.fillColor('#003366').fontSize(22).text('SOLICITACAO DE PASSAPORTE', { align: 'center' });
-        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentacao Consular', { align: 'center' });
+        doc.fillColor('#003366').fontSize(22).text('SOLICITAÇÃO DE PASSAPORTE', { align: 'center' });
+        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
         doc.moveDown(2);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
@@ -1280,39 +1058,39 @@ app.post('/api/submit-passaporte', async (req, res) => {
           { label: 'Nome completo', name: 'passaporte_nome' },
           { label: 'Sexo', name: 'passaporte_sexo' },
           { label: 'Data de nascimento', name: 'passaporte_data_nasc' },
-          { label: 'Raca/Cor', name: 'passaporte_raca' },
+          { label: 'Raça/Cor', name: 'passaporte_raca' },
           { label: 'Estado civil', name: 'passaporte_estado_civil' },
-          { label: 'Pais de nascimento', name: 'passaporte_pais_nasc' },
+          { label: 'País de nascimento', name: 'passaporte_pais_nasc' },
           { label: 'UF de nascimento', name: 'passaporte_uf_nasc' },
           { label: 'Cidade de nascimento', name: 'passaporte_cidade_nasc' },
-          { label: 'Alteracao de nome?', name: 'passaporte_alterou_nome' },
+          { label: 'Alteração de nome?', name: 'passaporte_alterou_nome' },
           { label: 'Nome(s) anterior(es)', name: 'passaporte_nome_anterior' },
           { label: 'Tipo de documento', name: 'passaporte_tipo_doc' },
-          { label: 'Numero do documento', name: 'passaporte_numero_doc' },
-          { label: 'Data de emissao do documento', name: 'passaporte_data_emissao_doc' },
-          { label: 'Orgao emissor e UF', name: 'passaporte_orgao_emissor' },
+          { label: 'Número do documento', name: 'passaporte_numero_doc' },
+          { label: 'Data de emissão do documento', name: 'passaporte_data_emissao_doc' },
+          { label: 'Órgão emissor e UF', name: 'passaporte_orgao_emissor' },
           { label: 'CPF', name: 'passaporte_cpf' },
-          { label: 'Possui certidao?', name: 'passaporte_certidao' },
-          { label: 'Certidao - Numero da matricula', name: 'passaporte_certidao_numero' },
-          { label: 'Certidao - Cartorio', name: 'passaporte_certidao_cartorio' },
-          { label: 'Certidao - Livro', name: 'passaporte_certidao_livro' },
-          { label: 'Certidao - Folha', name: 'passaporte_certidao_folha' },
-          { label: 'Profissao', name: 'passaporte_profissao' },
+          { label: 'Possui certidão?', name: 'passaporte_certidao' },
+          { label: 'Certidão - Número da matrícula', name: 'passaporte_certidao_numero' },
+          { label: 'Certidão - Cartório', name: 'passaporte_certidao_cartorio' },
+          { label: 'Certidão - Livro', name: 'passaporte_certidao_livro' },
+          { label: 'Certidão - Folha', name: 'passaporte_certidao_folha' },
+          { label: 'Profissão', name: 'passaporte_profissao' },
           { label: 'E-mail', name: 'passaporte_email' },
           { label: 'Telefone de contato', name: 'passaporte_telefone' },
-          { label: 'Endereco residencial', name: 'passaporte_endereco' },
+          { label: 'Endereço residencial', name: 'passaporte_endereco' },
           { label: 'Cidade', name: 'passaporte_cidade' },
           { label: 'UF', name: 'passaporte_uf' },
           { label: 'CEP', name: 'passaporte_cep' },
-          { label: 'Possui titulo de eleitor?', name: 'passaporte_titulo_eleitor' },
-          { label: 'Titulo - Numero', name: 'passaporte_titulo_numero' },
-          { label: 'Titulo - Zona', name: 'passaporte_titulo_zona' },
-          { label: 'Titulo - Secao', name: 'passaporte_titulo_secao' },
-          { label: 'Situacao militar', name: 'passaporte_situacao_militar' },
+          { label: 'Possui título de eleitor?', name: 'passaporte_titulo_eleitor' },
+          { label: 'Título - Número', name: 'passaporte_titulo_numero' },
+          { label: 'Título - Zona', name: 'passaporte_titulo_zona' },
+          { label: 'Título - Seção', name: 'passaporte_titulo_secao' },
+          { label: 'Situação militar', name: 'passaporte_situacao_militar' },
           { label: 'Certificado de reservista', name: 'passaporte_reservista_numero' },
-          { label: 'Situacao do passaporte anterior', name: 'passaporte_situacao' },
-          { label: 'Numero do passaporte anterior', name: 'passaporte_anterior_numero' },
-          { label: 'Data de expedicao anterior', name: 'passaporte_anterior_data_exp' },
+          { label: 'Situação do passaporte anterior', name: 'passaporte_situacao' },
+          { label: 'Número do passaporte anterior', name: 'passaporte_anterior_numero' },
+          { label: 'Data de expedição anterior', name: 'passaporte_anterior_data_exp' },
           { label: 'Data de validade anterior', name: 'passaporte_anterior_validade' }
         ];
 
@@ -1346,20 +1124,19 @@ app.post('/api/submit-passaporte', async (req, res) => {
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `📘 Passaporte: ${nome}`,
-        html: `<strong>Solicitacao de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
+        html: `<strong>Solicitação de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
         attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
       });
       console.log('✅ E-mail enviado para a equipe (passaporte)');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
           if (isEmailClienteValido(emailCliente, nome)) {
               try {
                   await resend.emails.send({
                       from: 'GetVisa <contato@getvisa.com.br>',
                       to: [emailCliente],
-                      subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
+                      subject: `Sua solicitação de passaporte foi recebida - ${nome}`,
+                      html: `<strong>Olá ${nome},</strong><br><p>Recebemos sua solicitação. Em breve nossa equipe entrará em contato.</p><p>Segue em anexo uma cópia.</p>`,
                       attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
                   console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
@@ -1368,7 +1145,6 @@ app.post('/api/submit-passaporte', async (req, res) => {
               }
           } else {
               console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
           }
       } else {
           console.log(`⚠️ Cliente sem e-mail: ${nome}`);
@@ -1425,8 +1201,8 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        doc.fillColor('#003366').fontSize(22).text('AVALIACAO DE VISTO NEGADO', { align: 'center' });
-        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Analise Estrategica', { align: 'center' });
+        doc.fillColor('#003366').fontSize(22).text('AVALIAÇÃO DE VISTO NEGADO', { align: 'center' });
+        doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Análise Estratégica', { align: 'center' });
         doc.moveDown(2);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
@@ -1435,26 +1211,26 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.moveDown(0.5);
         doc.font('Helvetica').fontSize(10).fillColor('#000000');
         doc.text(`Nome completo: ${nome}`);
-        doc.text(`E-mail: ${emailCliente || 'Nao informado'}`);
-        doc.text(`Telefone/WhatsApp: ${data['telefone'] || 'Nao informado'}`);
+        doc.text(`E-mail: ${emailCliente || 'Não informado'}`);
+        doc.text(`Telefone/WhatsApp: ${data['telefone'] || 'Não informado'}`);
         doc.moveDown(1);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('QUESTIONARIO DE AVALIACAO');
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('QUESTIONÁRIO DE AVALIAÇÃO');
         doc.moveDown(0.5);
 
         const perguntas = [
-          { label: '1. Quando seu visto foi negado pela ultima vez?', field: 'quando_negado' },
+          { label: '1. Quando seu visto foi negado pela última vez?', field: 'quando_negado' },
           { label: '2. Motivo da negativa informado pelo oficial', field: 'motivo_negativa' },
-          { label: '3. Mudanca na situacao profissional/financeira?', field: 'mudanca_profissional' },
-          { label: '4. Fortaleceu seus vinculos com o Brasil?', field: 'fortaleceu_vinculos' },
+          { label: '3. Mudança na situação profissional/financeira?', field: 'mudanca_profissional' },
+          { label: '4. Fortaleceu seus vínculos com o Brasil?', field: 'fortaleceu_vinculos' },
           { label: '5. Acredita que houve falha no preenchimento do DS-160?', field: 'falha_ds160' },
-          { label: '6. Ja teve problemas com imigracao?', field: 'problemas_imigracao' }
+          { label: '6. Já teve problemas com imigração?', field: 'problemas_imigracao' }
         ];
         for (const q of perguntas) {
           let resposta = data[q.field];
-          if (!resposta) resposta = '(nao informado)';
+          if (!resposta) resposta = '(não informado)';
           doc.font('Helvetica-Bold').fontSize(10).text(`${q.label}: `, { continued: true });
           doc.font('Helvetica').text(resposta);
           doc.moveDown(0.8);
@@ -1464,15 +1240,15 @@ app.post('/api/submit-visto-negado', async (req, res) => {
           doc.moveDown(1);
           doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
           doc.moveDown(0.5);
-          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('RESULTADO DA AVALIACAO');
+          doc.font('Helvetica-Bold').fontSize(11).fillColor('#003366').text('RESULTADO DA AVALIAÇÃO');
           doc.moveDown(0.5);
           doc.font('Helvetica').fontSize(10).fillColor('#000000');
-          doc.text(`Pontuacao: ${score}/100`);
+          doc.text(`Pontuação: ${score}/100`);
           let classificacaoTexto = '';
-          if (classificacaoTipo === 'urgent') classificacaoTexto = 'Requer Atencao Urgente';
+          if (classificacaoTipo === 'urgent') classificacaoTexto = 'Requer Atenção Urgente';
           else if (classificacaoTipo === 'moderate') classificacaoTexto = 'Potencial Moderado';
           else classificacaoTexto = 'Forte Potencial';
-          doc.text(`Classificacao: ${classificacaoTexto}`);
+          doc.text(`Classificação: ${classificacaoTexto}`);
           doc.text(`Mensagem: ${classificacaoMensagem}`);
         }
 
@@ -1487,17 +1263,16 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `⚠️ Visto Negado: ${nome}`,
-        html: `<strong>Avaliacao de visto negado recebida.</strong><br>
+        html: `<strong>Avaliação de visto negado recebida.</strong><br>
                <p><strong>Cliente:</strong> ${nome}</p>
-               <p><strong>E-mail:</strong> ${data['email'] || 'nao informado'}</p>
-               <p><strong>Telefone:</strong> ${data['telefone'] || 'nao informado'}</p>
-               <p><strong>Pontuacao:</strong> ${score !== null ? score + '/100' : 'nao calculada'}</p>
+               <p><strong>E-mail:</strong> ${data['email'] || 'não informado'}</p>
+               <p><strong>Telefone:</strong> ${data['telefone'] || 'não informado'}</p>
+               <p><strong>Pontuação:</strong> ${score !== null ? score + '/100' : 'não calculada'}</p>
                <p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
         attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
       });
       console.log('✅ E-mail enviado para a equipe (visto negado)');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
           if (isEmailClienteValido(emailCliente, nome)) {
               let resultadoHtml = '';
@@ -1505,9 +1280,9 @@ app.post('/api/submit-visto-negado', async (req, res) => {
                   let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
                   resultadoHtml = `
                     <div style="background: #f0f9ff; border-left: 5px solid ${cor}; padding: 15px; margin: 20px 0; border-radius: 12px;">
-                      <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliacao</h3>
-                      <p><strong>Pontuacao:</strong> ${score}/100</p>
-                      <p><strong>Classificacao:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atencao Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
+                      <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliação</h3>
+                      <p><strong>Pontuação:</strong> ${score}/100</p>
+                      <p><strong>Classificação:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atenção Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
                       <p><strong>${classificacaoTitulo}</strong></p>
                       <p>${classificacaoMensagem}</p>
                     </div>
@@ -1517,11 +1292,11 @@ app.post('/api/submit-visto-negado', async (req, res) => {
                   await resend.emails.send({
                       from: 'GetVisa <contato@getvisa.com.br>',
                       to: [emailCliente],
-                      subject: `Resultado da sua avaliacao de visto negado - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br>
-                             <p>Recebemos sua solicitacao de analise para reversao de visto negado. Em breve um de nossos especialistas entrara em contato.</p>
+                      subject: `Resultado da sua avaliação de visto negado - ${nome}`,
+                      html: `<strong>Olá ${nome},</strong><br>
+                             <p>Recebemos sua solicitação de análise para reversão de visto negado. Em breve um de nossos especialistas entrará em contato.</p>
                              ${resultadoHtml}
-                             <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliacao.</p>
+                             <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliação.</p>
                              <p>Atenciosamente,<br>Equipe GetVisa</p>`,
                       attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
@@ -1531,7 +1306,6 @@ app.post('/api/submit-visto-negado', async (req, res) => {
               }
           } else {
               console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
           }
       } else {
           console.log(`⚠️ Cliente sem e-mail: ${nome}`);
@@ -1563,7 +1337,7 @@ app.get('/api/agendamentos', validateApiKey, async (req, res) => {
 app.post('/api/agendamentos', validateApiKey, async (req, res) => {
   const { solicitacao_id, tipo, data_hora, local, observacoes } = req.body;
   if (!solicitacao_id || !tipo || !data_hora) {
-    return res.status(400).json({ error: 'Campos obrigatorios: solicitacao_id, tipo, data_hora' });
+    return res.status(400).json({ error: 'Campos obrigatórios: solicitacao_id, tipo, data_hora' });
   }
   const { data, error } = await supabase
     .from('agendamentos')
@@ -1617,7 +1391,7 @@ app.get('/api/compromissos', validateApiKey, async (req, res) => {
 app.post('/api/compromissos', validateApiKey, async (req, res) => {
   const { cliente, atividade, data, hora, local, concluido } = req.body;
   if (!cliente || !atividade || !data || !hora) {
-    return res.status(400).json({ error: 'Cliente, atividade, data e hora sao obrigatorios' });
+    return res.status(400).json({ error: 'Cliente, atividade, data e hora são obrigatórios' });
   }
   const { data: inserted, error } = await supabase
     .from('compromissos')
@@ -1703,19 +1477,18 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
     
-    // ==================== 1. RESPOSTA "SIM" ====================
+    // ==================== RESPOSTAS DO WEBHOOK ====================
     if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
                        `📋 *Acesse o rascunho do formulário DS-160:*\n` +
                        `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
                        `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Aguardamos seu formulario! 🇺🇸✨`;
+                       `Aguardamos seu formulário! 🇺🇸✨`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== 2. RESPOSTA "NÃO" ====================
     if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
@@ -1732,7 +1505,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
     if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
                  messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
@@ -1753,7 +1525,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 4. CONSULTAR AGENDAMENTOS ====================
+    // ==================== CONSULTAR AGENDAMENTOS ====================
     if (lead && (messageText === '8' || messageText === '8️⃣' || 
                  messageText === 'meus agendamentos' || messageText === 'meus compromissos' || 
                  messageText === 'minha entrevista' || messageText === 'quando' || 
@@ -1764,7 +1536,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       
       console.log(`📅 Cliente ${primeiroNome} solicitou consulta de agendamentos`);
       
-      // Buscar agendamentos do cliente pelo nome
       const { data: agendamentos, error } = await supabase
         .from('compromissos')
         .select('*')
@@ -1779,7 +1550,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       }
       
       if (agendamentos && agendamentos.length > 0) {
-        // Separar passados e futuros
         const hoje = new Date().toISOString().split('T')[0];
         const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido === 0);
         const passados = agendamentos.filter(a => a.data < hoje || a.concluido === 1);
@@ -1800,7 +1570,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
             resposta += `   ⏰ ${ag.hora}\n`;
             if (ag.local) resposta += `   📍 ${ag.local}\n`;
             
-            // Dias restantes
             const diasRestantes = Math.ceil((new Date(ag.data) - new Date()) / (1000 * 60 * 60 * 24));
             if (diasRestantes === 0) {
               resposta += `   ⚠️ *É HOJE!* ⚠️\n`;
@@ -1843,11 +1612,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 5. RESPOSTAS POR NÚMERO (1 a 6) ====================
-
-    // Opção 1 - PREÇO
-    if (lead && (messageText === '1' || messageText === '1️⃣' || 
-                 messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
+    // ==================== RESPOSTAS POR NÚMERO ====================
+    if (lead && (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
       const resposta = `💰 *INVESTIMENTO*\n\n` +
                        `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
                        `📋 *Assessoria:* R$ 350,00\n\n` +
@@ -1863,9 +1629,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // Opção 2 - PRAZO
-    if (lead && (messageText === '2' || messageText === '2️⃣' || 
-                 messageText === 'prazo' || messageText === '⏰')) {
+    if (lead && (messageText === '2' || messageText === '2️⃣' || messageText === 'prazo' || messageText === '⏰')) {
       const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
                        `📅 *Agendamento da entrevista:*\n` +
                        `   • Por conta própria: até 8 semanas\n` +
@@ -1878,9 +1642,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // Opção 3 - DOCUMENTOS
-    if (lead && (messageText === '3' || messageText === '3️⃣' || 
-                 messageText === 'documentos' || messageText === '📄')) {
+    if (lead && (messageText === '3' || messageText === '3️⃣' || messageText === 'documentos' || messageText === '📄')) {
       const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
                        `📌 *OBRIGATÓRIOS:*\n` +
                        `• Passaporte válido (mínimo 6 meses de validade)\n` +
@@ -1899,9 +1661,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // Opção 4 - PROCESSO
-    if (lead && (messageText === '4' || messageText === '4️⃣' || 
-                 messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
+    if (lead && (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
       const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
                        `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
                        `   → Avaliamos suas chances de aprovação\n\n` +
@@ -1921,10 +1681,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // Opção 5 - VISTO NEGADO
-    if (lead && (messageText === '5' || messageText === '5️⃣' || 
-                 messageText === 'visto negado' || messageText === 'negado' || 
-                 messageText === 'rejeitado' || messageText === '⚠️')) {
+    if (lead && (messageText === '5' || messageText === '5️⃣' || messageText === 'visto negado' || messageText === 'negado' || messageText === 'rejeitado' || messageText === '⚠️')) {
       const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
                        `*O que fazer após uma negativa:*\n\n` +
                        `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
@@ -1943,10 +1700,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // Opção 6 - AJUDA / ESPECIALISTA
-    if (lead && (messageText === '6' || messageText === '6️⃣' || 
-                 messageText === 'ajuda' || messageText === 'especialista' || 
-                 messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
+    if (lead && (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
       const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
                        `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
                        `*Contato direto:*\n` +
@@ -1960,7 +1714,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 6. LEAD EXISTE (mensagem padrão) ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
@@ -1982,8 +1735,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-    // ==================== 7. LEAD NÃO EXISTE ====================
-    if (!lead) {
+        if (!lead) {
       const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
                        `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
                        `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
@@ -2072,15 +1824,12 @@ app.post('/api/submit-simulador', async (req, res) => {
 
 // ==================== SISTEMA DE LEMBRETES AUTOMÁTICOS ====================
 
-// Função para formatar data brasileira
 function formatarDataBR(dataISO) {
   const [ano, mes, dia] = dataISO.split('-');
   return `${dia}/${mes}/${ano}`;
 }
 
-// Função para buscar telefone do cliente pelo nome ou cliente_id
 async function buscarTelefoneCliente(clienteNome, clienteId) {
-  // Primeiro tenta buscar pelo cliente_id na tabela clientes
   if (clienteId) {
     const { data: cliente } = await supabase
       .from('clientes')
@@ -2093,7 +1842,6 @@ async function buscarTelefoneCliente(clienteNome, clienteId) {
     }
   }
   
-  // Se não achou, tenta pelo nome na tabela leads_simulador
   const { data: lead } = await supabase
     .from('leads_simulador')
     .select('telefone_whatsapp')
@@ -2109,7 +1857,6 @@ async function buscarTelefoneCliente(clienteNome, clienteId) {
   return null;
 }
 
-// Função para enviar lembrete via WhatsApp
 async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
   const dataFormatada = formatarDataBR(agendamento.data);
   const emoji = agendamento.atividade === 'ENTREVISTA' ? '🗣️' : 
@@ -2130,7 +1877,6 @@ async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, dia
     mensagem += `📍 Local: ${agendamento.local}\n`;
   }
   
-  // Dicas específicas por tipo de atividade
   if (agendamento.atividade === 'ENTREVISTA') {
     mensagem += `\n📋 *Dicas importantes:*\n`;
     mensagem += `• Chegue com 30 minutos de antecedência\n`;
@@ -2151,7 +1897,6 @@ async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, dia
   mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
   mensagem += `Digite *MEUS AGENDAMENTOS* para ver todos os seus compromissos.`;
   
-  // Remove o 55 do início se existir
   let telefoneLimpo = telefone.toString().replace(/\D/g, '');
   if (telefoneLimpo.startsWith('55')) {
     telefoneLimpo = telefoneLimpo.substring(2);
@@ -2161,12 +1906,10 @@ async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, dia
   console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade} em ${agendamento.data}`);
 }
 
-// Função principal para verificar e enviar lembretes
 async function verificarLembretes() {
   console.log(`🔍 Verificando lembretes - ${new Date().toLocaleString('pt-BR')}`);
   
   try {
-    // Buscar agendamentos NÃO CONCLUÍDOS (concluido = 0) e futuros
     const hoje = new Date().toISOString().split('T')[0];
     
     const { data: agendamentos, error } = await supabase
@@ -2189,7 +1932,6 @@ async function verificarLembretes() {
       
       const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
       
-      // Buscar telefone do cliente
       const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
       
       if (!telefone) {
@@ -2197,11 +1939,9 @@ async function verificarLembretes() {
         continue;
       }
       
-      // Lembrete de 3 dias
       if (diffDays === 3 && !ag.lembrete_3d_enviado) {
         await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
         
-        // Marcar como enviado
         await supabase
           .from('compromissos')
           .update({ lembrete_3d_enviado: true })
@@ -2210,11 +1950,9 @@ async function verificarLembretes() {
         console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
       }
       
-      // Lembrete de 1 dia
       if (diffDays === 1 && !ag.lembrete_1d_enviado) {
         await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
         
-        // Marcar como enviado
         await supabase
           .from('compromissos')
           .update({ lembrete_1d_enviado: true })
@@ -2229,10 +1967,7 @@ async function verificarLembretes() {
   }
 }
 
-// Executar verificação a cada 6 horas (ou ajuste conforme necessidade)
 setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
-
-// Executar uma vez ao iniciar
 verificarLembretes();
 
 // ==================== INICIALIZAÇÃO ====================
