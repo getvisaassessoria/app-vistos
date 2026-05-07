@@ -146,7 +146,7 @@ app.use((req, res, next) => {
 });
 
 // ==================== VALIDAÇÃO DE E-MAIL (SÓ ENVIA PARA DOMÍNIOS PERMITIDOS) ====================
-/* const DOMINIOS_PERMITIDOS = [
+const DOMINIOS_PERMITIDOS = [
     'gmail.com', 
     'yahoo.com', 
     'outlook.com', 
@@ -173,7 +173,7 @@ const EMAILS_PERMITIDOS = [
 ];
 
 // ==================== VALIDAÇÃO DE E-MAIL PARA CLIENTES REAIS ====================
-const DOMINIOS_PERMITIDOS = [
+/* const DOMINIOS_PERMITIDOS = [
     'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
     'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
 ];
@@ -198,7 +198,7 @@ function isDominioPermitido(email) {
     if (!email || typeof email !== 'string') return false;
     const dominio = email.split('@')[1]?.toLowerCase();
     return DOMINIOS_PERMITIDOS.includes(dominio);
-}
+} */ 
 
 // ==================== VALIDAÇÃO DE E-MAIL ====================
 // LISTA NEGRA - Apenas e-mails de atacantes conhecidos (NÂO é lista branca!)
@@ -265,7 +265,7 @@ function isEmailClienteValido(email, nomeCliente) {
     return true;
 }
 // ==================== FIM DA VALIDAÇÃO ====================
-// ==================== FIM DA PROTEÇÃO ====================*/
+// ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
