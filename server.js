@@ -739,11 +739,11 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-            // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
-startSection('HISTÓRICO DE VIAGENS AOS EUA');
-doc.fillColor('#0066cc').fontSize(10).font('Helvetica-Bold').text('🔍 Transparência e confiança', { align: 'center' });
-doc.fillColor('#555555').fontSize(9).font('Helvetica').text('O formulário DS-160 oficial do governo americano exige estas informações. Responder com honestidade é essencial e demonstra idoneidade no processo.', { align: 'center' });
-doc.moveDown(0.8);
+            // ==================== INFORMAÇÕES DE VIAGENS AOS EUA ====================
+startSection('INFORMAÇÕES DE VIAGENS AOS EUA');
+doc.fillColor('#2c7da0').fontSize(9).font('Helvetica').text('O formulário DS-160 oficial do governo americano solicita estas informações para completar seu cadastro.', { align: 'center' });
+doc.fillColor('#61a5c2').fontSize(8).font('Helvetica').text('Responder com honestidade ajuda a demonstrar transparência no seu processo.', { align: 'center' });
+doc.moveDown(0.5);
 doc.fillColor('#000000').fontSize(10);
 
 // Pergunta 1: Visto Negado
@@ -751,15 +751,14 @@ let vistoNegado = data['radio-visto-negado'];
 if (vistoNegado === 'one') vistoNegado = 'Sim';
 else if (vistoNegado === 'two') vistoNegado = 'Não';
 
-doc.font('Helvetica-Bold').text('1. Você já teve um visto americano negado anteriormente?', { continued: false });
-doc.font('Helvetica').text(`Resposta: ${vistoNegado || 'Não informado'}`);
+doc.font('Helvetica-Bold').text('1. Você já teve um visto americano negado anteriormente?');
+doc.font('Helvetica').text(`   Resposta: ${vistoNegado || 'Não informado'}`);
 doc.moveDown(0.3);
 
 if (data['radio-visto-negado'] === 'one') {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano da negativa: ${data['text-visto-negado-ano'] || 'Não informado'}`);
+    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-visto-negado-ano'] || 'Não informado'}`);
     doc.text(`   • Consulado: ${data['text-visto-negado-consulado'] || 'Não informado'}`);
     doc.text(`   • Tipo de visto: ${data['select-visto-negado-tipo'] || 'Não informado'}`);
-    doc.moveDown(0.2);
     doc.fillColor('#000000');
 }
 
@@ -770,15 +769,14 @@ let entradaNegada = data['radio-entrada-negada'];
 if (entradaNegada === 'one') entradaNegada = 'Sim';
 else if (entradaNegada === 'two') entradaNegada = 'Não';
 
-doc.fillColor('#000000').fontSize(10).font('Helvetica-Bold').text('2. Você já teve a entrada negada nos EUA pelo oficial de imigração?', { continued: false });
-doc.font('Helvetica').text(`Resposta: ${entradaNegada || 'Não informado'}`);
+doc.font('Helvetica-Bold').text('2. Você já teve a entrada negada nos EUA pelo oficial de imigração?');
+doc.font('Helvetica').text(`   Resposta: ${entradaNegada || 'Não informado'}`);
 doc.moveDown(0.3);
 
 if (data['radio-entrada-negada'] === 'one') {
     doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`   • Ano: ${data['text-entrada-negada-ano'] || 'Não informado'}`);
-    doc.text(`   • Local (porto de entrada): ${data['text-entrada-negada-local'] || 'Não informado'}`);
+    doc.text(`   • Local: ${data['text-entrada-negada-local'] || 'Não informado'}`);
     doc.text(`   • Motivo: ${data['textarea-entrada-negada-motivo'] || 'Não informado'}`);
-    doc.moveDown(0.2);
     doc.fillColor('#000000');
 }
 
@@ -789,8 +787,8 @@ let deportado = data['radio-deportado'];
 if (deportado === 'one') deportado = 'Sim';
 else if (deportado === 'two') deportado = 'Não';
 
-doc.fillColor('#000000').fontSize(10).font('Helvetica-Bold').text('3. Você já foi deportado ou removido dos Estados Unidos?', { continued: false });
-doc.font('Helvetica').text(`Resposta: ${deportado || 'Não informado'}`);
+doc.font('Helvetica-Bold').text('3. Você já foi deportado ou removido dos Estados Unidos?');
+doc.font('Helvetica').text(`   Resposta: ${deportado || 'Não informado'}`);
 doc.moveDown(0.3);
 
 if (data['radio-deportado'] === 'one') {
@@ -800,30 +798,26 @@ if (data['radio-deportado'] === 'one') {
     else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
     else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
     else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
-    doc.text(`   • Período de impedimento: ${duracao || 'Não informado'}`);
-    doc.moveDown(0.2);
+    doc.text(`   • Período: ${duracao || 'Não informado'}`);
     doc.fillColor('#000000');
 }
 
 doc.moveDown(0.5);
 
-// Detalhes adicionais com tom mais acolhedor
+// Detalhes adicionais
 if (data['textarea-detalhes-negativa']) {
-    doc.fillColor('#0066cc').fontSize(9).font('Helvetica-Bold').text('📝 Informações complementares:', { continued: false });
-    doc.fillColor('#555555').fontSize(9).font('Helvetica').text(`${data['textarea-detalhes-negativa']}`);
-    doc.moveDown(0.3);
+    doc.fillColor('#2c7da0').fontSize(9).font('Helvetica-Bold').text('📝 Informações adicionais:');
+    doc.fillColor('#555555').fontSize(9).font('Helvetica').text(data['textarea-detalhes-negativa']);
     doc.fillColor('#000000');
+    doc.moveDown(0.3);
 }
-
-doc.fillColor('#2d6a4f').fontSize(9).font('Helvetica-Bold').text('✅ A transparência é um ponto positivo no seu processo!', { align: 'center' });
-doc.fillColor('#666666').fontSize(8).font('Helvetica').text('Estas informações são exigidas pelo formulário oficial do governo dos EUA', { align: 'center' });
 
 hasContentInSection = true;
 
-// Linha separadora suave
-doc.moveDown(0.5);
+// Linha separadora
+doc.moveDown(0.3);
 doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-doc.moveDown(0.5);
+doc.moveDown(0.3);
 
         
         startSection('ENDERECO RESIDENCIAL');
