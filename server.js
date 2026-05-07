@@ -201,44 +201,22 @@ function isDominioPermitido(email) {
 }
 
 // ==================== VALIDAÇÃO DE E-MAIL ====================
-const DOMINIOS_PERMITIDOS = [
-    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
-    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
-];
-
-// 🔥 LISTA NEGRA - Apenas e-mails de atacantes conhecidos
+// LISTA NEGRA - Apenas e-mails de atacantes conhecidos
 const EMAILS_BLOQUEADOS = [
     'phillipratylor29@gmail.com',
     'davidjonietz@gmail.com',
     'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com'
+    'faisal.johnson@hmgma.com',
+    'test@test.com',
+    'teste@teste.com'
 ];
 
-// 🔥 Domínios falsos/bloqueados (atacantes usam domínios inválidos)
+// Domínios falsos/bloqueados (atacantes usam domínios inválidos)
 const DOMINIOS_BLOQUEADOS = [
     'mailxw.com',
     'hmga.com',
     'hmgma.com'
 ];
-
-function isDominioPermitido(email) {
-    if (!email || typeof email !== 'string') return false;
-    const dominio = email.split('@')[1]?.toLowerCase();
-    
-    // Verifica se é domínio bloqueado
-    if (DOMINIOS_BLOQUEADOS.includes(dominio)) {
-        console.log(`🚨 Domínio bloqueado: ${dominio}`);
-        return false;
-    }
-    
-    // Verifica se tem formato básico de e-mail
-    if (!dominio || !dominio.includes('.')) {
-        console.log(`🚨 Domínio inválido: ${dominio}`);
-        return false;
-    }
-    
-    return true; // Permite qualquer domínio com formato válido
-}
 
 function isEmailClienteValido(email, nomeCliente) {
     // 1. Verifica se é um e-mail válido (formato básico)
@@ -255,15 +233,14 @@ function isEmailClienteValido(email, nomeCliente) {
         return false;
     }
     
-    // 3. Verifica domínio (permitido ou bloqueado)
-    const parteDominio = emailLower.split('@')[1];
-    if (!parteDominio) {
+    // 3. Verifica domínio bloqueado
+    const dominio = emailLower.split('@')[1];
+    if (!dominio) {
         console.log(`🚨 E-mail sem domínio: ${email}`);
         return false;
     }
     
-    // Verifica se o domínio é bloqueado
-    if (DOMINIOS_BLOQUEADOS.includes(parteDominio)) {
+    if (DOMINIOS_BLOQUEADOS.includes(dominio)) {
         console.log(`🚨 Domínio bloqueado: ${email}`);
         return false;
     }
@@ -292,6 +269,7 @@ function isEmailClienteValido(email, nomeCliente) {
     console.log(`✅ E-mail válido (cliente legítimo): ${email}`);
     return true;
 }
+// ==================== FIM DA VALIDAÇÃO DE E-MAIL ====================
 // ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
