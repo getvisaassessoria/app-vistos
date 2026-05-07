@@ -19,22 +19,39 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-// ==================== PROTEÇÃO CONTRA ATAQUE DE REQUISIÇÕES ====================
+// ==================== PROTEÇÃO CONTRA ATAQUE ====================
 const requestCounts = new Map();
+const emailRateLimits = new Map();
+const BLOCKED_IPS = new Set(); // IPs permanentemente bloqueados
 
-// Middleware de rate limiting GLOBAL
+// Função para obter IP real do cliente (considerando proxies)
+function getRealIp(req) {
+    // Verifica headers de proxy (Render, Cloudflare, etc.)
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+        const ips = forwarded.split(',');
+        return ips[0].trim();
+    }
+    return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+}
+
+// Middleware de bloqueio global
 app.use((req, res, next) => {
-    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const ip = getRealIp(req);
     
-    // 🔥 LIBERA IP LOCAL (Render interno)
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+    // 🔥 LIBERA IPs internos do Render
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === '::ffff:127.0.0.1') {
         return next();
     }
     
-    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown';
+    // 🔥 IP permanentemente bloqueado? (reincidentes)
+    if (BLOCKED_IPS.has(ip)) {
+        console.log(`🚨 BLOQUEADO PERMANENTE: IP ${ip} tentou acessar`);
+        return res.status(403).json({ error: 'Acesso bloqueado. Contate o suporte.' });
+    }
+    
     const now = Date.now();
-    const minuteKey = Math.floor(now / 60000); // Minuto atual
+    const minuteKey = Math.floor(now / 60000);
     const key = `${ip}:${minuteKey}`;
     
     const currentCount = (requestCounts.get(key) || 0) + 1;
@@ -50,9 +67,20 @@ app.use((req, res, next) => {
         }
     }, 60000);
     
-    // Se mais de 10 requisições por minuto do mesmo IP, bloqueia
-    if (currentCount > 10) {
-        console.log(`🚨 BLOQUEADO: IP ${ip} fez ${currentCount} requisições neste minuto`);
+    // Limite: 20 requisições por minuto (aumentado para humanos legítimos)
+    if (currentCount > 20) {
+        console.log(`🚨 BLOQUEADO TEMPORÁRIO: IP ${ip} fez ${currentCount} req/min`);
+        
+        // Se for a 3ª vez que bloqueia, bane permanentemente
+        const blockKey = `block:${ip}`;
+        const blockCount = (requestCounts.get(blockKey) || 0) + 1;
+        requestCounts.set(blockKey, blockCount);
+        
+        if (blockCount >= 3) {
+            BLOCKED_IPS.add(ip);
+            console.log(`🔥 IP ${ip} foi BANIDO PERMANENTEMENTE por reincidência`);
+        }
+        
         return res.status(429).json({ 
             error: 'Muitas requisições. Tente novamente em alguns minutos.' 
         });
@@ -61,9 +89,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Proteção específica para rotas que disparam e-mails (limite mais baixo)
-const emailRateLimits = new Map();
-
+// Verifica limite específico para rotas críticas
 function checkEmailRateLimit(ip, routeName) {
     const now = Date.now();
     const minuteKey = Math.floor(now / 60000);
@@ -72,7 +98,6 @@ function checkEmailRateLimit(ip, routeName) {
     const currentCount = (emailRateLimits.get(key) || 0) + 1;
     emailRateLimits.set(key, currentCount);
     
-    // Limpeza periódica
     setTimeout(() => {
         for (const k of emailRateLimits.keys()) {
             const kMinute = parseInt(k.split(':')[2]);
@@ -82,18 +107,36 @@ function checkEmailRateLimit(ip, routeName) {
         }
     }, 60000);
     
-    // Máximo 3 requisições por minuto para rotas de e-mail
-    return currentCount <= 3;
+    // Limite: 2 envios por MINUTO por rota (mais seguro)
+    return currentCount <= 2;
 }
 
-// Aplica proteção específica nas rotas que disparam e-mail
-const protectedRoutes = ['/api/submit-ds160', '/api/submit-passaporte', '/api/submit-avaliacao', '/api/submit-simulador', '/api/submit-visto-negado'];
+// Rotas protegidas (onde o ataque está acontecendo)
+const protectedRoutes = [
+    '/api/submit-ds160', 
+    '/api/submit-passaporte', 
+    '/api/submit-avaliacao', 
+    '/api/submit-simulador', 
+    '/api/submit-visto-negado'
+];
 
 app.use((req, res, next) => {
     if (protectedRoutes.includes(req.path)) {
-        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        const ip = getRealIp(req);
+        
         if (!checkEmailRateLimit(ip, req.path)) {
             console.log(`🚨 BLOQUEADO ROTA EMAIL: IP ${ip} excedeu limite na ${req.path}`);
+            
+            // Marca IP como suspeito para bloqueio futuro
+            const suspectKey = `suspect:${ip}`;
+            const suspectCount = (requestCounts.get(suspectKey) || 0) + 1;
+            requestCounts.set(suspectKey, suspectCount);
+            
+            if (suspectCount >= 5) {
+                BLOCKED_IPS.add(ip);
+                console.log(`🔥 IP ${ip} BANIDO por abuso nas rotas de e-mail`);
+            }
+            
             return res.status(429).json({ 
                 error: 'Limite de envios excedido. Tente novamente em alguns minutos.' 
             });
@@ -101,8 +144,46 @@ app.use((req, res, next) => {
     }
     next();
 });
-// ==================== FIM DA PROTEÇÃO ====================
 
+// ==================== VALIDAÇÃO DE E-MAIL (SÓ ENVIA PARA DOMÍNIOS PERMITIDOS) ====================
+const DOMINIOS_PERMITIDOS = [
+    'gmail.com', 
+    'yahoo.com', 
+    'outlook.com', 
+    'hotmail.com', 
+    'hotmail.com.br',
+    'uol.com.br', 
+    'bol.com.br', 
+    'ig.com.br', 
+    'terra.com.br',
+    'getvisa.com.br'
+];
+
+function isDominioPermitido(email) {
+    if (!email || typeof email !== 'string') return false;
+    const dominio = email.split('@')[1]?.toLowerCase();
+    return DOMINIOS_PERMITIDOS.includes(dominio);
+}
+
+function isEmailClienteValido(email, nomeCliente) {
+    // Verificações básicas
+    if (!email || !isDominioPermitido(email)) return false;
+    
+    // Impede e-mails com padrões suspeitos (teste, atacante, etc.)
+    const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root'];
+    const emailLower = email.toLowerCase();
+    const nomeLower = (nomeCliente || '').toLowerCase();
+    
+    for (const suspeito of nomesSuspeitos) {
+        if (emailLower.includes(suspeito) || nomeLower.includes(suspeito)) {
+            console.log(`🚨 E-mail suspeito bloqueado: ${email} (nome: ${nomeCliente})`);
+            return false;
+        }
+    }
+    
+    return true;
+}
+// ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
@@ -957,15 +1038,27 @@ app.post('/api/submit-ds160', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe');
 
+      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-        await resend.emails.send({
-          from: 'GetVisa <contato@getvisa.com.br>',
-          to: [emailCliente],
-          subject: `Seu formulario DS-160 foi recebido - ${nome}`,
-          html: `<strong>Ola ${nome},</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>`,
-          attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-        });
-        console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
+          if (isEmailClienteValido(emailCliente, nome)) {
+              try {
+                  await resend.emails.send({
+                      from: 'GetVisa <contato@getvisa.com.br>',
+                      to: [emailCliente],
+                      subject: `Seu formulario DS-160 foi recebido - ${nome}`,
+                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>`,
+                      attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+                  });
+                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
+              } catch (emailErr) {
+                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
+              }
+          } else {
+              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
+              // Não envia o e-mail, apenas registra no log
+          }
+      } else {
+          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento DS-160 (background):', err);
@@ -1164,15 +1257,27 @@ app.post('/api/submit-passaporte', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe (passaporte)');
 
+      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-        await resend.emails.send({
-          from: 'GetVisa <contato@getvisa.com.br>',
-          to: [emailCliente],
-          subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
-          html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
-          attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-        });
-        console.log(`✅ E-mail enviado para o cliente (passaporte): ${emailCliente}`);
+          if (isEmailClienteValido(emailCliente, nome)) {
+              try {
+                  await resend.emails.send({
+                      from: 'GetVisa <contato@getvisa.com.br>',
+                      to: [emailCliente],
+                      subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
+                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
+                      attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+                  });
+                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
+              } catch (emailErr) {
+                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
+              }
+          } else {
+              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
+              // Não envia o e-mail, apenas registra no log
+          }
+      } else {
+          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento do passaporte (background):', err);
@@ -1298,32 +1403,44 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe (visto negado)');
 
+      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-        let resultadoHtml = '';
-        if (score !== null) {
-          let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
-          resultadoHtml = `
-            <div style="background: #f0f9ff; border-left: 5px solid ${cor}; padding: 15px; margin: 20px 0; border-radius: 12px;">
-              <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliacao</h3>
-              <p><strong>Pontuacao:</strong> ${score}/100</p>
-              <p><strong>Classificacao:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atencao Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
-              <p><strong>${classificacaoTitulo}</strong></p>
-              <p>${classificacaoMensagem}</p>
-            </div>
-          `;
-        }
-        await resend.emails.send({
-          from: 'GetVisa <contato@getvisa.com.br>',
-          to: [emailCliente],
-          subject: `Resultado da sua avaliacao de visto negado - ${nome}`,
-          html: `<strong>Ola ${nome},</strong><br>
-                 <p>Recebemos sua solicitacao de analise para reversao de visto negado. Em breve um de nossos especialistas entrara em contato.</p>
-                 ${resultadoHtml}
-                 <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliacao.</p>
-                 <p>Atenciosamente,<br>Equipe GetVisa</p>`,
-          attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-        });
-        console.log(`✅ E-mail enviado para o cliente (visto negado) com resultado: ${emailCliente}`);
+          if (isEmailClienteValido(emailCliente, nome)) {
+              let resultadoHtml = '';
+              if (score !== null) {
+                  let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
+                  resultadoHtml = `
+                    <div style="background: #f0f9ff; border-left: 5px solid ${cor}; padding: 15px; margin: 20px 0; border-radius: 12px;">
+                      <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliacao</h3>
+                      <p><strong>Pontuacao:</strong> ${score}/100</p>
+                      <p><strong>Classificacao:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atencao Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
+                      <p><strong>${classificacaoTitulo}</strong></p>
+                      <p>${classificacaoMensagem}</p>
+                    </div>
+                  `;
+              }
+              try {
+                  await resend.emails.send({
+                      from: 'GetVisa <contato@getvisa.com.br>',
+                      to: [emailCliente],
+                      subject: `Resultado da sua avaliacao de visto negado - ${nome}`,
+                      html: `<strong>Ola ${nome},</strong><br>
+                             <p>Recebemos sua solicitacao de analise para reversao de visto negado. Em breve um de nossos especialistas entrara em contato.</p>
+                             ${resultadoHtml}
+                             <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliacao.</p>
+                             <p>Atenciosamente,<br>Equipe GetVisa</p>`,
+                      attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+                  });
+                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
+              } catch (emailErr) {
+                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
+              }
+          } else {
+              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
+              // Não envia o e-mail, apenas registra no log
+          }
+      } else {
+          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento do visto negado (background):', err);
