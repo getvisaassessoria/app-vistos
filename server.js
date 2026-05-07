@@ -1219,7 +1219,11 @@ app.post('/api/submit-passaporte', async (req, res) => {
 // ==================== ROTA VISTO NEGADO ====================
 app.post('/api/submit-visto-negado', async (req, res) => {
   const data = req.body;
-  console.log('📥 Dados de Visto Negado recebidos:', data);
+  console.log('📥 Dados de Visto Negado recebidos:', JSON.stringify({
+    nome: data['nome'],
+    email: data['email'],
+    telefone: data['telefone']
+  }));
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
@@ -1232,6 +1236,52 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       const classificacaoTitulo = data['classificacao_titulo'] || '';
       const classificacaoMensagem = data['classificacao_mensagem'] || '';
 
+      // ==================== SALVAR NO SUPABASE ====================
+      let solicitacaoId = null;
+      try {
+        console.log('💾 Salvando visto negado no Supabase:', { emailCliente, nome, telefoneCliente });
+        
+        // Primeiro, busca ou cria o cliente
+        const { data: cliente, error: clienteError } = await supabase
+          .from('clientes')
+          .upsert({
+            email: emailCliente,
+            nome_completo: nome,
+            telefone: telefoneCliente
+          }, { onConflict: 'email' })
+          .select()
+          .single();
+        
+        if (clienteError) {
+          console.error('❌ Erro ao salvar cliente (visto negado):', clienteError.message);
+        } else if (cliente) {
+          console.log(`✅ Cliente salvo/encontrado. ID: ${cliente.id}`);
+          
+          // Agora cria a solicitação de visto negado
+          const { data: solicitacao, error: solError } = await supabase
+            .from('solicitacoes')
+            .insert({
+              cliente_id: cliente.id,
+              tipo: 'visto_negado',
+              dados: data,
+              status: 'pendente',
+              created_at: new Date()
+            })
+            .select()
+            .single();
+          
+          if (solError) {
+            console.error('❌ Erro ao salvar solicitação de visto negado:', solError.message);
+          } else {
+            solicitacaoId = solicitacao.id;
+            console.log(`✅ Visto Negado salvo com sucesso! ID: ${solicitacaoId}`);
+          }
+        }
+      } catch (supabaseErr) {
+        console.error('⚠️ Erro geral no Supabase (visto negado):', supabaseErr.message);
+      }
+
+      // ==================== ENVIAR WHATSAPP ====================
       if (telefoneCliente && score !== null) {
         const primeiroNome = nome.split(' ')[0];
         const classificacaoTexto = classificacaoTipo === 'urgent' ? 'que Requer Atenção Urgente' 
@@ -1255,6 +1305,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         await enviarWhatsApp(telefoneCliente, mensagemWhats);
       }
 
+      // ==================== GERAR PDF ====================
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -1273,7 +1324,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         doc.font('Helvetica').fontSize(10).fillColor('#000000');
         doc.text(`Nome completo: ${nome}`);
         doc.text(`E-mail: ${emailCliente || 'Não informado'}`);
-        doc.text(`Telefone/WhatsApp: ${data['telefone'] || 'Não informado'}`);
+        doc.text(`Telefone/WhatsApp: ${telefoneCliente || 'Não informado'}`);
         doc.moveDown(1);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
@@ -1320,22 +1371,29 @@ app.post('/api/submit-visto-negado', async (req, res) => {
 
       console.log(`📄 PDF gerado para visto negado (${nome}), tamanho: ${pdfBuffer.length} bytes`);
 
+      // ==================== ENVIAR E-MAIL PARA EQUIPE ====================
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `⚠️ Visto Negado: ${nome}`,
         html: `<strong>Avaliação de visto negado recebida.</strong><br>
                <p><strong>Cliente:</strong> ${nome}</p>
-               <p><strong>E-mail:</strong> ${data['email'] || 'não informado'}</p>
-               <p><strong>Telefone:</strong> ${data['telefone'] || 'não informado'}</p>
+               <p><strong>E-mail:</strong> ${emailCliente || 'não informado'}</p>
+               <p><strong>Telefone:</strong> ${telefoneCliente || 'não informado'}</p>
                <p><strong>Pontuação:</strong> ${score !== null ? score + '/100' : 'não calculada'}</p>
                <p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
         attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
       });
       console.log('✅ E-mail enviado para a equipe (visto negado)');
 
+      // ==================== ENVIAR E-MAIL PARA CLIENTE COM VALIDAÇÃO ====================
       if (emailCliente && emailCliente.trim() !== '') {
-          if (isEmailClienteValido(emailCliente, nome)) {
+          console.log(`📧 Verificando e-mail do cliente (visto negado): ${emailCliente}`);
+          
+          const emailValido = isEmailClienteValido(emailCliente, nome);
+          console.log(`📧 Resultado da validação: ${emailValido ? 'VÁLIDO' : 'BLOQUEADO'}`);
+          
+          if (emailValido) {
               let resultadoHtml = '';
               if (score !== null) {
                   let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
@@ -1361,16 +1419,17 @@ app.post('/api/submit-visto-negado', async (req, res) => {
                              <p>Atenciosamente,<br>Equipe GetVisa</p>`,
                       attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
-                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
+                  console.log(`✅ E-mail enviado para cliente (visto negado): ${emailCliente}`);
               } catch (emailErr) {
                   console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
               }
           } else {
-              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
+              console.log(`🚨 BLOQUEADO: E-mail não passou na validação: ${emailCliente}`);
           }
       } else {
           console.log(`⚠️ Cliente sem e-mail: ${nome}`);
       }
+      
     } catch (err) {
       console.error('❌ Erro no processamento do visto negado (background):', err);
     }
