@@ -1043,34 +1043,29 @@ app.post('/api/submit-passaporte', async (req, res) => {
     try {
       let solicitacaoId = null;
       
-      // ==================== SALVAR NO SUPABASE (PASSAPORTE) ====================
+      // ==================== SALVAR NO SUPABASE ====================
       try {
         const emailCliente = data['passaporte_email'] || null;
         const nomeCliente = data['passaporte_nome'] || null;
         const telefoneCliente = data['passaporte_telefone'] || null;
         
-        console.log('💾 Tentando salvar passaporte no Supabase:', { emailCliente, nomeCliente, telefoneCliente });
+        console.log('💾 Salvando passaporte no Supabase:', { emailCliente, nomeCliente, telefoneCliente });
         
-        // Primeiro, busca ou cria o cliente usando upsert
         const { data: cliente, error: clienteError } = await supabase
           .from('clientes')
           .upsert({
             email: emailCliente,
             nome_completo: nomeCliente,
             telefone: telefoneCliente
-          }, { 
-            onConflict: 'email',
-            ignoreDuplicates: false
-          })
+          }, { onConflict: 'email' })
           .select()
           .single();
         
         if (clienteError) {
-          console.error('❌ Erro ao salvar cliente (passaporte):', clienteError.message);
+          console.error('❌ Erro ao salvar cliente:', clienteError.message);
         } else if (cliente) {
           console.log(`✅ Cliente salvo/encontrado. ID: ${cliente.id}`);
           
-          // Agora cria a solicitação de passaporte
           const { data: solicitacao, error: solError } = await supabase
             .from('solicitacoes')
             .insert({
@@ -1084,19 +1079,20 @@ app.post('/api/submit-passaporte', async (req, res) => {
             .single();
           
           if (solError) {
-            console.error('❌ Erro ao salvar solicitação de passaporte:', solError.message);
+            console.error('❌ Erro ao salvar solicitação:', solError.message);
           } else {
             solicitacaoId = solicitacao.id;
-            console.log(`✅ Passaporte salvo com sucesso! ID: ${solicitacaoId}`);
+            console.log(`✅ Passaporte salvo! ID: ${solicitacaoId}`);
           }
         }
       } catch (supabaseErr) {
-        console.error('⚠️ Erro geral no Supabase (passaporte):', supabaseErr.message);
+        console.error('⚠️ Erro no Supabase:', supabaseErr.message);
       }
 
       const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
       const emailCliente = data['passaporte_email'] || null;
 
+      // ==================== GERAR PDF ====================
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -1176,7 +1172,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
 
       console.log(`📄 PDF gerado para passaporte de ${nome}, tamanho: ${pdfBuffer.length} bytes`);
 
-      // Enviar e-mail para a equipe
+      // ==================== ENVIAR E-MAIL PARA EQUIPE ====================
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
@@ -1186,9 +1182,15 @@ app.post('/api/submit-passaporte', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe (passaporte)');
 
-      // 🔥 Enviar e-mail para o cliente (se for válido)
+      // ==================== ENVIAR E-MAIL PARA CLIENTE COM VALIDAÇÃO ====================
       if (emailCliente && emailCliente.trim() !== '') {
-          if (isEmailClienteValido(emailCliente, nome)) {
+          console.log(`📧 Verificando e-mail do cliente: ${emailCliente}`);
+          
+          // 🔥 CHAMA A VALIDAÇÃO (igual ao DS-160)
+          const emailValido = isEmailClienteValido(emailCliente, nome);
+          console.log(`📧 Resultado da validação: ${emailValido ? 'VÁLIDO' : 'BLOQUEADO'}`);
+          
+          if (emailValido) {
               try {
                   await resend.emails.send({
                       from: 'GetVisa <contato@getvisa.com.br>',
@@ -1197,12 +1199,12 @@ app.post('/api/submit-passaporte', async (req, res) => {
                       html: `<strong>Olá ${nome},</strong><br><p>Recebemos sua solicitação de passaporte. Em breve nossa equipe entrará em contato.</p><p>Segue em anexo uma cópia do seu pré-cadastro.</p><br><p>Atenciosamente,<br>Equipe GetVisa</p>`,
                       attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
-                  console.log(`✅ E-mail enviado para cliente (passaporte): ${emailCliente}`);
+                  console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
               } catch (emailErr) {
                   console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
               }
           } else {
-              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
+              console.log(`🚨 BLOQUEADO: E-mail não passou na validação: ${emailCliente}`);
           }
       } else {
           console.log(`⚠️ Cliente sem e-mail: ${nome}`);
