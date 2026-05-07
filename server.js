@@ -1494,10 +1494,216 @@ app.post('/api/submit-australia', async (req, res) => {
         console.error('⚠️ Erro no Supabase (Austrália):', supabaseErr.message);
       }
 
-      // ==================== ENVIAR E-MAIL PARA EQUIPE ====================
-      const dataChegada = data['data_chegada'] ? new Date(data['data_chegada']).toLocaleDateString('pt-BR') : 'Não informada';
-      const dataSaida = data['data_saida'] ? new Date(data['data_saida']).toLocaleDateString('pt-BR') : 'Não informada';
-      
+      // ==================== GERAR PDF ====================
+      const pdfBuffer = await new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 50 });
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+        doc.on('error', reject);
+
+        // Cabeçalho
+        doc.fillColor('#1a5f7a').fontSize(22).font('Helvetica-Bold').text('SOLICITAÇÃO DE VISTO AUSTRALIANO', { align: 'center' });
+        doc.fontSize(12).fillColor('#666666').font('Helvetica').text('Assessoria GetVisa - Documentação Consular', { align: 'center' });
+        doc.moveDown(2);
+        doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(1);
+
+        // ==================== DADOS PESSOAIS ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('1. DADOS PESSOAIS');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Nome Completo: ', { continued: true });
+        doc.font('Helvetica').text(data['full_name'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Outros nomes: ', { continued: true });
+        doc.font('Helvetica').text(data['outros_nomes_quais'] || (data['outros_nomes'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Gênero: ', { continued: true });
+        doc.font('Helvetica').text(data['genero'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Data de Nascimento: ', { continued: true });
+        doc.font('Helvetica').text(data['data_nascimento'] ? new Date(data['data_nascimento']).toLocaleDateString('pt-BR') : 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Cidade/Estado de Nascimento: ', { continued: true });
+        doc.font('Helvetica').text(`${data['cidade_nascimento'] || ''} / ${data['estado_nascimento'] || ''}`);
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('País de Nascimento: ', { continued: true });
+        doc.font('Helvetica').text(data['pais_nascimento'] || 'Brasil');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Estado Civil: ', { continued: true });
+        doc.font('Helvetica').text(data['estado_civil'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('CPF: ', { continued: true });
+        doc.font('Helvetica').text(data['cpf'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('RG: ', { continued: true });
+        doc.font('Helvetica').text(`${data['rg'] || ''} - ${data['rg_orgao'] || ''} (${data['rg_data_emissao'] ? new Date(data['rg_data_emissao']).toLocaleDateString('pt-BR') : ''})`);
+        doc.moveDown(0.8);
+
+        // ==================== DOCUMENTOS DE VIAGEM ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('2. DOCUMENTOS DE VIAGEM');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Número do Passaporte: ', { continued: true });
+        doc.font('Helvetica').text(data['passaporte_numero'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('País Emissor: ', { continued: true });
+        doc.font('Helvetica').text(data['passaporte_pais'] || 'Brasil');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Data de Emissão/Validade: ', { continued: true });
+        doc.font('Helvetica').text(`${data['passaporte_data_emissao'] ? new Date(data['passaporte_data_emissao']).toLocaleDateString('pt-BR') : ''} a ${data['passaporte_data_validade'] ? new Date(data['passaporte_data_validade']).toLocaleDateString('pt-BR') : ''}`);
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Local de Emissão: ', { continued: true });
+        doc.font('Helvetica').text(data['passaporte_local_emissao'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Outra Cidadania: ', { continued: true });
+        doc.font('Helvetica').text(data['outra_cidadania_qual'] || (data['outra_cidadania'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.8);
+
+        // ==================== CONTATO ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('3. CONTATO E RESIDÊNCIA');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Endereço: ', { continued: true });
+        doc.font('Helvetica').text(data['endereco'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Cidade/UF/CEP: ', { continued: true });
+        doc.font('Helvetica').text(`${data['cidade'] || ''} / ${data['estado'] || ''} - ${data['cep'] || ''}`);
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Telefone: ', { continued: true });
+        doc.font('Helvetica').text(data['telefone'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('E-mail: ', { continued: true });
+        doc.font('Helvetica').text(data['email'] || 'Não informado');
+        doc.moveDown(0.8);
+
+        // ==================== DETALHES DA VIAGEM ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('4. DETALHES DA VIAGEM');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        const dataChegada = data['data_chegada'] ? new Date(data['data_chegada']).toLocaleDateString('pt-BR') : 'Não informada';
+        const dataSaida = data['data_saida'] ? new Date(data['data_saida']).toLocaleDateString('pt-BR') : 'Não informada';
+        
+        doc.font('Helvetica-Bold').text('Período da Viagem: ', { continued: true });
+        doc.font('Helvetica').text(`${dataChegada} a ${dataSaida}`);
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Motivo da Viagem: ', { continued: true });
+        doc.font('Helvetica').text(data['motivo_viagem'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        if (data['tem_acompanhante'] === 'sim') {
+          doc.font('Helvetica-Bold').text('Acompanhantes:', { continued: false });
+          const acompanhantesNomes = data['acompanhante_nome[]'] || [];
+          const acompanhantesParentesco = data['acompanhante_parentesco[]'] || [];
+          for (let i = 0; i < acompanhantesNomes.length; i++) {
+            doc.font('Helvetica').text(`   - ${acompanhantesNomes[i]} (${acompanhantesParentesco[i] || ''})`);
+          }
+          doc.moveDown(0.3);
+        }
+        
+        if (data['tem_contato_aus'] === 'sim') {
+          doc.font('Helvetica-Bold').text('Contatos na Austrália:', { continued: false });
+          const contatosNomes = data['contato_aus_nome[]'] || [];
+          const contatosStatus = data['contato_aus_status[]'] || [];
+          for (let i = 0; i < contatosNomes.length; i++) {
+            doc.font('Helvetica').text(`   - ${contatosNomes[i]} (${contatosStatus[i] || ''})`);
+          }
+          doc.moveDown(0.3);
+        }
+        doc.moveDown(0.5);
+
+        // ==================== OCUPAÇÃO ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('5. OCUPAÇÃO E VÍNCULOS');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Ocupação: ', { continued: true });
+        doc.font('Helvetica').text(data['ocupacao'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Empresa/Instituição: ', { continued: true });
+        doc.font('Helvetica').text(data['empresa_nome'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Data de Início: ', { continued: true });
+        doc.font('Helvetica').text(data['data_inicio'] ? new Date(data['data_inicio']).toLocaleDateString('pt-BR') : 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Atividades: ', { continued: true });
+        doc.font('Helvetica').text(data['descricao_atividades'] || 'Não informado');
+        doc.moveDown(0.8);
+
+        // ==================== INFORMAÇÕES FINANCEIRAS ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('6. INFORMAÇÕES FINANCEIRAS');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Quem paga a viagem: ', { continued: true });
+        doc.font('Helvetica').text(data['quem_paga'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Valor disponível: ', { continued: true });
+        doc.font('Helvetica').text(data['valor_disponivel'] || 'Não informado');
+        doc.moveDown(0.3);
+        
+        if (data['patrocinio']) {
+          doc.font('Helvetica-Bold').text('Patrocínio: ', { continued: true });
+          doc.font('Helvetica').text(data['patrocinio']);
+          doc.moveDown(0.3);
+        }
+        doc.moveDown(0.5);
+
+        // ==================== SAÚDE E CARÁTER ====================
+        doc.fillColor('#1a5f7a').fontSize(14).font('Helvetica-Bold').text('7. SAÚDE E CARÁTER');
+        doc.moveDown(0.5);
+        doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        
+        doc.font('Helvetica-Bold').text('Internação na Austrália: ', { continued: true });
+        doc.font('Helvetica').text(data['internacao'] === 'sim' ? 'Sim' : (data['internacao'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Tuberculose: ', { continued: true });
+        doc.font('Helvetica').text(data['tuberculose'] === 'sim' ? 'Sim' : (data['tuberculose'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Antecedentes criminais: ', { continued: true });
+        doc.font('Helvetica').text(data['antecedentes'] === 'sim' ? `Sim - ${data['antecedentes_explicacao'] || ''}` : (data['antecedentes'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.3);
+        
+        doc.font('Helvetica-Bold').text('Serviço militar/treinamento: ', { continued: true });
+        doc.font('Helvetica').text(data['servico_militar'] === 'sim' ? `Sim - ${data['militar_explicacao'] || ''}` : (data['servico_militar'] === 'nao' ? 'Não' : 'Não informado'));
+        doc.moveDown(0.8);
+
+        // Rodapé
+        doc.moveDown(2);
+        doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+        doc.end();
+      });
+
+      console.log(`📄 PDF gerado para Visto Australiano - ${nome}, tamanho: ${pdfBuffer.length} bytes`);
+
+      // ==================== ENVIAR E-MAIL PARA EQUIPE (COM PDF)====================
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
@@ -1507,11 +1713,13 @@ app.post('/api/submit-australia', async (req, res) => {
                <p><strong>E-mail:</strong> ${emailCliente || 'não informado'}</p>
                <p><strong>Telefone:</strong> ${telefoneCliente || 'não informado'}</p>
                <p><strong>Período da viagem:</strong> ${dataChegada} a ${dataSaida}</p>
-               <p><strong>Motivo:</strong> ${data['motivo_viagem'] || 'não informado'}</p>`
+               <p><strong>Motivo:</strong> ${data['motivo_viagem'] || 'não informado'}</p>
+               <p>PDF em anexo.</p>`,
+        attachments: [{ filename: `Visto_Australiano_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
       });
-      console.log('✅ E-mail enviado para a equipe (Austrália)');
+      console.log('✅ E-mail enviado para a equipe (Austrália) com PDF');
 
-      // ==================== ENVIAR E-MAIL PARA CLIENTE ====================
+      // ==================== ENVIAR E-MAIL PARA CLIENTE (COM PDF)====================
       if (emailCliente && emailCliente.trim() !== '') {
           if (isEmailClienteValido(emailCliente, nome)) {
               try {
@@ -1527,10 +1735,12 @@ app.post('/api/submit-australia', async (req, res) => {
                                <li>📅 Período: ${dataChegada} a ${dataSaida}</li>
                                <li>✈️ Motivo: ${data['motivo_viagem'] || 'não informado'}</li>
                              </ul>
+                             <p>Segue em anexo uma cópia do seu pré-cadastro.</p>
                              <br>
-                             <p>Atenciosamente,<br>Equipe GetVisa</p>`
+                             <p>Atenciosamente,<br>Equipe GetVisa</p>`,
+                      attachments: [{ filename: `Visto_Australiano_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
                   });
-                  console.log(`✅ E-mail enviado para cliente (Austrália): ${emailCliente}`);
+                  console.log(`✅ E-mail enviado para cliente (Austrália): ${emailCliente} com PDF`);
               } catch (emailErr) {
                   console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
               }
