@@ -354,38 +354,66 @@ function drawSectionTitle(doc, title) {
 // ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
-  console.log('📥 Dados recebidos (DS-160)');
+  console.log('📥 Dados recebidos (DS-160):', JSON.stringify({
+    nome: data['full_name'],
+    email: data['email-1'],
+    telefone: data['text-77']
+  }));
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
     try {
       let solicitacaoId = null;
+      
+      // ==================== SALVAR NO SUPABASE (CORRIGIDO) ====================
       try {
+        const emailCliente = data['email-1'] || null;
+        const nomeCliente = data['full_name'] || null;
+        const telefoneCliente = data['text-77'] || null;
+        
+        console.log('💾 Tentando salvar no Supabase:', { emailCliente, nomeCliente, telefoneCliente });
+        
+        // Primeiro, busca ou cria o cliente usando upsert
         const { data: cliente, error: clienteError } = await supabase
           .from('clientes')
           .upsert({
-            email: data['email-1'] || null,
-            nome_completo: data['full_name'] || null,
-            telefone: data['text-77'] || null
-          }, { onConflict: 'email' })
+            email: emailCliente,
+            nome_completo: nomeCliente,
+            telefone: telefoneCliente
+          }, { 
+            onConflict: 'email',
+            ignoreDuplicates: false
+          })
           .select()
           .single();
-        if (!clienteError) {
+        
+        if (clienteError) {
+          console.error('❌ Erro ao salvar cliente:', clienteError.message);
+        } else if (cliente) {
+          console.log(`✅ Cliente salvo/encontrado. ID: ${cliente.id}`);
+          
+          // Agora cria a solicitação
           const { data: solicitacao, error: solError } = await supabase
             .from('solicitacoes')
             .insert({
               cliente_id: cliente.id,
               tipo: 'ds160',
               dados: data,
-              status: 'pendente'
+              status: 'pendente',
+              created_at: new Date()
             })
             .select()
             .single();
-          if (!solError) solicitacaoId = solicitacao.id;
-          console.log(`✅ DS-160 salvo. ID: ${solicitacaoId}`);
+          
+          if (solError) {
+            console.error('❌ Erro ao salvar solicitação:', solError.message);
+          } else {
+            solicitacaoId = solicitacao.id;
+            console.log(`✅ DS-160 salvo com sucesso! ID: ${solicitacaoId}`);
+          }
         }
       } catch (supabaseErr) {
-        console.error('⚠️ Erro ao salvar no Supabase:', supabaseErr.message);
+        console.error('⚠️ Erro geral no Supabase:', supabaseErr.message);
       }
 
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
