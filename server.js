@@ -2098,17 +2098,25 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
-        if (!lead) {
-      const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                       `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
-                       `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                       `Em 2 minutos você descobre suas chances de aprovação! 🚀`;
+            // ==================== LEAD NÃO EXISTE (OFERECE MENU COMPLETO) ====================
+    if (!lead) {
+      const resposta = `🇺🇸 *GetVisa Assessoria Consular* 🇺🇸\n\n` +
+                       `Olá! 👋 Seja bem-vindo(a)!\n\n` +
+                       `📋 *Como podemos ajudar você hoje?*\n\n` +
+                       `🔍 *Opções disponíveis:*\n` +
+                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
+                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
+                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
+                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
+                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
+                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
+                       `7️⃣  📊 *AVALIAÇÃO* - Análise gratuita do seu perfil\n\n` +
+                       `*Digite o número da opção desejada (1 a 7):* 🚀\n\n` +
+                       `📌 *Para uma análise personalizada, preencha nosso simulador:*\n` +
+                       `https://getvisa.com.br/simulador-visto-americano-4917`;
       await sendReply(cleanPhone, resposta);
+      console.log(`📝 Menu completo para novo cliente enviado para ${cleanPhone}`);
     }
-    
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
-  }
 });
 
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
