@@ -1082,56 +1082,49 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
           const primeiraViagem = historicoViagens.toLowerCase().includes('nunca');
           
-          let analisePersonalizada = '';
+          let analise = '';
           
           if (situacaoProfissional.toLowerCase().includes('clt')) {
-            analisePersonalizada += `✅ *Estabilidade profissional:* Sua situação como ${situacaoProfissional} é um ponto muito positivo para o consulado.\n`;
+            analise += `✅ *Estabilidade profissional:* Sua situação como ${situacaoProfissional} é um ponto muito positivo.\n`;
           } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
-            analisePersonalizada += `📊 *Renda autônoma:* Vamos organizar sua documentação financeira da melhor forma.\n`;
+            analise += `📊 *Renda autônoma:* Vamos organizar sua documentação financeira.\n`;
           } else if (situacaoProfissional.toLowerCase().includes('estudante')) {
-            analisePersonalizada += `📚 *Perfil estudante:* Precisaremos de documentação escolar e comprovação de vínculos familiares.\n`;
+            analise += `📚 *Perfil estudante:* Precisaremos de documentação escolar.\n`;
           } else if (situacaoProfissional.toLowerCase().includes('desempregado')) {
-            analisePersonalizada += `⚠️ *Ponto de atenção:* Trabalharemos para fortalecer seus vínculos com o Brasil.\n`;
+            analise += `⚠️ *Ponto de atenção:* Vamos fortalecer seus vínculos com o Brasil.\n`;
           }
           
           if (renda.includes('15.000')) {
-            analisePersonalizada += `💰 *Renda compatível:* Sua renda está acima da média, o que favorece seu perfil.\n`;
+            analise += `💰 *Renda compatível:* Sua renda favorece seu perfil.\n`;
           } else if (renda.includes('Até R$ 3.000')) {
-            analisePersonalizada += `📌 *Renda atual:* Vamos complementar sua documentação com outros comprovantes.\n`;
+            analise += `📌 *Renda atual:* Vamos complementar com outros comprovantes.\n`;
           }
           
           if (primeiraViagem) {
-            analisePersonalizada += `✈️ *Primeira viagem:* Preparemos documentação extra para demonstrar vínculos.\n`;
+            analise += `✈️ *Primeira viagem:* Documentação extra para demonstrar vínculos.\n`;
           } else if (historicoViagens.toLowerCase().includes('visto americano')) {
-            analisePersonalizada += `🇺🇸 *Experiência positiva:* Seu histórico com visto americano é um grande diferencial!\n`;
-          } else if (historicoViagens.toLowerCase().includes('outros países')) {
-            analisePersonalizada += `🌎 *Bom histórico:* Suas viagens internacionais fortalecem seu perfil.\n`;
+            analise += `🇺🇸 *Experiência positiva:* Histórico com visto americano é um diferencial!\n`;
           }
           
           let mensagemWhats = `🎯 *${primeiroNome}, obrigado por preencher nossa avaliação!* 🎯\n\n`;
-          mensagemWhats += `📊 *Análise do seu perfil:*\n`;
-          mensagemWhats += `🔹 Classificação: *${classificacao}*\n`;
-          mensagemWhats += `🔹 Pontuação: *${score}/100*\n\n`;
-          mensagemWhats += `📋 *Dados que analisamos:*\n`;
+          mensagemWhats += `📊 *Sua classificação:* ${classificacao}\n`;
+          mensagemWhats += `🔹 Pontuação: ${score}/100\n\n`;
+          mensagemWhats += `📋 *Dados analisados:*\n`;
           mensagemWhats += `• ${situacaoProfissional}\n`;
           mensagemWhats += `• Renda: ${renda}\n`;
-          mensagemWhats += `• ${historicoViagens || 'Histórico não informado'}\n`;
-          mensagemWhats += `• Motivo: ${propositoViagem}\n\n`;
+          mensagemWhats += `• ${historicoViagens}\n`;
+          mensagemWhats += `• ${propositoViagem}\n\n`;
           
-          if (analisePersonalizada) {
-            mensagemWhats += `🔍 *O que isso significa para o consulado?*\n${analisePersonalizada}\n`;
+          if (analise) {
+            mensagemWhats += `🔍 *Análise personalizada:*\n${analise}\n`;
           }
           
-          mensagemWhats += `💰 *Investimento total:*\n`;
-          mensagemWhats += `🇺🇸 Taxa Consular: ~R$ 950\n`;
-          mensagemWhats += `📋 Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n`;
-          
+          mensagemWhats += `💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
           mensagemWhats += `✅ *Próximos passos:*\n`;
-          mensagemWhats += `• Digite *SIM* para receber o link do DS-160\n`;
-          mensagemWhats += `• Digite *MENU* para ver todas as opções\n`;
+          mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
+          mensagemWhats += `• Digite *MENU* para outras opções\n`;
           mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
-          
-          mensagemWhats += `Nossa equipe está à disposição para te ajudar! 🚀💙`;
+          mensagemWhats += `Estamos juntos! 🚀💙`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
