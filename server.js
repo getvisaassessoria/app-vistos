@@ -1811,7 +1811,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
 
-    // Buscar lead (apenas para saber se já tem cadastro - NÃO OBRIGATÓRIO)
+    // Buscar lead (apenas para saber se já tem cadastro)
     let lead = null;
     const { data: leads } = await supabase
       .from('leads_simulador')
@@ -1839,7 +1839,24 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
 
-    // ==================== 1. RESPOSTAS POR NÚMERO (VÊM PRIMEIRO) ====================
+    // ==================== VOLTAR AO MENU ====================
+    if (messageText === 'voltar' || messageText === 'menu' || messageText === 'inicio' || messageText === '🔙') {
+      const resposta = `📋 *MENU PRINCIPAL*
+
+1️⃣ 💰 PREÇO - Valores do processo
+2️⃣ ⏰ PRAZO - Tempos estimados
+3️⃣ 📄 DOCUMENTOS - O que é necessário
+4️⃣ 📋 PROCESSO - Passo a passo
+5️⃣ ⚠️ VISTO NEGADO - Casos de negativa
+6️⃣ 📞 AJUDA - Falar com especialista
+7️⃣ 📊 AVALIAÇÃO - Análise gratuita do seu perfil
+
+*Digite o número da opção desejada (1 a 7):* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+
+    // ==================== RESPOSTAS POR NÚMERO ====================
     
     // OPÇÃO 1 - PREÇO
     if (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰') {
@@ -1855,7 +1872,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
 ✅ Preparação para entrevista
 ✅ Acompanhamento total
 
-Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
+---
+*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1870,7 +1888,8 @@ Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
 
 🕒 *Total estimado:* 30 a 40 dias
 
-Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
+---
+*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1891,7 +1910,8 @@ Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
 • Comprovante de imóvel
 • Certidão de nascimento filhos
 
-Digite *MENU* para voltar! 📋`;
+---
+*Digite VOLTAR para o menu principal!* 📋`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1909,7 +1929,8 @@ Digite *MENU* para voltar! 📋`;
 
 ⏰ *Prazo médio:* 30 a 40 dias
 
-Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
+---
+*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1932,7 +1953,8 @@ Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
 
 💰 *Investimento especial:* R$ 380 + Taxa Consular
 
-Digite *MENU* para voltar ou *SIM* para agendar análise! 🚀`;
+---
+*Digite VOLTAR para o menu principal ou SIM para agendar análise!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1951,7 +1973,8 @@ https://calendly.com/getvisa/consultoria
 
 *Horário:* Segunda a Sexta, 9h às 18h
 
-Te aguardo! 💬`;
+---
+*Digite VOLTAR para o menu principal!* 💬`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1969,14 +1992,14 @@ https://getvisa.com.br/simulador-visto-americano-4917
 📊 Você recebe uma análise personalizada
 🎯 Descobre seus pontos fortes e de atenção
 
-*Após preencher, todas as opções serão liberadas para você!* 🚀`;
+---
+*Digite VOLTAR para o menu principal!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
 
-    // ==================== 2. RESPOSTA "SIM" (iniciar processo) ====================
+    // ==================== RESPOSTA "SIM" (iniciar processo) ====================
     if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero') {
-      // Se não tem lead, sugere fazer avaliação primeiro
       if (!lead) {
         const resposta = `📊 *Antes de iniciarmos, que tal descobrir suas chances de aprovação?*
 
@@ -1985,7 +2008,8 @@ https://getvisa.com.br/simulador-visto-americano-4917
 
 Em 2 minutos você recebe uma análise personalizada!
 
-Digite *AVALIAÇÃO* para começar ou *MENU* para voltar! 🚀`;
+---
+*Digite AVALIAÇÃO para começar ou VOLTAR para o menu!* 🚀`;
         await sendReply(cleanPhone, resposta);
         return;
       }
@@ -1998,12 +2022,13 @@ Digite *AVALIAÇÃO* para começar ou *MENU* para voltar! 🚀`;
 
 ⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.
 
-Aguardamos seu formulário! 🇺🇸✨`;
+---
+*Digite VOLTAR para o menu principal!* 🇺🇸✨`;
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== 3. SAUDAÇÃO (mostra MENU) ====================
+    // ==================== SAUDAÇÃO (mostra MENU) ====================
     if (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
         messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite') {
       
@@ -2030,22 +2055,10 @@ https://getvisa.com.br/simulador-visto-americano-4917`;
       return;
     }
     
-    // ==================== 4. VOLTAR AO MENU ====================
-    if (messageText === 'menu' || messageText === 'voltar' || messageText === 'inicio') {
-      const resposta = `📋 *Menu principal:*
-
-1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS
-4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ AVALIAÇÃO
-
-Digite o número da opção desejada (1 a 7)! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 5. NENHUMA OPÇÃO RECONHECIDA ====================
+    // ==================== NENHUMA OPÇÃO RECONHECIDA ====================
     const resposta = `🤔 *Não entendi sua mensagem.*
 
-Digite *MENU* para ver as opções disponíveis ou *OI* para recomeçar.
+Digite *MENU* para ver as opções disponíveis ou *VOLTAR* para recomeçar.
 
 Estou aqui para te ajudar! 💙`;
     await sendReply(cleanPhone, resposta);
@@ -2054,7 +2067,6 @@ Estou aqui para te ajudar! 💙`;
     console.error('❌ Erro no webhook:', error.message);
   }
 });
-
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
