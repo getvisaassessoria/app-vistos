@@ -2071,25 +2071,31 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-   // OPÇÃO 6 - AJUDA / ESPECIALISTA
+// OPÇÃO 6 - AJUDA / ESPECIALISTA
 if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
-  const resposta = `💬 *Fale com um especialista GetVisa*
+  
+  // Mensagem pré-preenchida
+  const mensagemPadrao = encodeURIComponent(`Olá! Gostaria de falar com um especialista sobre meu visto americano.`);
+  
+  const resposta = `💬 *Atendimento GetVisa*
 
-Não encontrou a resposta para sua dúvida? Gostaria de uma análise mais detalhada do seu caso?
+Não encontrou sua resposta? Nossa equipe está aqui para ajudar você!
 
-📝 *Deixe sua pergunta aqui mesmo* e um especialista entrará em contato o mais breve possível.
+📱 *Falar com especialista agora:*
+https://wa.me/5521974601812?text=${mensagemPadrao}
 
-📌 *Enquanto isso, você também pode:*
+📝 *Ou descreva sua dúvida aqui mesmo* (responderemos em até 24h)
 
-• Falar diretamente para falar com um especialista:
-https://wa.me/5521974601812
+⏰ *Horário de atendimento humano:*
+Segunda a Sexta, 9h às 18h
 
-⏰ *Horário de atendimento:* Segunda a Sexta, 9h às 18h
+--
+*Esta é uma mensagem automática. Em breve, um humano te atenderá!*
 
 ---
 *Digite VOLTAR para o menu principal* 🔙
 
-Estamos aqui para te ajudar! 💙🚀`;
+Estamos juntos nessa! 💙🚀`;
   await sendReply(cleanPhone, resposta);
   return;
 }
