@@ -34,6 +34,28 @@ function getRealIp(req) {
     return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
 }
 
+// ==================== BLOQUEIO DE BOTS ====================
+app.use((req, res, next) => {
+    const ip = getRealIp(req);
+    const userAgent = req.headers['user-agent'] || '';
+    
+    // Bloquear user-agents suspeitos
+    const userAgentsBloqueados = [
+        'python-requests', 'curl', 'wget', 'Go-http-client', 
+        'Java', 'okhttp', 'Apache-HttpClient', 'Scrapy'
+    ];
+    
+    for (const bot of userAgentsBloqueados) {
+        if (userAgent.toLowerCase().includes(bot.toLowerCase())) {
+            console.log(`🚨 BOT BLOQUEADO: IP ${ip} - User-Agent: ${userAgent}`);
+            return res.status(403).json({ error: 'Acesso negado' });
+        }
+    }
+    
+    next();
+});
+
+
 app.use((req, res, next) => {
     const ip = getRealIp(req);
     
@@ -136,44 +158,56 @@ app.use((req, res, next) => {
     next();
 });
 
-// ==================== VALIDAÇÃO DE E-MAIL ====================
+// ==================== VALIDAÇÃO DE E-MAIL MAIS RESTRITIVA ====================
 const DOMINIOS_PERMITIDOS = [
     'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
-    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
+    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br',
+    'yahoo.com.br', 'icloud.com', 'me.com', 'live.com', 'msn.com'
 ];
 
-function isDominioPermitido(email) {
-    if (!email || typeof email !== 'string') return false;
-    const dominio = email.split('@')[1]?.toLowerCase();
-    return DOMINIOS_PERMITIDOS.includes(dominio);
-}
+// Domínios bloqueados (estrangeiros e suspeitos)
+const DOMINIOS_BLOQUEADOS = [
+    'mailxw.com', 'hmga.com', 'hmgma.com', 'rogers.com', 'hotmail.co.uk',
+    'aol.com', 'mail.com', 'yandex.com', 'protonmail.com', 'gmx.com',
+    'web.de', 'btinternet.com', 'icloud.com.br'
+];
 
+// E-mails específicos bloqueados
 const EMAILS_BLOQUEADOS = [
     'phillipratylor29@gmail.com',
     'davidjonietz@gmail.com',
     'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com'
+    'faisal.johnson@hmgma.com',
+    'c_kropp@rogers.com',
+    'dillionhanks18@gmail.com',
+    'achanna20@hotmail.com',
+    'bobdabdoubs@gmail.com',
+    'onemoniquekee@yahoo.com'
 ];
 
-const DOMINIOS_BLOQUEADOS = [
-    'mailxw.com',
-    'hmga.com',
-    'hmgma.com'
+// Nomes suspeitos (bloquear)
+const NOMES_SUSPEITOS = [
+    'ynkytywzkgtg', 'vajtprvputmy', 'gmdkjrwqgnkx', 'oenehsthzwwz', 
+    'mdtxwelltidxh', 'test', 'fake', 'spam', 'hacker', 'admin'
 ];
 
 function isEmailClienteValido(email, nomeCliente) {
+    // Verifica se é um e-mail válido
     if (!email || typeof email !== 'string') {
         console.log(`🚨 E-mail inválido: ${email}`);
         return false;
     }
     
     const emailLower = email.toLowerCase().trim();
+    const nomeLower = (nomeCliente || '').toLowerCase().trim();
     
+    // 1. Verifica se está na LISTA NEGRA de e-mails
     if (EMAILS_BLOQUEADOS.includes(emailLower)) {
         console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
         return false;
     }
     
+    // 2. Verifica domínio bloqueado
     const dominio = emailLower.split('@')[1];
     if (!dominio) {
         console.log(`🚨 E-mail sem domínio: ${email}`);
@@ -185,20 +219,40 @@ function isEmailClienteValido(email, nomeCliente) {
         return false;
     }
     
+    // 3. Verifica se o domínio é permitido (apenas domínios brasileiros e comuns)
+    const isDominioPermitido = DOMINIOS_PERMITIDOS.some(d => dominio === d);
+    if (!isDominioPermitido) {
+        console.log(`🚨 Domínio não permitido: ${email} - apenas e-mails nacionais são aceitos`);
+        return false;
+    }
+    
+    // 4. Verifica formato básico de e-mail
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         console.log(`🚨 Formato de e-mail inválido: ${email}`);
         return false;
     }
     
-    const nomeLower = (nomeCliente || '').toLowerCase();
-    const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam'];
-    
-    for (const suspeito of nomesSuspeitos) {
-        if (nomeLower.includes(suspeito)) {
-            console.log(`🚨 Nome suspeito bloqueado: ${nomeCliente}`);
+    // 5. Verifica se o nome ou e-mail contêm padrões suspeitos
+    for (const suspeito of NOMES_SUSPEITOS) {
+        if (nomeLower.includes(suspeito) || emailLower.includes(suspeito)) {
+            console.log(`🚨 Padrão suspeito detectado - Nome: ${nomeCliente}, Email: ${email}`);
             return false;
         }
+    }
+    
+    // 6. Verifica se o nome tem pelo menos 3 caracteres (evita nomes muito curtos)
+    if (nomeLower.length < 3) {
+        console.log(`🚨 Nome muito curto: ${nomeCliente}`);
+        return false;
+    }
+    
+    // 7. Verifica se o nome não é apenas letras repetidas ou padrão aleatório
+    const nomeSemEspacos = nomeLower.replace(/\s/g, '');
+    const temVogal = /[aeiou]/.test(nomeSemEspacos);
+    if (!temVogal && nomeSemEspacos.length > 5) {
+        console.log(`🚨 Nome sem vogais (padrão aleatório): ${nomeCliente}`);
+        return false;
     }
     
     console.log(`✅ E-mail válido: ${email}`);
