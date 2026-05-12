@@ -1119,13 +1119,9 @@ app.post('/api/submit-avaliacao', async (req, res) => {
       let telefoneCliente = data['telefone'] || data['whatsapp'] || null;
       if (telefoneCliente) {
         telefoneCliente = telefoneCliente.toString().replace(/\D/g, '');
-        if (telefoneCliente.startsWith('55')) {
-          telefoneCliente = telefoneCliente.substring(2);
-        }
-        if (telefoneCliente.length === 12) {
-          telefoneCliente = telefoneCliente.substring(1);
-        }
-        console.log(`📞 Telefone original: ${data['telefone']} → normalizado: ${telefoneCliente}`);
+        if (telefoneCliente.startsWith('55')) telefoneCliente = telefoneCliente.substring(2);
+        if (telefoneCliente.length === 12) telefoneCliente = telefoneCliente.substring(1);
+        console.log(`📞 Telefone normalizado: ${telefoneCliente}`);
       }
       
       const score = data['score'] || data['pontuacao'] || 0;
@@ -1150,60 +1146,30 @@ app.post('/api/submit-avaliacao', async (req, res) => {
         if (insertError) {
           console.error('❌ Erro ao salvar lead:', insertError);
         } else {
-          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
+          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
           
           const primeiroNome = nome.split(' ')[0];
-          
-          // Extrair dados para personalização
           const situacaoProfissional = data['situacao_profissional'] || data['ocupacao'] || 'não informada';
           const renda = data['renda_mensal'] || data['renda'] || 'não informada';
           const historicoViagens = data['historico_viagens'] || '';
           const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
-          const primeiraViagem = historicoViagens.toLowerCase().includes('nunca');
           
-          let analise = '';
+          // 🔥 USA A FUNÇÃO HUMANIZADA 🔥
+          const respostaHumanizada = gerarRespostaHumanizada(
+            primeiroNome, classificacao, situacaoProfissional, 
+            renda, historicoViagens, propositoViagem, score
+          );
           
-          if (situacaoProfissional.toLowerCase().includes('clt')) {
-            analise += `✅ *Estabilidade profissional:* Sua situação como ${situacaoProfissional} é um ponto muito positivo.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
-            analise += `📊 *Renda autônoma:* Vamos organizar sua documentação financeira.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('estudante')) {
-            analise += `📚 *Perfil estudante:* Precisaremos de documentação escolar.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('desempregado')) {
-            analise += `⚠️ *Ponto de atenção:* Vamos fortalecer seus vínculos com o Brasil.\n`;
+          let mensagemWhats = respostaHumanizada;
+          
+          if (!respostaHumanizada.includes('Investimento')) {
+            mensagemWhats += `\n\n💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
+            mensagemWhats += `✅ *Próximos passos:*\n`;
+            mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
+            mensagemWhats += `• Digite *MENU* para outras opções\n`;
+            mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
+            mensagemWhats += `Estamos juntos! 🚀💙`;
           }
-          
-          if (renda.includes('15.000')) {
-            analise += `💰 *Renda compatível:* Sua renda favorece seu perfil.\n`;
-          } else if (renda.includes('Até R$ 3.000')) {
-            analise += `📌 *Renda atual:* Vamos complementar com outros comprovantes.\n`;
-          }
-          
-          if (primeiraViagem) {
-            analise += `✈️ *Primeira viagem:* Documentação extra para demonstrar vínculos.\n`;
-          } else if (historicoViagens.toLowerCase().includes('visto americano')) {
-            analise += `🇺🇸 *Experiência positiva:* Histórico com visto americano é um diferencial!\n`;
-          }
-          
-          let mensagemWhats = `🎯 *${primeiroNome}, obrigado por preencher nossa avaliação!* 🎯\n\n`;
-          mensagemWhats += `📊 *Sua classificação:* ${classificacao}\n`;
-          mensagemWhats += `🔹 Pontuação: ${score}/100\n\n`;
-          mensagemWhats += `📋 *Dados analisados:*\n`;
-          mensagemWhats += `• ${situacaoProfissional}\n`;
-          mensagemWhats += `• Renda: ${renda}\n`;
-          mensagemWhats += `• ${historicoViagens}\n`;
-          mensagemWhats += `• ${propositoViagem}\n\n`;
-          
-          if (analise) {
-            mensagemWhats += `🔍 *Análise personalizada:*\n${analise}\n`;
-          }
-          
-          mensagemWhats += `💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
-          mensagemWhats += `✅ *Próximos passos:*\n`;
-          mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
-          mensagemWhats += `• Digite *MENU* para outras opções\n`;
-          mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
-          mensagemWhats += `Estamos juntos! 🚀💙`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
