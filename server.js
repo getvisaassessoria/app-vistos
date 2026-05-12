@@ -1125,15 +1125,15 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           }
           
           mensagemWhats += `💰 *Investimento total:*\n`;
-          mensagemWhats += `🇺🇸 Taxa Consular: ~R$ 950\n`;
-          mensagemWhats += `📋 Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n`;
+          mensagemWhats += `🇺🇸 Taxa Consular: U$185 - Aprox R$950\n`;
+          mensagemWhats += `📋 Assessoria GetVisa: R$ 350 \n\n`;
           
           mensagemWhats += `✅ *Próximos passos:*\n`;
           mensagemWhats += `• Digite *SIM* para receber o link do DS-160\n`;
           mensagemWhats += `• Digite *MENU* para ver todas as opciones\n`;
           mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
           
-          mensagemWhats += `Estou aqui para te ajudar! 🚀💙`;
+          mensagemWhats += `Estamos aqui para te ajudar! 🚀💙`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
@@ -2071,25 +2071,28 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // OPÇÃO 6 - AJUDA / ESPECIALISTA
-    if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
-      const resposta = `📞 *FALAR COM UM ESPECIALISTA*
+   // OPÇÃO 6 - AJUDA / ESPECIALISTA
+if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
+  const resposta = `💬 *Fale com um especialista GetVisa*
 
-Meu nome é *Moisés* e estou aqui para te ajudar!
+Não encontrou a resposta para sua dúvida? Gostaria de uma análise mais detalhada do seu caso?
 
-*WhatsApp direto:*
+📝 *Deixe sua pergunta aqui mesmo* e um especialista entrará em contato o mais breve possível.
+
+📌 *Enquanto isso, você também pode:*
+
+• Falar diretamente para falar com um especialista:
 https://wa.me/5521974601812
 
-*Agende uma consultoria gratuita:*
-https://calendly.com/getvisa/consultoria
-
-*Horário:* Segunda a Sexta, 9h às 18h
+⏰ *Horário de atendimento:* Segunda a Sexta, 9h às 18h
 
 ---
-*Digite VOLTAR para o menu principal!* 💬`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
+*Digite VOLTAR para o menu principal* 🔙
+
+Estamos aqui para te ajudar! 💙🚀`;
+  await sendReply(cleanPhone, resposta);
+  return;
+}
 
     // OPÇÃO 7 - AVALIAÇÃO (LINK DO SIMULADOR)
     if (messageText === '7' || messageText === '7️⃣' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador' || messageText === '📊') {
