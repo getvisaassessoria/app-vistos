@@ -1092,8 +1092,6 @@ app.post('/api/submit-avaliacao', async (req, res) => {
             analisePersonalizada += `📚 *Perfil estudante:* Precisaremos de documentação escolar e comprovação de vínculos familiares.\n`;
           } else if (situacaoProfissional.toLowerCase().includes('desempregado')) {
             analisePersonalizada += `⚠️ *Ponto de atenção:* Trabalharemos para fortalecer seus vínculos com o Brasil.\n`;
-          } else {
-            analisePersonalizada += `📌 *Perfil analisado:* Vamos preparar sua documentação da melhor forma possível.\n`;
           }
           
           if (renda.includes('15.000')) {
@@ -1104,9 +1102,9 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           
           if (primeiraViagem) {
             analisePersonalizada += `✈️ *Primeira viagem:* Preparemos documentação extra para demonstrar vínculos.\n`;
-          } else if (historicoViagens.includes('visto americano')) {
+          } else if (historicoViagens.toLowerCase().includes('visto americano')) {
             analisePersonalizada += `🇺🇸 *Experiência positiva:* Seu histórico com visto americano é um grande diferencial!\n`;
-          } else if (historicoViagens.includes('outros países')) {
+          } else if (historicoViagens.toLowerCase().includes('outros países')) {
             analisePersonalizada += `🌎 *Bom histórico:* Suas viagens internacionais fortalecem seu perfil.\n`;
           }
           
@@ -1125,15 +1123,15 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           }
           
           mensagemWhats += `💰 *Investimento total:*\n`;
-          mensagemWhats += `🇺🇸 Taxa Consular: U$185 - Aprox R$950\n`;
-          mensagemWhats += `📋 Assessoria GetVisa: R$ 350 \n\n`;
+          mensagemWhats += `🇺🇸 Taxa Consular: ~R$ 950\n`;
+          mensagemWhats += `📋 Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n`;
           
           mensagemWhats += `✅ *Próximos passos:*\n`;
           mensagemWhats += `• Digite *SIM* para receber o link do DS-160\n`;
-          mensagemWhats += `• Digite *MENU* para ver todas as opciones\n`;
+          mensagemWhats += `• Digite *MENU* para ver todas as opções\n`;
           mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
           
-          mensagemWhats += `Estamos aqui para te ajudar! 🚀💙`;
+          mensagemWhats += `Nossa equipe está à disposição para te ajudar! 🚀💙`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
