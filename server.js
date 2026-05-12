@@ -1811,7 +1811,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
 
-    // Buscar lead no Supabase
+    // Buscar lead (apenas para saber se já tem cadastro - NÃO OBRIGATÓRIO)
     let lead = null;
     const { data: leads } = await supabase
       .from('leads_simulador')
@@ -1822,8 +1822,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (leads && leads.length > 0) {
       lead = leads[0];
       console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
-    } else {
-      console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
     }
     
     const instance = process.env.ZAPI_INSTANCE;
@@ -1841,80 +1839,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
 
-    // ==================== 1. NOVOS CLIENTES (LEAD NÃO EXISTE) ====================
-    if (!lead) {
-      console.log(`🆕 Cliente NOVO detectado. Enviando MENU COMPLETO.`);
-      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
-
-Olá! 👋 Seja bem-vindo(a)!
-
-📋 *Como podemos ajudar você hoje?*
-
-1️⃣ 💰 *PREÇO* - Valores do processo
-2️⃣ ⏰ *PRAZO* - Tempos estimados
-3️⃣ 📄 *DOCUMENTOS* - O que é necessário
-4️⃣ 📋 *PROCESSO* - Passo a passo
-5️⃣ ⚠️ *VISTO NEGADO* - Casos de negativa
-6️⃣ 📞 *AJUDA* - Falar com especialista
-7️⃣ 📊 *AVALIAÇÃO* - Análise gratuita do seu perfil
-
-*Digite o número da opção desejada (1 a 7):* 🚀
-
-📌 *Para uma análise personalizada, preencha nosso simulador:*
-https://getvisa.com.br/simulador-visto-americano-4917`;
-      
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // ==================== 2. CLIENTES EXISTENTES ====================
+    // ==================== 1. RESPOSTAS POR NÚMERO (VÊM PRIMEIRO) ====================
     
-    // RESPOSTA "SIM"
-    if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣') {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉
-
-📋 *Acesse o rascunho do formulário DS-160:*
-🌐 https://getvisa.com.br/formulario-ds160
-
-⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.
-
-Aguardamos seu formulário! 🇺🇸✨`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // RESPOSTA "NÃO"
-    if (messageText === 'não' || messageText === 'nao' || messageText === 'n') {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `😊 *Tudo bem, ${primeiroNome}!*
-
-🔍 *Opções rápidas:*
-1️⃣💰 PREÇO | 2️⃣⏰ PRAZO | 3️⃣📄 DOCUMENTOS
-4️⃣📋 PROCESSO | 5️⃣⚠️ VISTO NEGADO | 6️⃣📞 AJUDA
-8️⃣📅 MEUS AGENDAMENTOS
-
-Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // SAUDAÇÃO
-    if (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-        messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite') {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸
-
-📋 *Menu rápido:*
-1️⃣ 💰 PREÇO | 2️⃣ ⏰ PRAZO | 3️⃣ 📄 DOCUMENTOS
-4️⃣ 📋 PROCESSO | 5️⃣ ⚠️ VISTO NEGADO | 6️⃣ 📞 AJUDA
-7️⃣ ✅ SIM | 8️⃣ 📅 MEUS AGENDAMENTOS
-
-*Digite o número da opção desejada (1 a 8):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
     // OPÇÃO 1 - PREÇO
     if (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰') {
       const resposta = `💰 *INVESTIMENTO*
@@ -1929,7 +1855,7 @@ Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
 ✅ Preparação para entrevista
 ✅ Acompanhamento total
 
-Digite *7* ou *SIM* para começar! 🚀`;
+Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1944,7 +1870,7 @@ Digite *7* ou *SIM* para começar! 🚀`;
 
 🕒 *Total estimado:* 30 a 40 dias
 
-Digite *7* ou *SIM* para acelerar! 🚀`;
+Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1965,7 +1891,7 @@ Digite *7* ou *SIM* para acelerar! 🚀`;
 • Comprovante de imóvel
 • Certidão de nascimento filhos
 
-Digite *7* ou *SIM* e te ajudo! 📋`;
+Digite *MENU* para voltar! 📋`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -1974,7 +1900,7 @@ Digite *7* ou *SIM* e te ajudo! 📋`;
     if (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo') {
       const resposta = `📋 *PASSO A PASSO DO PROCESSO*
 
-1️⃣ Análise de perfil (você já fez ✅)
+1️⃣ Análise de perfil
 2️⃣ Preenchimento do DS-160
 3️⃣ Pagamento da taxa consular (~R$ 950)
 4️⃣ Agendamento da entrevista
@@ -1983,7 +1909,7 @@ Digite *7* ou *SIM* e te ajudo! 📋`;
 
 ⏰ *Prazo médio:* 30 a 40 dias
 
-Digite *7* ou *SIM* para iniciar! 🚀`;
+Digite *MENU* para voltar ou *SIM* para começar! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -2006,7 +1932,7 @@ Digite *7* ou *SIM* para iniciar! 🚀`;
 
 💰 *Investimento especial:* R$ 380 + Taxa Consular
 
-Digite *7* ou *SIM* para agendar análise! 🚀`;
+Digite *MENU* para voltar ou *SIM* para agendar análise! 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
@@ -2030,75 +1956,106 @@ Te aguardo! 💬`;
       return;
     }
 
-    // OPÇÃO 8 - AGENDAMENTOS
-    if (messageText === '8' || messageText === '8️⃣' || messageText === 'meus agendamentos' || messageText === 'agendamentos' || messageText === '📅') {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const nomeCompleto = lead.nome_cliente || '';
-      
-      const { data: agendamentos, error } = await supabase
-        .from('compromissos')
-        .select('*')
-        .ilike('cliente', `%${nomeCompleto}%`)
-        .order('data', { ascending: true });
-      
-      if (error || !agendamentos || agendamentos.length === 0) {
-        const resposta = `📅 *Olá, ${primeiroNome}!*
+    // OPÇÃO 7 - AVALIAÇÃO (LINK DO SIMULADOR)
+    if (messageText === '7' || messageText === '7️⃣' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador' || messageText === '📊') {
+      const resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*
 
-Você não possui compromissos agendados no momento.
+Descubra suas chances de aprovação para o visto americano!
 
-Gostaria de agendar uma consultoria gratuita?
-👉 https://calendly.com/getvisa/consultoria
+📋 *Preencha nosso simulador:*
+https://getvisa.com.br/simulador-visto-americano-4917
 
-Digite *MENU* para voltar! 🚀`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-      
-      const hoje = new Date().toISOString().split('T')[0];
-      const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido !== 1);
-      
-      if (futuros.length === 0) {
-        const resposta = `📅 *Olá, ${primeiroNome}!*
+⏱️ Leva menos de 2 minutos!
+📊 Você recebe uma análise personalizada
+🎯 Descobre seus pontos fortes e de atenção
 
-✅ *Você não tem compromissos futuros no momento.*
-
-Gostaria de agendar uma consultoria gratuita?
-👉 https://calendly.com/getvisa/consultoria
-
-Digite *MENU* para voltar! 🚀`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-      
-      let resposta = `📅 *Olá, ${primeiroNome}! Seus próximos compromissos:*\n\n`;
-      for (const ag of futuros.slice(0, 5)) {
-        const dataFormatada = formatarDataBR(ag.data);
-        const emoji = ag.atividade === 'ENTREVISTA' ? '🗣️' : 
-                      ag.atividade === 'CASV' ? '👆' : 
-                      ag.atividade.includes('TREINAMENTO') ? '💻' : '📌';
-        resposta += `${emoji} *${ag.atividade}*\n   📆 ${dataFormatada} | ⏰ ${ag.hora}\n\n`;
-      }
-      resposta += `Digite *MENU* para voltar! 🚀`;
+*Após preencher, todas as opções serão liberadas para você!* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
 
-    // ==================== FALLBACK (nenhuma opção reconhecida) ====================
-    const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-    const classificacao = lead.classificacao_perfil || 'Analisado';
-    const pontuacao = lead.pontuacao_total || 0;
-    const respostas = lead.respostas_simulador || {};
+    // ==================== 2. RESPOSTA "SIM" (iniciar processo) ====================
+    if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero') {
+      // Se não tem lead, sugere fazer avaliação primeiro
+      if (!lead) {
+        const resposta = `📊 *Antes de iniciarmos, que tal descobrir suas chances de aprovação?*
+
+Faça nossa avaliação gratuita de perfil:
+https://getvisa.com.br/simulador-visto-americano-4917
+
+Em 2 minutos você recebe uma análise personalizada!
+
+Digite *AVALIAÇÃO* para começar ou *MENU* para voltar! 🚀`;
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+      
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉
+
+📋 *Acesse o rascunho do formulário DS-160:*
+🌐 https://getvisa.com.br/formulario-ds160
+
+⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.
+
+Aguardamos seu formulário! 🇺🇸✨`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
     
-    let resposta = `Olá, ${primeiroNome}! Seu perfil: *${classificacao}* (${pontuacao}/100)\n\n`;
-    resposta += `📋 *Opções:* 1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ SIM | 8️⃣ AGENDAMENTOS\n\n`;
-    resposta += `Digite o número da opção desejada! 🚀`;
+    // ==================== 3. SAUDAÇÃO (mostra MENU) ====================
+    if (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
+        messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite') {
+      
+      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
+
+Olá! 👋 Seja bem-vindo(a)!
+
+📋 *Como podemos ajudar você hoje?*
+
+1️⃣ 💰 *PREÇO* - Valores do processo
+2️⃣ ⏰ *PRAZO* - Tempos estimados
+3️⃣ 📄 *DOCUMENTOS* - O que é necessário
+4️⃣ 📋 *PROCESSO* - Passo a passo
+5️⃣ ⚠️ *VISTO NEGADO* - Casos de negativa
+6️⃣ 📞 *AJUDA* - Falar com especialista
+7️⃣ 📊 *AVALIAÇÃO* - Análise gratuita do seu perfil
+
+*Digite o número da opção desejada (1 a 7):* 🚀
+
+📌 *Para uma análise personalizada, preencha nosso simulador:*
+https://getvisa.com.br/simulador-visto-americano-4917`;
+      
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
     
+    // ==================== 4. VOLTAR AO MENU ====================
+    if (messageText === 'menu' || messageText === 'voltar' || messageText === 'inicio') {
+      const resposta = `📋 *Menu principal:*
+
+1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS
+4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ AVALIAÇÃO
+
+Digite o número da opção desejada (1 a 7)! 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // ==================== 5. NENHUMA OPÇÃO RECONHECIDA ====================
+    const resposta = `🤔 *Não entendi sua mensagem.*
+
+Digite *MENU* para ver as opções disponíveis ou *OI* para recomeçar.
+
+Estou aqui para te ajudar! 💙`;
     await sendReply(cleanPhone, resposta);
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
   }
-});// ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
+});
+
+// ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
   console.log('📥 Simulador 5 etapas recebido:', data);
