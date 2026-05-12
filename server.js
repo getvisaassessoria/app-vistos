@@ -1025,6 +1025,85 @@ app.post('/api/submit-ds160', async (req, res) => {
   })();
 });
 
+// ==================== FUNÇÃO DE RESPOSTA HUMANIZADA POR PERFIL ====================
+function gerarRespostaHumanizada(primeiroNome, classificacao, situacao, renda, historico, motivo, score) {
+  
+  // Combinações específicas (mais comuns)
+  if (classificacao === 'Requer Atenção') {
+    if (situacao.includes('Desempregado') && renda === 'Até R$ 3.000' && historico.includes('Nunca viajei')) {
+      if (motivo.includes('Estudos')) {
+        return `🗣️ Olá, ${primeiroNome}! Tudo bem? Vi que seu sonho é fazer intercâmbio, mas seu perfil atual (desempregado, sem renda fixa e sem experiência internacional) é o que o Consulado mais questiona. A boa notícia é que podemos construir uma estratégia sólida com documentação alternativa: comprovantes de ajuda familiar, bens, carta de intenção e vínculos acadêmicos. Vamos juntos transformar essa dificuldade em um caso bem apresentado.`;
+      }
+      if (motivo.includes('Turismo')) {
+        return `🤔 Olá, ${primeiroNome}! Viajar a lazer é um sonho, mas seu momento profissional atual (desempregado) e a falta de histórico internacional exigem uma preparação muito cuidadosa. O Consulado pode questionar seus vínculos com o Brasil. Minha sugestão é primeiro fortalecer sua situação profissional ou familiar antes de aplicar. Posso te orientar sobre o que fazer para construir um perfil mais sólido nos próximos meses.`;
+      }
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano') && renda === 'Até R$ 3.000') {
+      return `📌 Olá, ${primeiroNome}! Você tem um emprego recente, o que é positivo, mas o tempo curto na empresa e a renda inicial podem levantar dúvidas. Vamos focar em: carta da empresa evidenciando estabilidade + comprovantes de vínculos familiares + documentação extra para sua primeira viagem. Com planejamento, seu perfil pode evoluir muito.`;
+    }
+    
+    if (situacao.includes('Autônomo') && renda === 'Até R$ 3.000') {
+      return `📊 Olá, ${primeiroNome}! Como autônomo com renda variável e sem histórico de viagens, o Consulado precisa ver organização financeira. Vamos preparar: extratos detalhados, declaração de IR, contratos de trabalho, e uma carta de intenção clara. Mesmo com desafios, é possível construir um bom caso.`;
+    }
+  }
+  
+  if (classificacao === 'Perfil Regular') {
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano') && renda === 'Entre R$ 3.000 e R$ 7.000') {
+      return `🌟 Olá, ${primeiroNome}! Você tem um bom ponto de partida: emprego recente e renda estável. O que precisa de atenção é o tempo curto na empresa. Vamos focar em: carta da empresa evidenciando potencial de crescimento + comprovantes de vínculos familiares. Com isso, seu perfil fica muito mais seguro. Posso começar?`;
+    }
+    
+    if (situacao.includes('Autônomo') && renda === 'Entre R$ 7.000 e R$ 15.000' && historico.includes('Tenho visto para outros países')) {
+      return `💼 Olá, ${primeiroNome}! Excelente! Viagem a negócios com histórico internacional positivo e experiência como autônomo. Seu perfil é promissor. O foco será: comprovação da sua empresa, contratos comerciais, carta convite do parceiro nos EUA e sua agenda de negócios. Com isso, o Consulado vê profissionalismo e propósito. Vamos preparar esse caso estratégico?`;
+    }
+    
+    if (situacao.includes('Estudante') && historico.includes('Nunca viajei')) {
+      return `📚 Olá, ${primeiroNome}! Fazer intercâmbio é incrível, mas seu perfil (estudante sem renda e sem viagens) precisa de uma estrutura forte. Sua aprovação virá da documentação dos seus patrocinadores (pais/responsáveis) + comprovante de matrícula + planejamento de retorno ao Brasil para concluir os estudos. Posso te ajudar a organizar esse caso?`;
+    }
+  }
+  
+  if (classificacao === 'Potencial Moderado') {
+    if (situacao.includes('CLT') && situacao.includes('mais de 1 ano') && renda === 'Acima de R$ 15.000') {
+      return `✨ Olá, ${primeiroNome}! Seu perfil está muito forte! Emprego estável, boa renda e propósito claro. Isso é o que o Consulado mais valoriza. Meu papel será garantir que sua documentação esteja perfeita e que você esteja 100% preparado para a entrevista. Com poucos ajustes, seu caso fica excelente. Vamos nessa?`;
+    }
+    
+    if (situacao.includes('Empresário') && renda === 'Acima de R$ 15.000' && historico.includes('Já possuo visto americano')) {
+      return `🏆 Olá, ${primeiroNome}! Uau, seu perfil é dos mais fortes! Empresário consolidado, boa renda e já com visto americano. A chave será atualizar corretamente seu DS-160 e alinhar sua entrevista com seus planos de negócios. Praticamente uma formalidade. Quer que eu cuide de tudo para você?`;
+    }
+    
+    if (situacao.includes('Autônomo') && renda === 'Entre R$ 7.000 e R$ 15.000' && historico.includes('Tenho visto para outros países')) {
+      return `📈 Olá, ${primeiroNome}! Seu perfil combina pontos fortes: experiência internacional, propósito de negócios e atuação como autônomo. Vamos organizar sua documentação financeira e comercial para que o Consulado veja solidez. Com esse perfil, sua aprovação tem tudo para acontecer. Vamos começar?`;
+    }
+  }
+  
+  if (classificacao === 'Forte Potencial') {
+    if ((situacao.includes('CLT') || situacao.includes('Empresário')) && renda === 'Acima de R$ 15.000' && historico.includes('Já possuo visto americano')) {
+      return `🏆 Olá, ${primeiroNome}! PARABÉNS! Seu perfil é FORTÍSSIMO. Você já tem visto americano, estabilidade profissional e excelente renda. Meu trabalho aqui será básico: alinhar o DS-160, reforçar seus vínculos e te preparar para a entrevista (que será tranquila). A aprovação é quase certa. Quer que eu cuide de tudo para você?`;
+    }
+    
+    if (situacao.includes('Empresário') && renda === 'Acima de R$ 15.000' && historico.includes('Tenho visto para outros países')) {
+      return `🎉 Olá, ${primeiroNome}! Que perfil fantástico! Empresário bem-sucedido, com renda elevada e experiência internacional. Seu caso é dos mais fáceis de aprovar. Vamos juntos apenas revisar documentos e alinhar sua apresentação. O visto está muito próximo. Bora?`;
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('mais de 1 ano') && renda === 'Acima de R$ 15.000' && historico.includes('Tenho visto para outros países')) {
+      return `🌟 Olá, ${primeiroNome}! Seu perfil é DOS SONHOS para o Consulado: emprego estável, boa renda, experiência internacional e propósito claro de ${motivo.toLowerCase()}. Dificilmente terá problemas. Vamos garantir que tudo esteja perfeito para sua entrevista ficar ainda mais tranquila. Quer me contratar para cuidar de tudo?`;
+    }
+  }
+  
+  // Fallback genérico (quando nenhuma combinação específica for encontrada)
+  return `🌟 Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${score}/100). Vamos trabalhar juntos para fortalecer sua documentação e preparar você para a entrevista. 
+
+💰 *Investimento total:*
+🇺🇸 Taxa Consular: ~R$ 950
+📋 Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para receber o link do DS-160
+• Digite *MENU* para ver outras opções
+• Digite *VOLTAR* a qualquer momento
+
+Podemos começar? 🚀💙`;
+}
 
 // ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
 app.post('/api/submit-avaliacao', async (req, res) => {
@@ -2232,6 +2311,38 @@ app.post('/api/submit-simulador', async (req, res) => {
         } else {
           console.log(`✅ Lead salvo: ${nome} - ${telefoneCliente}`);
           
+          // Dentro da rota, após salvar o lead e calcular score/classificação
+const primeiroNome = nome.split(' ')[0];
+const situacaoProfissional = data['situacao_profissional'] || data['ocupacao'] || 'não informada';
+const renda = data['renda_mensal'] || data['renda'] || 'não informada';
+const historicoViagens = data['historico_viagens'] || '';
+const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
+
+// Gerar resposta humanizada
+const respostaHumanizada = gerarRespostaHumanizada(
+  primeiroNome, 
+  classificacao, 
+  situacaoProfissional, 
+  renda, 
+  historicoViagens, 
+  propositoViagem, 
+  score
+);
+
+let mensagemWhats = respostaHumanizada;
+
+// Adiciona investimento e próximos passos se não vier na resposta humanizada
+if (!respostaHumanizada.includes('Investimento')) {
+  mensagemWhats += `\n\n💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
+  mensagemWhats += `✅ *Próximos passos:*\n`;
+  mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
+  mensagemWhats += `• Digite *MENU* para outras opções\n`;
+  mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
+  mensagemWhats += `Estamos juntos! 🚀💙`;
+}
+
+await enviarWhatsApp(telefoneCliente, mensagemWhats);
+
           const primeiroNome = nome.split(' ')[0];
           const primeiraViagem = historicoViagens === 'Nunca viajei para fora do Brasil';
           
