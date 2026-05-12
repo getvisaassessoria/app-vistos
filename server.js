@@ -1135,6 +1135,13 @@ app.post('/api/submit-avaliacao', async (req, res) => {
   })();
 });
 
+// ==================== IGNORAR MENSAGEM COPIADA DO SITE ====================
+if (messageText.includes('fiz a avaliação de perfil no site') && 
+    messageText.includes('*Meus dados:*')) {
+  console.log(`📋 Cliente copiou resultado da avaliação - ignorando`);
+  return; // não responde nada
+}
+
 // ==================== ROTA PASSAPORTE ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
