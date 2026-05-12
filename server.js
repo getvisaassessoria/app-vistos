@@ -1788,272 +1788,102 @@ app.get('/ping', (req, res) => {
     res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API SIMPLIFICADO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-    res.status(200).json({ status: 'ok' });
+  res.status(200).json({ status: 'ok' });
 
-    const body = req.body;
-    
-    if (body.fromMe === true) return;
-    const connectedPhone = body.connectedPhone;
-    const senderPhone = body.phone || body.from;
-    if (senderPhone === connectedPhone) return;
-    if (body.isStatusReply === true || body.waitingMessage === true) return;
+  const body = req.body;
+  
+  if (body.fromMe === true) return;
+  const connectedPhone = body.connectedPhone;
+  const senderPhone = body.phone || body.from;
+  if (senderPhone === connectedPhone) return;
+  if (body.isStatusReply === true || body.waitingMessage === true) return;
 
-    try {
-        const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
-        if (!messageText) return;
+  try {
+    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
+    if (!messageText) return;
 
-        let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-        if (cleanPhone.startsWith('55')) {
-            cleanPhone = cleanPhone.substring(2);
-        }
-        console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
-
-        let lead = null;
-        const { data: leads } = await supabase
-            .from('leads_simulador')
-            .select('*')
-            .eq('telefone_whatsapp', cleanPhone)
-            .limit(1);
-        
-        if (leads && leads.length > 0) {
-            lead = leads[0];
-            console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
-        }
-        
-        const instance = process.env.ZAPI_INSTANCE;
-        const token = process.env.ZAPI_TOKEN;
-        const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-        
-        const sendReply = async (phone, message) => {
-            if (!instance || !token) return;
-            const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-                body: JSON.stringify({ phone, message })
-            });
-            console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
-        };
-
-        if (messageText === 'voltar' || messageText === 'menu' || messageText === 'inicio' || messageText === '🔙') {
-            const resposta = `📋 *MENU PRINCIPAL*
-
-1️⃣ 💰 PREÇO - Valores do processo
-2️⃣ ⏰ PRAZO - Tempos estimados
-3️⃣ 📄 DOCUMENTOS - O que é necessário
-4️⃣ 📋 PROCESSO - Passo a passo
-5️⃣ ⚠️ VISTO NEGADO - Casos de negativa
-6️⃣ 📞 AJUDA - Falar com especialista
-7️⃣ 📊 AVALIAÇÃO - Análise gratuita do seu perfil
-
-*Digite o número da opção desejada (1 a 7):* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰') {
-            const resposta = `💰 *INVESTIMENTO*
-
-🇺🇸 *Taxa Consular:* ~R$ 950
-📋 *Assessoria:* R$ 350
-
-*O que a assessoria inclui:*
-✅ Análise completa do perfil
-✅ Preenchimento do DS-160
-✅ Agendamento da entrevista
-✅ Preparação para entrevista
-✅ Acompanhamento total
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '2' || messageText === '2️⃣' || messageText === 'prazo' || messageText === '⏰') {
-            const resposta = `⏰ *PRAZOS ESTIMADOS*
-
-📅 Agendamento: até 8 semanas
-🔍 Análise consular: 7 a 10 dias úteis
-📬 Retorno do passaporte: 5 a 7 dias úteis
-
-🕒 *Total estimado:* 30 a 40 dias
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '3' || messageText === '3️⃣' || messageText === 'documentos' || messageText === '📄') {
-            const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*
-
-📌 *OBRIGATÓRIOS:*
-• Passaporte válido
-• Foto 5x7 recente
-• Comprovante da taxa MRV
-• DS-160 preenchido
-
-📌 *RECOMENDADOS (vínculos):*
-• Comprovante de renda
-• Extratos bancários
-• Comprovante de imóvel
-• Certidão de nascimento filhos
-
----
-*Digite VOLTAR para o menu principal!* 📋`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo') {
-            const resposta = `📋 *PASSO A PASSO DO PROCESSO*
-
-1️⃣ Análise de perfil
-2️⃣ Preenchimento do DS-160
-3️⃣ Pagamento da taxa consular (~R$ 950)
-4️⃣ Agendamento da entrevista
-5️⃣ Preparação para entrevista
-6️⃣ Acompanhamento até o final
-
-⏰ *Prazo médio:* 30 a 40 dias
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '5' || messageText === '5️⃣' || messageText === 'visto negado' || messageText === 'negado' || messageText === '⚠️') {
-            const resposta = `⚠️ *VISTO NEGADO? Não desanime!*
-
-*O que fazer após uma negativa:*
-
-1️⃣ Entender o motivo (artigo 214b)
-2️⃣ Reforçar vínculos com o Brasil
-3️⃣ Corrigir o DS-160
-4️⃣ Preparação intensiva para entrevista
-
-*Nossa assessoria especializada em REVERSÃO:*
-✅ Revisão completa do caso
-✅ Estratégia personalizada
-✅ Acompanhamento total
-
-💰 *Investimento especial:* R$ 380 + Taxa Consular
-
----
-*Digite VOLTAR para o menu principal ou SIM para agendar análise!* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
-            const mensagemPadrao = encodeURIComponent(`Olá! Gostaria de falar com um especialista sobre meu visto americano.`);
-            const resposta = `💬 *Atendimento GetVisa*
-
-Não encontrou sua resposta? Nossa equipe está aqui para ajudar você!
-
-📱 *Falar com especialista agora:*
-https://wa.me/5521974601812?text=${mensagemPadrao}
-
-📝 *Ou descreva sua dúvida aqui mesmo* (responderemos em até 24h)
-
-⏰ *Horário de atendimento humano:*
-Segunda a Sexta, 9h às 18h
-
---
-*Digite VOLTAR para o menu principal* 🔙
-
-Estamos juntos nessa! 💙🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === '7' || messageText === '7️⃣' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador' || messageText === '📊') {
-            const resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*
-
-Descubra suas chances de aprovação para o visto americano!
-
-📋 *Preencha nosso simulador:*
-https://getvisa.com.br/simulador-visto-americano-4917
-
-⏱️ Leva menos de 2 minutos!
-📊 Você recebe uma análise personalizada
-🎯 Descobre seus pontos fortes e de atenção
-
----
-*Digite VOLTAR para o menu principal!* 🚀`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-
-        if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero') {
-            if (!lead) {
-                const resposta = `📊 *Antes de iniciarmos, que tal descobrir suas chances de aprovação?*
-
-Faça nossa avaliação gratuita de perfil:
-https://getvisa.com.br/simulador-visto-americano-4917
-
-Em 2 minutos você recebe uma análise personalizada!
-
----
-*Digite AVALIAÇÃO para começar ou VOLTAR para o menu!* 🚀`;
-                await sendReply(cleanPhone, resposta);
-                return;
-            }
-            
-            const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-            const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉
-
-📋 *Acesse o rascunho do formulário DS-160:*
-🌐 https://getvisa.com.br/formulario-ds160
-
-⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.
-
----
-*Digite VOLTAR para o menu principal!* 🇺🇸✨`;
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        
-        if (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-            messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite') {
-            
-            const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
-
-Olá! 👋 Seja bem-vindo(a)!
-
-📋 *Como podemos ajudar você hoje?*
-
-1️⃣ 💰 *PREÇO* - Valores do processo
-2️⃣ ⏰ *PRAZO* - Tempos estimados
-3️⃣ 📄 *DOCUMENTOS* - O que é necessário
-4️⃣ 📋 *PROCESSO* - Passo a passo
-5️⃣ ⚠️ *VISTO NEGADO* - Casos de negativa
-6️⃣ 📞 *AJUDA* - Falar com especialista
-7️⃣ 📊 *AVALIAÇÃO* - Análise gratuita do seu perfil
-
-*Digite o número da opção desejada (1 a 7):* 🚀
-
-📌 *Para uma análise personalizada, preencha nosso simulador:*
-https://getvisa.com.br/simulador-visto-americano-4917`;
-            
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        
-        const resposta = `🤔 *Não entendi sua mensagem.*
-
-Digite *MENU* para ver as opções disponíveis ou *VOLTAR* para recomeçar.
-
-Estou aqui para te ajudar! 💙`;
-        await sendReply(cleanPhone, resposta);
-        
-    } catch (error) {
-        console.error('❌ Erro no webhook:', error.message);
+    // 🔥 BLOQUEIA MENSAGEM COPIADA 🔥
+    if (messageText.includes('fiz a avaliação de perfil no site')) {
+      console.log(`🚫 IGNORADO - CLIENTE COPIOU AVALIAÇÃO`);
+      return;
     }
+
+    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    console.log(`📞 ${cleanPhone}: "${messageText}"`);
+
+    // Buscar lead
+    let lead = null;
+    const { data: leads } = await supabase
+      .from('leads_simulador')
+      .select('*')
+      .eq('telefone_whatsapp', cleanPhone);
+    
+    if (leads && leads.length > 0) {
+      lead = leads[0];
+      console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
+    } else {
+      console.log(`❌ Lead NÃO encontrado`);
+    }
+    
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    
+    const sendReply = async (phone, message) => {
+      if (!instance || !token) return;
+      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+        body: JSON.stringify({ phone, message })
+      });
+      console.log(`📱 Mensagem enviada para ${phone}`);
+    };
+
+    // RESPOSTAS (apenas as essenciais)
+    if (messageText === 'sim') {
+      await sendReply(cleanPhone, `🎉 Perfeito! 📋 Acesse o DS-160: https://getvisa.com.br/formulario-ds160`);
+      return;
+    }
+    
+    if (messageText === 'menu' || messageText === 'voltar') {
+      await sendReply(cleanPhone, `📋 MENU: 1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ AVALIAÇÃO`);
+      return;
+    }
+    
+    if (messageText === '1' || messageText === 'preço') {
+      await sendReply(cleanPhone, `💰 R$ 950 (taxa) + R$ 350 (assessoria)`);
+      return;
+    }
+    
+    if (messageText === '7' || messageText === 'avaliação') {
+      await sendReply(cleanPhone, `📊 https://getvisa.com.br/simulador-visto-americano-4917`);
+      return;
+    }
+    
+    if (messageText === 'oi' || messageText === 'olá') {
+      await sendReply(cleanPhone, `🇺🇸 Olá! 👋 Digite MENU para ver as opções disponíveis ou AVALIAÇÃO para análise gratuita.`);
+      return;
+    }
+    
+    if (lead && messageText !== 'sim' && messageText !== 'menu') {
+      await sendReply(cleanPhone, `Olá! Digite MENU para ver as opções, SIM para o DS-160 ou AVALIAÇÃO para o simulador.`);
+      return;
+    }
+    
+    if (!lead) {
+      await sendReply(cleanPhone, `🇺🇸 Olá! 👋 Faça sua avaliação gratuita: https://getvisa.com.br/simulador-visto-americano-4917`);
+      return;
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro:', error.message);
+  }
 });
 
 // ==================== SISTEMA DE LEMBRETES AUTOMÁTICOS ====================
