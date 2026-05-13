@@ -291,6 +291,74 @@ async function enviarWhatsApp(telefone, mensagem) {
   }
 }
 
+// ==================== FUNÇÃO DE RESPOSTA HUMANIZADA ====================
+function gerarRespostaHumanizada(primeiroNome, classificacao, situacao, renda, historico, motivo, score) {
+  
+  if (classificacao === 'Requer Atenção') {
+    if (situacao.includes('Desempregado') && renda === 'Até R$ 3.000' && historico.includes('Nunca viajei')) {
+      if (motivo.includes('Estudos')) {
+        return `🗣️ Olá, ${primeiroNome}! Tudo bem? Vi que seu sonho é fazer intercâmbio, mas seu perfil atual (desempregado, sem renda fixa e sem experiência internacional) é o que o Consulado mais questiona. A boa notícia é que podemos construir uma estratégia sólida com documentação alternativa. Vamos juntos transformar essa dificuldade em um caso bem apresentado.`;
+      }
+      if (motivo.includes('Turismo')) {
+        return `🤔 Olá, ${primeiroNome}! Viajar a lazer é um sonho, mas seu momento profissional atual e a falta de histórico internacional exigem uma preparação muito cuidadosa. Minha sugestão é primeiro fortalecer sua situação profissional antes de aplicar. Posso te orientar sobre o que fazer para construir um perfil mais sólido nos próximos meses.`;
+      }
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano')) {
+      return `📌 Olá, ${primeiroNome}! Você tem um emprego recente, o que é positivo, mas o tempo curto na empresa pode levantar dúvidas. Vamos focar em: carta da empresa evidenciando estabilidade + comprovantes de vínculos familiares. Com planejamento, seu perfil pode evoluir muito.`;
+    }
+    
+    if (situacao.includes('Autônomo')) {
+      return `📊 Olá, ${primeiroNome}! Como autônomo, o Consulado precisa ver organização financeira. Vamos preparar: extratos detalhados, declaração de IR e contratos. Mesmo com desafios, é possível construir um bom caso.`;
+    }
+    
+    return `⚠️ Olá, ${primeiroNome}! Seu perfil foi classificado como "Requer Atenção". Vamos trabalhar juntos para fortalecer seus vínculos com o Brasil e organizar sua documentação da melhor forma possível.`;
+  }
+  
+  if (classificacao === 'Perfil Regular') {
+    if (situacao.includes('Autônomo') && historico.includes('Tenho visto para outros países')) {
+      return `💼 Olá, ${primeiroNome}! Excelente! Seu perfil combina pontos fortes: experiência internacional e atuação como autônomo. Vamos organizar sua documentação financeira e comercial para que o Consulado veja solidez. Com esse perfil, sua aprovação tem tudo para acontecer.`;
+    }
+    
+    if (situacao.includes('Estudante') && historico.includes('Nunca viajei')) {
+      return `📚 Olá, ${primeiroNome}! Fazer intercâmbio é incrível, mas seu perfil precisa de uma estrutura forte. Sua aprovação virá da documentação dos seus patrocinadores + comprovante de matrícula + planejamento de retorno ao Brasil. Posso te ajudar a organizar esse caso?`;
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano')) {
+      return `🌟 Olá, ${primeiroNome}! Você tem um bom ponto de partida: emprego recente e renda estável. O que precisa de atenção é o tempo curto na empresa. Vamos focar em: carta da empresa evidenciando potencial de crescimento + comprovantes de vínculos familiares. Com isso, seu perfil fica muito mais seguro.`;
+    }
+    
+    return `🌟 Olá, ${primeiroNome}! Seu perfil foi classificado como "Perfil Regular". Temos aspectos positivos, mas também alguns pontos que merecem atenção. Com o preparo certo, você chega ao consulado em uma posição mais sólida.`;
+  }
+  
+  if (classificacao === 'Potencial Moderado') {
+    if (situacao.includes('CLT') && renda === 'Acima de R$ 15.000') {
+      return `✨ Olá, ${primeiroNome}! Seu perfil está muito forte! Emprego estável e boa renda. Isso é o que o Consulado mais valoriza. Meu papel será garantir que sua documentação esteja perfeita e que você esteja 100% preparado para a entrevista. Vamos nessa?`;
+    }
+    
+    if (situacao.includes('Empresário') && historico.includes('Já possuo visto americano')) {
+      return `🏆 Olá, ${primeiroNome}! Uau, seu perfil é dos mais fortes! Empresário consolidado, e já com visto americano. A chave será atualizar corretamente seu DS-160 e alinhar sua entrevista com seus planos de negócios. Praticamente uma formalidade. Quer que eu cuide de tudo para você?`;
+    }
+    
+    return `📈 Olá, ${primeiroNome}! Seu perfil foi classificado como "Potencial Moderado". Vamos organizar sua documentação financeira e comercial para que o Consulado veja solidez. Com esse perfil, sua aprovação tem tudo para acontecer.`;
+  }
+  
+  if (classificacao === 'Forte Potencial') {
+    if ((situacao.includes('CLT') || situacao.includes('Empresário')) && renda === 'Acima de R$ 15.000') {
+      return `🏆 Olá, ${primeiroNome}! PARABÉNS! Seu perfil é FORTÍSSIMO. Você tem estabilidade profissional e excelente renda. Meu trabalho aqui será básico: alinhar o DS-160 e te preparar para a entrevista. A aprovação é quase certa. Quer que eu cuide de tudo para você?`;
+    }
+    
+    if (situacao.includes('Empresário') && historico.includes('Tenho visto para outros países')) {
+      return `🎉 Olá, ${primeiroNome}! Que perfil fantástico! Empresário bem-sucedido, com renda elevada e experiência internacional. Seu caso é dos mais fáceis de aprovar. Vamos juntos apenas revisar documentos e alinhar sua apresentação. O visto está muito próximo. Bora?`;
+    }
+    
+    return `🏆 Olá, ${primeiroNome}! PARABÉNS! Seu perfil é FORTÍSSIMO. Você tem estabilidade profissional e excelente renda. A aprovação é quase certa. Quer que eu cuide de tudo para você?`;
+  }
+  
+  // Fallback genérico (se nenhuma combinação for encontrada)
+  return `🌟 Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${score}/100). Vamos trabalhar juntos para fortalecer sua documentação e preparar você para a entrevista.`;
+}
+
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
 const radioMapping = {
   'one': 'Sim',
@@ -1077,52 +1145,19 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
           
           const primeiroNome = nome.split(' ')[0];
-          
-          // Extrair dados para personalização
           const situacaoProfissional = data['situacao_profissional'] || data['ocupacao'] || 'não informada';
           const renda = data['renda_mensal'] || data['renda'] || 'não informada';
           const historicoViagens = data['historico_viagens'] || '';
           const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
-          const primeiraViagem = historicoViagens.toLowerCase().includes('nunca');
           
-          let analise = '';
+          // 🔥 USA A FUNÇÃO HUMANIZADA 🔥
+          const respostaHumanizada = gerarRespostaHumanizada(
+            primeiroNome, classificacao, situacaoProfissional, 
+            renda, historicoViagens, propositoViagem, score
+          );
           
-          if (situacaoProfissional.toLowerCase().includes('clt')) {
-            analise += `✅ *Estabilidade profissional:* Sua situação como ${situacaoProfissional} é um ponto muito positivo.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
-            analise += `📊 *Renda autônoma:* Vamos organizar sua documentação financeira.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('estudante')) {
-            analise += `📚 *Perfil estudante:* Precisaremos de documentação escolar.\n`;
-          } else if (situacaoProfissional.toLowerCase().includes('desempregado')) {
-            analise += `⚠️ *Ponto de atenção:* Vamos fortalecer seus vínculos com o Brasil.\n`;
-          }
-          
-          if (renda.includes('15.000')) {
-            analise += `💰 *Renda compatível:* Sua renda favorece seu perfil.\n`;
-          } else if (renda.includes('Até R$ 3.000')) {
-            analise += `📌 *Renda atual:* Vamos complementar com outros comprovantes.\n`;
-          }
-          
-          if (primeiraViagem) {
-            analise += `✈️ *Primeira viagem:* Documentação extra para demonstrar vínculos.\n`;
-          } else if (historicoViagens.toLowerCase().includes('visto americano')) {
-            analise += `🇺🇸 *Experiência positiva:* Histórico com visto americano é um diferencial!\n`;
-          }
-          
-          let mensagemWhats = `🎯 *${primeiroNome}, obrigado por preencher nossa avaliação!* 🎯\n\n`;
-          mensagemWhats += `📊 *Sua classificação:* ${classificacao}\n`;
-          mensagemWhats += `🔹 Pontuação: ${score}/100\n\n`;
-          mensagemWhats += `📋 *Dados analisados:*\n`;
-          mensagemWhats += `• ${situacaoProfissional}\n`;
-          mensagemWhats += `• Renda: ${renda}\n`;
-          mensagemWhats += `• ${historicoViagens}\n`;
-          mensagemWhats += `• ${propositoViagem}\n\n`;
-          
-          if (analise) {
-            mensagemWhats += `🔍 *Análise personalizada:*\n${analise}\n`;
-          }
-          
-          mensagemWhats += `💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
+          let mensagemWhats = respostaHumanizada;
+          mensagemWhats += `\n\n💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
           mensagemWhats += `✅ *Próximos passos:*\n`;
           mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
           mensagemWhats += `• Digite *MENU* para outras opções\n`;
