@@ -280,16 +280,198 @@ async function enviarWhatsApp(telefone, mensagem) {
 }
 
 // ==================== FUNÇÃO DE RESPOSTA HUMANIZADA ====================
+// ==================== FUNÇÃO DE RESPOSTA HUMANIZADA ====================
 function gerarRespostaHumanizada(primeiroNome, classificacao, situacao, renda, historico, motivo, score) {
-  const nomeFormatado = primeiroNome.toUpperCase();
+  
+  if (classificacao === 'Requer Atenção') {
+    if (situacao.includes('Desempregado') && renda === 'Até R$ 3.000' && historico.includes('Nunca viajei')) {
+      if (motivo && motivo.includes('Estudos')) {
+        return `🗣️ Olá, ${primeiroNome}! Tudo bem? Vi que seu sonho é fazer intercâmbio, mas seu perfil atual (desempregado, sem renda fixa e sem experiência internacional) é o que o Consulado mais questiona. A boa notícia é que podemos construir uma estratégia sólida com documentação alternativa. Vamos juntos transformar essa dificuldade em um caso bem apresentado.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+      }
+      if (motivo && motivo.includes('Turismo')) {
+        return `🤔 Olá, ${primeiroNome}! Viajar a lazer é um sonho, mas seu momento profissional atual e a falta de histórico internacional exigem uma preparação muito cuidadosa. Minha sugestão é primeiro fortalecer sua situação profissional antes de aplicar. Posso te orientar sobre o que fazer para construir um perfil mais sólido nos próximos meses.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+      }
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano')) {
+      return `📌 Olá, ${primeiroNome}! Você tem um emprego recente, o que é positivo, mas o tempo curto na empresa pode levantar dúvidas. Vamos focar em: carta da empresa evidenciando estabilidade + comprovantes de vínculos familiares. Com planejamento, seu perfil pode evoluir muito.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    if (situacao.includes('Autônomo')) {
+      return `📊 Olá, ${primeiroNome}! Como autônomo, o Consulado precisa ver organização financeira. Vamos preparar: extratos detalhados, declaração de IR e contratos. Mesmo com desafios, é possível construir um bom caso.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    return `⚠️ Olá, ${primeiroNome}! Seu perfil foi classificado como "Requer Atenção". Vamos trabalhar juntos para fortalecer seus vínculos com o Brasil e organizar sua documentação da melhor forma possível.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+  }
+  
+  if (classificacao === 'Perfil Regular') {
+    if (situacao.includes('Autônomo') && historico.includes('Tenho visto para outros países')) {
+      return `💼 Olá, ${primeiroNome}! Excelente! Seu perfil combina pontos fortes: experiência internacional e atuação como autônomo. Vamos organizar sua documentação financeira e comercial para que o Consulado veja solidez. Com esse perfil, sua aprovação tem tudo para acontecer.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    if (situacao.includes('Estudante') && historico.includes('Nunca viajei')) {
+      return `📚 Olá, ${primeiroNome}! Fazer intercâmbio é incrível, mas seu perfil precisa de uma estrutura forte. Sua aprovação virá da documentação dos seus patrocinadores + comprovante de matrícula + planejamento de retorno ao Brasil. Posso te ajudar a organizar esse caso?
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    if (situacao.includes('CLT') && situacao.includes('menos de 1 ano')) {
+      return `🌟 Olá, ${primeiroNome}! Você tem um bom ponto de partida: emprego recente e renda estável. O que precisa de atenção é o tempo curto na empresa. Vamos focar em: carta da empresa evidenciando potencial de crescimento + comprovantes de vínculos familiares. Com isso, seu perfil fica muito mais seguro.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    return `🌟 Olá, ${primeiroNome}! Seu perfil foi classificado como "Perfil Regular". Temos aspectos positivos, mas também alguns pontos que merecem atenção. Com o preparo certo, você chega ao consulado em uma posição mais sólida.
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+  }
+  
+  if (classificacao === 'Potencial Moderado') {
+    if (situacao.includes('CLT') && renda === 'Acima de R$ 15.000') {
+      return `✨ Olá, ${primeiroNome}! Seu perfil está muito bom! Emprego estável e boa renda. Meu papel será garantir que sua documentação esteja perfeita e que você esteja 100% preparado para a entrevista. Vamos nessa?
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    if (situacao.includes('Empresário') && historico.includes('Já possuo visto americano')) {
+      return `🏆 Olá, ${primeiroNome}! Uau, seu perfil é dos mais fortes! Empresário consolidado, e já com visto americano. A chave será atualizar corretamente seu DS-160 e alinhar sua entrevista com seus planos de negócios. Praticamente uma formalidade. Quer que eu cuide de tudo para você?
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
+
+Estamos juntos! 🚀`;
+    }
+    
+    return `📈 Olá, ${primeiroNome}! Seu perfil foi classificado como "Potencial Moderado". Você tem uma base sólida, e com os ajustes certos na documentação, suas chances aumentam significativamente. Vamos trabalhar juntos!
+
+📊 *Sobre seus dados:*
+• Situação: ${situacao}
+• Renda: ${renda}
+• Histórico: ${historico}
+• Motivo: ${motivo || 'não informado'}
+
+💰 *Investimento total:*
+• Taxa Consular: ~R$ 950
+• Assessoria GetVisa: R$ 350 (2x R$ 175)
+
+✅ *Próximos passos:*
+• Digite *SIM* para receber o link do DS-160
+• Digite *MENU* para outras opções
+• Digite *VOLTAR* a qualquer momento
+
+🚀 *Vamos juntos rumo à aprovação!*`;
+  }
   
   if (classificacao === 'Forte Potencial') {
-    return `🎉 *PARABÉNS, ${nomeFormatado}!* 🎉
+    if ((situacao.includes('CLT') || situacao.includes('Empresário')) && renda === 'Acima de R$ 15.000') {
+      return `🎉 *PARABÉNS, ${primeiroNome}!* 🎉
 
-✅ Sua análise foi concluída e você tem um *PERFIL FORTE* para o visto americano!
+Sua análise está completa e temos uma ÓTIMA notícia!
+
+✅ Seu perfil foi classificado como *FORTE POTENCIAL* para o visto americano!
 
 📊 *Pontuação: ${score}/100*
-🏆 *Classificação:* ${classificacao}
+
+🔍 *O que isso significa?*
+• Sua combinação de emprego estável + renda compatível é exatamente o que o Consulado busca
+• Você está no caminho certo para a aprovação
 
 📋 *Seus dados analisados:*
 • Situação: ${situacao}
@@ -301,62 +483,57 @@ function gerarRespostaHumanizada(primeiroNome, classificacao, situacao, renda, h
 • Assessoria GetVisa: R$ 350 (2x R$ 175)
 
 📌 *Próximos passos:*
-• Digite *SIM* para receber o link do formulário DS-160
+• Digite *SIM* para receber o link do DS-160
 • Digite *MENU* para ver outras opções
 
-🚀 *Vamos juntos rumo à aprovação!*`;
-  }
-  
-  if (classificacao === 'Potencial Moderado') {
-    return `📈 *OLÁ, ${nomeFormatado}!*
+🚀 *Vamos conquistar esse visto juntos!*`;
+    }
+    
+    if (situacao.includes('Empresário') && historico.includes('Tenho visto para outros países')) {
+      return `🏆 *EXCELENTE, ${primeiroNome}!* 🏆
 
-Sua análise de perfil foi concluída!
+Sua análise de perfil foi concluída com o MELHOR RESULTADO possível!
 
-📊 *Pontuação: ${score}/100*
-📋 *Classificação:* ${classificacao}
+✅ Classificação: *FORTE POTENCIAL* (${score}/100)
 
-📋 *Seus dados analisados:*
-• Situação: ${situacao}
-• Renda: ${renda}
-• Histórico: ${historico}
+🔍 *Seu perfil é destaque porque:*
+• Perfil empreendedor consolidado
+• Experiência internacional comprovada
+• Renda compatível com a viagem
 
 💰 *Investimento total:*
 • Taxa Consular: ~R$ 950
 • Assessoria GetVisa: R$ 350 (2x R$ 175)
 
-✅ *Próximos passos:*
-• Digite *SIM* para receber o link do formulário DS-160
-• Digite *MENU* para ver outras opções
+📌 *Para iniciar, digite:*
+• *SIM* para receber o link do DS-160
+• *MENU* para ver outras opções
 
-*Vamos trabalhar juntos!* 🚀`;
-  }
-  
-  if (classificacao === 'Requer Atenção') {
-    return `⚠️ *OLÁ, ${nomeFormatado}!*
+🎯 *Seu visto americano está muito próximo!*`;
+    }
+    
+    return `🏆 *PARABÉNS, ${primeiroNome}!* 🏆
 
-Sua análise de perfil foi concluída!
+✅ Sua análise foi concluída e você tem um *PERFIL FORTE* para o visto americano!
 
 📊 *Pontuação: ${score}/100*
-📋 *Classificação:* ${classificacao}
-
-📋 *Seus dados analisados:*
-• Situação: ${situacao}
-• Renda: ${renda}
-• Histórico: ${historico}
+• Classificação: ${classificacao}
+• Situação profissional: ${situacao}
+• Renda declarada: ${renda}
 
 💰 *Investimento total:*
 • Taxa Consular: ~R$ 950
 • Assessoria GetVisa: R$ 350 (2x R$ 175)
 
-✅ *Próximos passos:*
-• Digite *SIM* para agendar uma análise mais detalhada
-• Digite *MENU* para ver outras opções
+📌 *Próximos passos:*
+• Digite *SIM* para o link do DS-160
+• Digite *MENU* para outras opções
 
-*Podemos conversar melhor sobre seu caso!* 💙`;
+🚀 *Vamos começar?*`;
   }
   
   // Fallback genérico
-  return `🌟 *OLÁ, ${nomeFormatado}!*
+  return `🌟 Olá, ${primeiroNome}!
 
 Sua análise de perfil foi concluída.
 
@@ -599,7 +776,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados da Avaliação Normal recebidos:', JSON.stringify(data, null, 2));
-  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
+  res.status(200).json({ success: true });
 
   (async () => {
     try {
@@ -1390,7 +1567,7 @@ Estou aqui para te ajudar! 💙`;
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
   console.log('📥 Simulador 5 etapas recebido:', data);
-  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
+  res.status(200).json({ success: true });
 
   (async () => {
     try {
