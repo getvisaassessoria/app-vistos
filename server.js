@@ -345,18 +345,18 @@ function gerarRespostaHumanizada(primeiroNome, classificacao, situacao, renda, h
   
   if (classificacao === 'Forte Potencial') {
     if ((situacao.includes('CLT') || situacao.includes('Empresário')) && renda === 'Acima de R$ 15.000') {
-      return `🏆 Olá, ${primeiroNome}! PARABÉNS! Seu perfil é FORTÍSSIMO. Você tem estabilidade profissional e excelente renda. Meu trabalho aqui será básico: alinhar o DS-160 e te preparar para a entrevista. A aprovação é quase certa. Quer que eu cuide de tudo para você?`;
+      return `🎉 *PARABÉNS, ${primeiroNome}!* 🎉\n\nSua análise está completa e temos uma ÓTIMA notícia!\n\n✅ Seu perfil foi classificado como *FORTE POTENCIAL* para o visto americano!\n\n🔍 *O que isso significa?*\n• Sua combinação de emprego estável + renda compatível é exatamente o que o Consulado busca\n• Com sua experiência internacional, você já demonstra que respeita as regras de imigração\n\n📋 *Sobre seus dados:*\n• Situação: ${situacao}\n• Renda: ${renda}\n• Histórico de viagens internacionais: ${historico}\n• Motivo da viagem: ${motivo}\n\n💰 *Investimento total:*\n• Taxa Consular: ~R$ 950\n• Assessoria GetVisa: R$ 350 (parcelamos em até 2x)\n\n📌 *Próximos passos:*\n• Digite *SIM* para receber o link do DS-160\n• Digite *MENU* para outras opções\n• Digite *VOLTAR* a qualquer momento\n\n🚀 *Vamos conquistar esse visto juntos!*`;
     }
     
     if (situacao.includes('Empresário') && historico.includes('Tenho visto para outros países')) {
-      return `🎉 Olá, ${primeiroNome}! Que perfil fantástico! Empresário bem-sucedido, com renda elevada e experiência internacional. Seu caso é dos mais fáceis de aprovar. Vamos juntos apenas revisar documentos e alinhar sua apresentação. O visto está muito próximo. Bora?`;
+      return `🏆 *EXCELENTE, ${primeiroNome}!* 🏆\n\nSua análise de perfil foi concluída com o MELHOR RESULTADO possível!\n\n✅ Classificação: *FORTE POTENCIAL* (${score}/100)\n\n🔍 *Seu perfil é destaque porque:*\n• Perfil empreendedor consolidado\n• Experiência internacional comprovada\n• Renda compatível com a viagem\n\n💰 *Investimento total:*\n• Taxa Consular: ~R$ 950\n• Assessoria GetVisa: R$ 350 (2x de R$ 175)\n\n📌 *Para iniciar, digite:*\n• *SIM* para receber o link do DS-160\n• *MENU* para ver outras opções\n\n🎯 *Seu visto americano está muito próximo!*`;
     }
     
-    return `🏆 Olá, ${primeiroNome}! PARABÉNS! Seu perfil é FORTÍSSIMO. Você tem estabilidade profissional e excelente renda. A aprovação é quase certa. Quer que eu cuide de tudo para você?`;
+    return `🏆 *PARABÉNS, ${primeiroNome}!* 🏆\n\n✅ Sua análise foi concluída e você tem um *PERFIL FORTE* para o visto americano!\n\n📊 *Pontuação:* ${score}/100\n• Classificação: ${classificacao}\n• Situação profissional: ${situacao}\n• Renda declarada: ${renda}\n\n💰 *Investimento total:*\n• Taxa Consular: ~R$ 950\n• Assessoria GetVisa: R$ 350 (2x R$ 175)\n\n📌 *Próximos passos:*\n• Digite *SIM* para o link do DS-160\n• Digite *MENU* para outras opções\n\n🚀 *Vamos começar?*`;
   }
   
-  // Fallback genérico (se nenhuma combinação for encontrada)
-  return `🌟 Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${score}/100). Vamos trabalhar juntos para fortalecer sua documentação e preparar você para a entrevista.`;
+  // Fallback genérico
+  return `🌟 Olá, ${primeiroNome}!\n\nSua análise de perfil foi concluída.\n\n📊 *Resultado:* ${classificacao} (${score}/100)\n• Situação: ${situacao}\n• Renda: ${renda}\n\n💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n✅ Para iniciar, digite *SIM*.\nPara o menu principal, digite *MENU*.`;
 }
 
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
@@ -1124,6 +1124,13 @@ app.post('/api/submit-avaliacao', async (req, res) => {
       const classificacao = data['classificacao'] || data['classificacao_perfil'] || 
                            (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
       
+      // Extrair dados para personalização
+      const situacaoProfissional = data['situacao_profissional'] || data['ocupacao'] || 'não informada';
+      const renda = data['renda_mensal'] || data['renda'] || 'não informada';
+      const historicoViagens = data['historico_viagens'] || '';
+      const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
+      const primeiroNome = nome.split(' ')[0];
+      
       if (telefoneCliente) {
         const { data: inserted, error: insertError } = await supabase
           .from('leads_simulador')
@@ -1144,27 +1151,14 @@ app.post('/api/submit-avaliacao', async (req, res) => {
         } else {
           console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
           
-          const primeiroNome = nome.split(' ')[0];
-          const situacaoProfissional = data['situacao_profissional'] || data['ocupacao'] || 'não informada';
-          const renda = data['renda_mensal'] || data['renda'] || 'não informada';
-          const historicoViagens = data['historico_viagens'] || '';
-          const propositoViagem = data['proposito_viagem'] || data['motivo_viagem'] || '';
-          
-          // 🔥 USA A FUNÇÃO HUMANIZADA 🔥
-          const respostaHumanizada = gerarRespostaHumanizada(
+          // 🔥 USA APENAS A FUNÇÃO HUMANIZADA - SEM DUPLICAÇÃO 🔥
+          const mensagemWhats = gerarRespostaHumanizada(
             primeiroNome, classificacao, situacaoProfissional, 
             renda, historicoViagens, propositoViagem, score
           );
           
-          let mensagemWhats = respostaHumanizada;
-          mensagemWhats += `\n\n💰 *Investimento:* Taxa Consular ~R$ 950 + Assessoria R$ 350\n\n`;
-          mensagemWhats += `✅ *Próximos passos:*\n`;
-          mensagemWhats += `• Digite *SIM* para o link do DS-160\n`;
-          mensagemWhats += `• Digite *MENU* para outras opções\n`;
-          mensagemWhats += `• Digite *VOLTAR* a qualquer momento\n\n`;
-          mensagemWhats += `Estamos juntos! 🚀💙`;
-          
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
+          console.log(`✅ Mensagem humanizada enviada para ${primeiroNome} (${classificacao})`);
         }
       }
     } catch (err) {
@@ -1953,11 +1947,26 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
+    // ==================== IGNORAR MENSAGEM COPIADA DO SITE ====================
+    // Isso evita que o cliente receba DUAS mensagens (uma do sistema e outra do webhook)
+    if (messageText.includes('fiz a avaliação de perfil no site') && 
+        (messageText.includes('meus dados') || messageText.includes('perfil'))) {
+      console.log(`📋 Cliente copiou resultado da avaliação do site - ignorando para não duplicar resposta`);
+      return; // não responde nada, apenas ignora
+    }
+    
+    // Também ignorar mensagens que são apenas o resultado da avaliação copiada
+    if (messageText.includes('perfil:') && 
+        (messageText.includes('renda:') || messageText.includes('histórico:'))) {
+      console.log(`📋 Possível resultado de avaliação copiado - ignorando`);
+      return;
+    }
+
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) {
       cleanPhone = cleanPhone.substring(2);
     }
-    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
+    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText.substring(0, 100)}..."`);
 
     // Buscar lead (apenas para saber se já tem cadastro)
     let lead = null;
@@ -2107,13 +2116,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-// OPÇÃO 6 - AJUDA / ESPECIALISTA
-if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
-  
-  // Mensagem pré-preenchida
-  const mensagemPadrao = encodeURIComponent(`Olá! Gostaria de falar com um especialista sobre meu visto americano.`);
-  
-  const resposta = `💬 *Atendimento GetVisa*
+    // OPÇÃO 6 - AJUDA / ESPECIALISTA
+    if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
+      
+      // Mensagem pré-preenchida
+      const mensagemPadrao = encodeURIComponent(`Olá! Gostaria de falar com um especialista sobre meu visto americano.`);
+      
+      const resposta = `💬 *Atendimento GetVisa*
 
 Não encontrou sua resposta? Nossa equipe está aqui para ajudar você!
 
@@ -2132,9 +2141,9 @@ Segunda a Sexta, 9h às 18h
 *Digite VOLTAR para o menu principal* 🔙
 
 Estamos juntos nessa! 💙🚀`;
-  await sendReply(cleanPhone, resposta);
-  return;
-}
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
 
     // OPÇÃO 7 - AVALIAÇÃO (LINK DO SIMULADOR)
     if (messageText === '7' || messageText === '7️⃣' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador' || messageText === '📊') {
@@ -2156,7 +2165,7 @@ https://getvisa.com.br/simulador-visto-americano-4917
     }
 
     // ==================== RESPOSTA "SIM" (iniciar processo) ====================
-    if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero') {
+    if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === 'quero sim') {
       if (!lead) {
         const resposta = `📊 *Antes de iniciarmos, que tal descobrir suas chances de aprovação?*
 
@@ -2187,7 +2196,8 @@ Em 2 minutos você recebe uma análise personalizada!
     
     // ==================== SAUDAÇÃO (mostra MENU) ====================
     if (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-        messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite') {
+        messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite' ||
+        messageText === 'hey' || messageText === 'e ai' || messageText === 'e aí') {
       
       const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
 
