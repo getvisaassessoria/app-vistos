@@ -34,8 +34,14 @@ function getRealIp(req) {
     return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
 }
 
-// ==================== BLOQUEIO DE BOTS ====================
+/// ==================== BLOQUEIO DE BOTS ====================
 app.use((req, res, next) => {
+    // LIBERAR WEBHOOK DO Z-API (não bloquear)
+    if (req.path === '/api/webhook/zapi') {
+        console.log(`✅ WEBHOOK Z-API LIBERADO: ${req.method} ${req.path}`);
+        return next();
+    }
+    
     const ip = getRealIp(req);
     const userAgent = req.headers['user-agent'] || '';
     
