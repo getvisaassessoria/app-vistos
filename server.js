@@ -269,13 +269,12 @@ async function enviarWhatsApp(telefone, mensagem) {
     const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
     
     const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Client-Token': securityToken || ''
-      },
-      body: JSON.stringify({ phone: cleanPhone, message: mensagem })
-    });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ phone: cleanPhone, message: mensagem })
+});
     
     console.log(`📱 WhatsApp enviado para ${cleanPhone}: ${response.status}`);
     return response.status === 200;
