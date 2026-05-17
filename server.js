@@ -1506,6 +1506,93 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
+// ==================== ROTA DE DEBUG (REMOVER DEPOIS) ====================
+app.get('/api/debug/leads', async (req, res) => {
+  try {
+    // Busca todos os leads
+    const { data: leads, error } = await supabase
+      .from('leads_simulador')
+      .select('id, nome_cliente, telefone_whatsapp, pontuacao_total, data_simulacao')
+      .order('data_simulacao', { ascending: false })
+      .limit(20);
+    
+    if (error) throw error;
+    
+    res.json({
+      total_leads: leads?.length || 0,
+      leads: leads?.map(l => ({
+        id: l.id,
+        nome: l.nome_cliente,
+        telefone: l.telefone_whatsapp,
+        pontuacao: l.pontuacao_total,
+        data: l.data_simulacao
+      })),
+      dica: "Compare o telefone do lead com o número que está enviando mensagem"
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rota para buscar lead específico por telefone
+app.get('/api/debug/buscar/:telefone', async (req, res) => {
+  try {
+    const telefone = req.params.telefone;
+    const cleanPhone = telefone.replace(/\D/g, '');
+    
+    // Busca com vários formatos
+    const results = [];
+    
+    // Formato 1: exato
+    const { data: exact } = await supabase
+      .from('leads_simulador')
+      .select('*')
+      .eq('telefone_whatsapp', cleanPhone);
+    
+    if (exact?.length) results.push({ metodo: 'exato', leads: exact });
+    
+    // Formato 2: ILIKE
+    const { data: ilike } = await supabase
+      .from('leads_simulador')
+      .select('*')
+      .ilike('telefone_whatsapp', `%${cleanPhone}%`);
+    
+    if (ilike?.length) results.push({ metodo: 'ilike', leads: ilike });
+    
+    // Formato 3: sem 55
+    const sem55 = cleanPhone.replace(/^55/, '');
+    if (sem55 !== cleanPhone) {
+      const { data: sem55data } = await supabase
+        .from('leads_simulador')
+        .select('*')
+        .ilike('telefone_whatsapp', `%${sem55}%`);
+      
+      if (sem55data?.length) results.push({ metodo: 'sem_55', leads: sem55data });
+    }
+    
+    // Formato 4: só os últimos 10 dígitos
+    const ultimos10 = cleanPhone.slice(-10);
+    if (ultimos10.length >= 10) {
+      const { data: ult10 } = await supabase
+        .from('leads_simulador')
+        .select('*')
+        .ilike('telefone_whatsapp', `%${ultimos10}%`);
+      
+      if (ult10?.length) results.push({ metodo: 'ultimos_10', leads: ult10 });
+    }
+    
+    res.json({
+      telefone_buscado: telefone,
+      telefone_normalizado: cleanPhone,
+      resultados: results,
+      total_encontrados: results.reduce((acc, r) => acc + (r.leads?.length || 0), 0)
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== WEBHOOK Z-API (VERSÃO CORRIGIDA) ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📨 Webhook Z-API recebido');
