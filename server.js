@@ -12,262 +12,12 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static('public')); 
 
 // ==================== SUPABASE CLIENT ====================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-// ==================== PROTEÇÃO CONTRA ATAQUE ====================
-const requestCounts = new Map();
-const emailRateLimits = new Map();
-const BLOCKED_IPS = new Set(); // IPs permanentemente bloqueados
-
-// Função para obter IP real do cliente (considerando proxies)
-function getRealIp(req) {
-    // Verifica headers de proxy (Render, Cloudflare, etc.)
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-        const ips = forwarded.split(',');
-        return ips[0].trim();
-    }
-    return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
-}
-
-// Middleware de bloqueio global
-app.use((req, res, next) => {
-    const ip = getRealIp(req);
-    
-    // 🔥 LIBERA IPs internos do Render
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === '::ffff:127.0.0.1') {
-        return next();
-    }
-    
-    // 🔥 IP permanentemente bloqueado? (reincidentes)
-    if (BLOCKED_IPS.has(ip)) {
-        console.log(`🚨 BLOQUEADO PERMANENTE: IP ${ip} tentou acessar`);
-        return res.status(403).json({ error: 'Acesso bloqueado. Contate o suporte.' });
-    }
-    
-    const now = Date.now();
-    const minuteKey = Math.floor(now / 60000);
-    const key = `${ip}:${minuteKey}`;
-    
-    const currentCount = (requestCounts.get(key) || 0) + 1;
-    requestCounts.set(key, currentCount);
-    
-    // Limpa registros antigos a cada minuto
-    setTimeout(() => {
-        for (const k of requestCounts.keys()) {
-            const kMinute = parseInt(k.split(':')[1]);
-            if (kMinute < minuteKey - 1) {
-                requestCounts.delete(k);
-            }
-        }
-    }, 60000);
-    
-    // Limite: 20 requisições por minuto (aumentado para humanos legítimos)
-    if (currentCount > 20) {
-        console.log(`🚨 BLOQUEADO TEMPORÁRIO: IP ${ip} fez ${currentCount} req/min`);
-        
-        // Se for a 3ª vez que bloqueia, bane permanentemente
-        const blockKey = `block:${ip}`;
-        const blockCount = (requestCounts.get(blockKey) || 0) + 1;
-        requestCounts.set(blockKey, blockCount);
-        
-        if (blockCount >= 3) {
-            BLOCKED_IPS.add(ip);
-            console.log(`🔥 IP ${ip} foi BANIDO PERMANENTEMENTE por reincidência`);
-        }
-        
-        return res.status(429).json({ 
-            error: 'Muitas requisições. Tente novamente em alguns minutos.' 
-        });
-    }
-    
-    next();
-});
-
-// Verifica limite específico para rotas críticas
-function checkEmailRateLimit(ip, routeName) {
-    const now = Date.now();
-    const minuteKey = Math.floor(now / 60000);
-    const key = `${routeName}:${ip}:${minuteKey}`;
-    
-    const currentCount = (emailRateLimits.get(key) || 0) + 1;
-    emailRateLimits.set(key, currentCount);
-    
-    setTimeout(() => {
-        for (const k of emailRateLimits.keys()) {
-            const kMinute = parseInt(k.split(':')[2]);
-            if (kMinute < minuteKey - 1) {
-                emailRateLimits.delete(k);
-            }
-        }
-    }, 60000);
-    
-    // Limite: 2 envios por MINUTO por rota (mais seguro)
-    return currentCount <= 2;
-}
-
-// Rotas protegidas (onde o ataque está acontecendo)
-const protectedRoutes = [
-    '/api/submit-ds160', 
-    '/api/submit-passaporte', 
-    '/api/submit-avaliacao', 
-    '/api/submit-simulador', 
-    '/api/submit-visto-negado'
-];
-
-app.use((req, res, next) => {
-    if (protectedRoutes.includes(req.path)) {
-        const ip = getRealIp(req);
-        
-        if (!checkEmailRateLimit(ip, req.path)) {
-            console.log(`🚨 BLOQUEADO ROTA EMAIL: IP ${ip} excedeu limite na ${req.path}`);
-            
-            // Marca IP como suspeito para bloqueio futuro
-            const suspectKey = `suspect:${ip}`;
-            const suspectCount = (requestCounts.get(suspectKey) || 0) + 1;
-            requestCounts.set(suspectKey, suspectCount);
-            
-            if (suspectCount >= 5) {
-                BLOCKED_IPS.add(ip);
-                console.log(`🔥 IP ${ip} BANIDO por abuso nas rotas de e-mail`);
-            }
-            
-            return res.status(429).json({ 
-                error: 'Limite de envios excedido. Tente novamente em alguns minutos.' 
-            });
-        }
-    }
-    next();
-});
-
-// ==================== VALIDAÇÃO DE E-MAIL (SÓ ENVIA PARA DOMÍNIOS PERMITIDOS) ====================
-const DOMINIOS_PERMITIDOS = [
-    'gmail.com', 
-    'yahoo.com', 
-    'outlook.com', 
-    'hotmail.com', 
-    'hotmail.com.br',
-    'uol.com.br', 
-    'bol.com.br', 
-    'ig.com.br', 
-    'terra.com.br',
-    'getvisa.com.br'
-];
-
-function isDominioPermitido(email) {
-    if (!email || typeof email !== 'string') return false;
-    const dominio = email.split('@')[1]?.toLowerCase();
-    return DOMINIOS_PERMITIDOS.includes(dominio);
-}
-
-// 🔥 MODO RESTRITO - LISTA BRANCA (só aceita e-mails que você adicionar)
-const EMAILS_PERMITIDOS = [
-    'getvisa.assessoria@gmail.com',  // seu e-mail da equipe
-    'moises.barreto@getvisa.com.br', // seu e-mail profissional
-    // Adicione aqui os e-mails dos seus clientes legítimos
-];
-
-// ==================== VALIDAÇÃO DE E-MAIL PARA CLIENTES REAIS ====================
-/* const DOMINIOS_PERMITIDOS = [
-    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'hotmail.com.br',
-    'uol.com.br', 'bol.com.br', 'ig.com.br', 'terra.com.br', 'getvisa.com.br'
-];
-
-// 🔥 E-mails que SÃO do sistema/equipe (nunca bloquear)
-const EMAILS_SISTEMA = [
-    'getvisa.assessoria@gmail.com',
-    'contato@getvisa.com.br'
-];
-
-// 🔥 LISTA NEGRA - E-mails de atacantes conhecidos
-const EMAILS_BLOQUEADOS = [
-    'phillipratylor29@gmail.com',
-    'davidjonietz@gmail.com',
-    'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com',
-    'test@test.com',
-    'teste@teste.com'
-];
-
-function isDominioPermitido(email) {
-    if (!email || typeof email !== 'string') return false;
-    const dominio = email.split('@')[1]?.toLowerCase();
-    return DOMINIOS_PERMITIDOS.includes(dominio);
-} */ 
-
-// ==================== VALIDAÇÃO DE E-MAIL ====================
-// ==================== VALIDAÇÃO DE E-MAIL ====================
-// LISTA NEGRA - Apenas e-mails de atacantes conhecidos
-const EMAILS_BLOQUEADOS = [
-    'phillipratylor29@gmail.com',
-    'davidjonietz@gmail.com',
-    'faisal.johnson@hmga.com',
-    'faisal.johnson@hmgma.com'
-];
-
-// Domínios falsos/bloqueados
-const DOMINIOS_BLOQUEADOS = [
-    'mailxw.com',
-    'hmga.com',
-    'hmgma.com'
-];
-
-// FUNÇÃO DE VALIDAÇÃO (deve estar definida ANTES de ser usada)
-function isEmailClienteValido(email, nomeCliente) {
-    // Verifica se é um e-mail válido
-    if (!email || typeof email !== 'string') {
-        console.log(`🚨 E-mail inválido: ${email}`);
-        return false;
-    }
-    
-    const emailLower = email.toLowerCase().trim();
-    
-    // 1. Verifica se está na LISTA NEGRA
-    if (EMAILS_BLOQUEADOS.includes(emailLower)) {
-        console.log(`🚨 E-mail na LISTA NEGRA bloqueado: ${email}`);
-        return false;
-    }
-    
-    // 2. Verifica domínio bloqueado
-    const dominio = emailLower.split('@')[1];
-    if (!dominio) {
-        console.log(`🚨 E-mail sem domínio: ${email}`);
-        return false;
-    }
-    
-    if (DOMINIOS_BLOQUEADOS.includes(dominio)) {
-        console.log(`🚨 Domínio bloqueado: ${email}`);
-        return false;
-    }
-    
-    // 3. Verifica formato básico de e-mail
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        console.log(`🚨 Formato de e-mail inválido: ${email}`);
-        return false;
-    }
-    
-    // 4. Impede nomes MUITO suspeitos (não bloqueia clientes reais)
-    const nomeLower = (nomeCliente || '').toLowerCase();
-    const nomesSuspeitos = ['test', 'fake', 'invasor', 'hacker', 'admin', 'root', 'spam'];
-    
-    for (const suspeito of nomesSuspeitos) {
-        if (nomeLower.includes(suspeito)) {
-            console.log(`🚨 Nome suspeito bloqueado: ${nomeCliente}`);
-            return false;
-        }
-    }
-    
-    console.log(`✅ E-mail válido: ${email}`);
-    return true;
-}
-// ==================== FIM DA VALIDAÇÃO ====================
-// ==================== FIM DA PROTEÇÃO ====================
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
@@ -336,6 +86,7 @@ const radioMapping = {
   'falecido-address-same': { 'one': 'Mesmo que o meu', 'two': 'Diferente' }
 };
 
+// Função para formatar data do padrão americano (YYYY-MM-DD) para brasileiro (DD/MM/YYYY)
 function formatDateToBrazilian(dateString) {
   if (!dateString || dateString === '') return null;
   
@@ -407,9 +158,17 @@ function groupTravels(data) {
   return result;
 }
 
+function drawSeparator(doc) {
+  doc.moveDown(0.5);
+  doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+  doc.moveDown(0.5);
+}
+
 function drawSectionTitle(doc, title) {
     doc.moveDown(1);
-    doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    doc.fillColor('#003366').fontSize(14).font('Helvetica-Bold').text(title.normalize('NFD').replace(/[\u0300-\u036f]/g, ''), { 
+        // Fallback: remover acentos como última alternativa
+    });
     doc.moveDown(0.3);
     doc.strokeColor('#003366').lineWidth(1.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.lineWidth(0.5);
@@ -624,6 +383,11 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
+        const fieldLabelMap = {};
+        for (const f of simpleFields) {
+          fieldLabelMap[f.name] = f.label;
+        }
+
         let currentSection = null;
         let hasContentInSection = false;
 
@@ -650,6 +414,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = false;
         }
 
+        // ==================== SEÇÃO 1: INFORMAÇÕES INICIAIS ====================
         startSection('INFORMACOES INICIAIS');
         renderField('consulado_cidade', 'Cidade do Consulado');
         if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
@@ -658,6 +423,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-64', 'Idioma usado para preencher');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 2: INFORMAÇÕES PESSOAIS ====================
         startSection('INFORMACOES PESSOAIS');
         renderField('full_name', 'Nome completo');
         if (renderField('radio-2', 'Ja teve outro nome?') && data['radio-2'] === 'one') {
@@ -678,7 +444,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
         hasContentInSection = true;
 
-         
+        // ==================== SEÇÃO 3: INFORMAÇÕES DA VIAGEM ====================
         startSection('INFORMACOES DA VIAGEM');
         renderField('radio-28', 'Proposito da viagem');
         renderField('radio-planos', 'Planos especificos?');
@@ -690,6 +456,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('email-4', 'CEP (EUA)');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 4: PAGADOR DA VIAGEM ====================
         startSection('PAGADOR DA VIAGEM');
         renderField('radio-6', 'Quem vai pagar?');
         renderField('text-22', 'Nome do pagador');
@@ -703,6 +470,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-30', 'Pais do pagador');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 5: ACOMPANHANTES ====================
         if (data['radio-7'] === 'one') {
           startSection('ACOMPANHANTES');
           renderField('radio-7', 'Ha acompanhantes?');
@@ -715,6 +483,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 6: HISTÓRICO DE VIAGENS AOS EUA ====================
         if (data['radio-8'] === 'one') {
           startSection('HISTORICO DE VIAGENS AOS EUA');
           renderField('radio-8', 'Ja esteve nos EUA?');
@@ -727,6 +496,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 7: INFORMAÇÕES DO VISTO ====================
         if (data['radio-23'] === 'one') {
           startSection('INFORMACOES DO VISTO');
           renderField('radio-23', 'Ja teve visto americano?');
@@ -739,76 +509,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
-             // ==================== HISTÓRICO DE NEGATIVAS (OBRIGATÓRIO) ====================
-        startSection('HISTORICO DE NEGATIVAS');
-        doc.fillColor('#666666').fontSize(9).font('Helvetica').text('Estas perguntas sao obrigatorias no formulario DS-160 oficial. Responder falsamente constitui fraude.', { align: 'center' });
-        doc.moveDown(0.5);
-        doc.fillColor('#000000').fontSize(10);
-        
-        // Pergunta 1: Visto Negado
-        let vistoNegado = data['radio-visto-negado'];
-        if (vistoNegado === 'one') vistoNegado = 'Sim';
-        else if (vistoNegado === 'two') vistoNegado = 'Nao';
-        doc.font('Helvetica-Bold').text('1. Ja teve visto americano NEGADO anteriormente?: ', { continued: true });
-        doc.font('Helvetica').text(vistoNegado || 'Nao informado');
-        doc.moveDown(0.3);
-        
-        if (data['radio-visto-negado'] === 'one') {
-            doc.font('Helvetica').text(`   - Ano da negativa: ${data['text-visto-negado-ano'] || 'Nao informado'}`);
-            doc.font('Helvetica').text(`   - Consulado: ${data['text-visto-negado-consulado'] || 'Nao informado'}`);
-            doc.font('Helvetica').text(`   - Tipo de visto: ${data['select-visto-negado-tipo'] || 'Nao informado'}`);
-            doc.moveDown(0.3);
-        }
-        
-        // Pergunta 2: Entrada Negada
-        let entradaNegada = data['radio-entrada-negada'];
-        if (entradaNegada === 'one') entradaNegada = 'Sim';
-        else if (entradaNegada === 'two') entradaNegada = 'Nao';
-        doc.font('Helvetica-Bold').text('2. Ja teve a entrada NEGADA nos EUA pelo oficial de imigracao?: ', { continued: true });
-        doc.font('Helvetica').text(entradaNegada || 'Nao informado');
-        doc.moveDown(0.3);
-        
-        if (data['radio-entrada-negada'] === 'one') {
-            doc.font('Helvetica').text(`   - Ano da negativa: ${data['text-entrada-negada-ano'] || 'Nao informado'}`);
-            doc.font('Helvetica').text(`   - Porto de entrada: ${data['text-entrada-negada-local'] || 'Nao informado'}`);
-            doc.font('Helvetica').text(`   - Motivo: ${data['textarea-entrada-negada-motivo'] || 'Nao informado'}`);
-            doc.moveDown(0.3);
-        }
-        
-        // Pergunta 3: Deportacao
-        let deportado = data['radio-deportado'];
-        if (deportado === 'one') deportado = 'Sim';
-        else if (deportado === 'two') deportado = 'Nao';
-        doc.font('Helvetica-Bold').text('3. Ja foi deportado ou removido dos Estados Unidos?: ', { continued: true });
-        doc.font('Helvetica').text(deportado || 'Nao informado');
-        doc.moveDown(0.3);
-        
-        if (data['radio-deportado'] === 'one') {
-            doc.font('Helvetica').text(`   - Ano da deportacao: ${data['text-deportado-ano'] || 'Nao informado'}`);
-            let duracao = data['select-deportado-duracao'] || '';
-            if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
-            else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
-            else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
-            else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
-            doc.font('Helvetica').text(`   - Duracao: ${duracao || 'Nao informado'}`);
-            doc.moveDown(0.3);
-        }
-        
-        // Detalhes adicionais
-        if (data['textarea-detalhes-negativa']) {
-            doc.font('Helvetica-Bold').text('Detalhes adicionais sobre negativas:');
-            doc.font('Helvetica').text(`${data['textarea-detalhes-negativa']}`);
-            doc.moveDown(0.3);
-        }
-        
-        hasContentInSection = true;
-        
-        // Linha separadora sem cor vermelha
-        doc.moveDown(0.5);
-        doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-        doc.moveDown(0.5);
-
-        
+        // ==================== SEÇÃO 8: ENDEREÇO RESIDENCIAL ====================
         startSection('ENDERECO RESIDENCIAL');
         renderField('text-71', 'Logradouro');
         renderField('text-72', 'Complemento');
@@ -818,6 +519,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-76', 'Pais');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 9: ENDEREÇO DE CORRESPONDÊNCIA ====================
         startSection('ENDERECO DE CORRESPONDENCIA');
         renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
         if (data['radio-9'] === 'Não, é diferente') {
@@ -832,6 +534,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 10: TELEFONES ====================
         startSection('TELEFONES');
         renderField('text-77', 'Telefone principal');
         renderField('text-78', 'Telefone comercial');
@@ -845,6 +548,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 11: E-MAILS ====================
         startSection('E-MAILS');
         renderField('email-1', 'E-mail principal');
         if (renderField('radio-11', 'Usou outros e-mails?') && data['radio-11'] === 'one') {
@@ -857,6 +561,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 12: MIDIAS SOCIAIS ====================
         startSection('MIDIAS SOCIAIS');
         if (renderField('radio-12', 'Presenca em midias sociais?') && data['radio-12'] === 'one') {
           const plataformas = data['midia_plataforma[]'] || [];
@@ -875,6 +580,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 13: PASSAPORTE ====================
         startSection('PASSAPORTE');
         renderField('text-38', 'Numero do passaporte');
         renderField('text-40', 'Pais que emitiu');
@@ -885,6 +591,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('radio-13', 'Passaporte perdido/roubado?');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 14: CONTATO NOS EUA ====================
         startSection('CONTATO NOS EUA');
         renderField('name-2', 'Contato nos EUA (nome)');
         renderField('text-41_contato', 'Endereco (EUA)');
@@ -896,6 +603,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('email-3', 'E-mail do contato (EUA)');
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 15: FAMILIARES ====================
         startSection('FAMILIARES');
         renderField('nome_pai', 'Nome do pai');
         renderField('text-44', 'Data de nascimento do pai');
@@ -917,6 +625,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 16: CÔNJUGE ====================
         if (data['spouse_fullname']) {
           startSection('CONJUGE');
           renderField('spouse_fullname', 'Nome do conjuge');
@@ -934,6 +643,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 17: EX-CÔNJUGE ====================
         if (data['ex_fullname']) {
           startSection('EX-CONJUGE');
           renderField('ex_fullname', 'Nome do ex-conjuge');
@@ -948,6 +658,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 18: CÔNJUGE FALECIDO ====================
         if (data['falecido_fullname']) {
           startSection('CONJUGE FALECIDO');
           renderField('falecido_fullname', 'Nome do conjuge falecido');
@@ -959,6 +670,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 19: OCUPAÇÃO ATUAL ====================
         startSection('OCUPACAO ATUAL');
         renderField('radio-27', 'Ocupacao principal');
         renderField('text-49', 'Empregador / escola');
@@ -972,6 +684,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         renderField('text-52', 'Descricao das funcoes');
         hasContentInSection = true;
 
+        // ==================== OUTRAS OCUPACOES / FONTES DE RENDA ====================
         const extra_descricoes = data['extra_descricao[]'] || [];
         if (extra_descricoes.length > 0) {
           startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
@@ -1001,6 +714,7 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+        // ==================== SEÇÃO 20: EMPREGOS ANTERIORES ====================
         if (data['radio-17'] === 'one') {
           const empNomes = data['emprego_anterior_nome[]'] || [];
           if (empNomes.length > 0) {
@@ -1023,7 +737,7 @@ app.post('/api/submit-ds160', async (req, res) => {
             hasContentInSection = true;
           }
         }
-
+// ==================== SEÇÃO 22: ESCOLARIDADE ====================
         if (data['radio-18'] === 'one') {
           startSection('ESCOLARIDADE');
           renderField('text-59', 'Instituicao de ensino');
@@ -1037,6 +751,8 @@ app.post('/api/submit-ds160', async (req, res) => {
           hasContentInSection = true;
         }
 
+
+        // ==================== SEÇÃO 23: SERVIÇO MILITAR ====================
         startSection('SERVICO MILITAR');
         if (data['servico_militar'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
@@ -1055,6 +771,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 24: TREINAMENTO ESPECIALIZADO ====================
         startSection('TREINAMENTO ESPECIALIZADO');
         if (data['treinamento_especializado'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
@@ -1068,6 +785,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 25: SEGURANCA ====================
         startSection('SEGURANCA');
         if (data['antecedentes_criminais'] === 'Sim') {
           doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
@@ -1084,6 +802,8 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        
+        // ==================== SEÇÃO 26: IDIOMAS ====================
         startSection('IDIOMAS');
         if (data['radio-19'] === 'one') {
           const idiomas = data['idiomas[]'] || [];
@@ -1095,6 +815,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         }
         hasContentInSection = true;
 
+        // ==================== SEÇÃO 27: VIAGENS INTERNACIONAIS ====================
         startSection('VIAGENS INTERNACIONAIS');
         if (data['radio-20'] === 'one') {
           const paises = data['paises_visitados[]'] || [];
@@ -1122,27 +843,15 @@ app.post('/api/submit-ds160', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-          if (isEmailClienteValido(emailCliente, nome)) {
-              try {
-                  await resend.emails.send({
-                      from: 'GetVisa <contato@getvisa.com.br>',
-                      to: [emailCliente],
-                      subject: `Seu formulario DS-160 foi recebido - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>`,
-                      attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-                  });
-                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
-              } catch (emailErr) {
-                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
-              }
-          } else {
-              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
-          }
-      } else {
-          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
+        await resend.emails.send({
+          from: 'GetVisa <contato@getvisa.com.br>',
+          to: [emailCliente],
+          subject: `Seu formulario DS-160 foi recebido - ${nome}`,
+          html: `<strong>Ola ${nome},</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>`,
+          attachments: [{ filename: `DS160_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+        });
+        console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento DS-160 (background):', err);
@@ -1154,32 +863,24 @@ app.post('/api/submit-ds160', async (req, res) => {
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
   console.log('📥 Dados da Avaliação Normal recebidos:', JSON.stringify(data, null, 2));
+  console.log('📞 Telefone recebido:', data['telefone']);
+  console.log('📧 Email recebido:', data['email']);
+  console.log('📝 Nome recebido:', data['nome']);
+  console.log('📥 Dados da Avaliação Normal recebidos:', data);
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
     try {
-      const nome = data['nome'] || 'Cliente_Sem_Nome';
-      const emailCliente = data['email'] || null;
-      
-      // 🔥 CORREÇÃO: Normalizar telefone
-      let telefoneCliente = data['telefone'] || data['whatsapp'] || null;
-      if (telefoneCliente) {
-        telefoneCliente = telefoneCliente.toString().replace(/\D/g, '');
-        // Remove 55 do início se existir
-        if (telefoneCliente.startsWith('55')) {
-          telefoneCliente = telefoneCliente.substring(2);
-        }
-        // Se ainda tiver 12 dígitos (com 9 extra), ajusta
-        if (telefoneCliente.length === 12) {
-          telefoneCliente = telefoneCliente.substring(1);
-        }
-        console.log(`📞 Telefone original: ${data['telefone']} → normalizado: ${telefoneCliente}`);
-      }
-      
+      const nome = data['nome'] || data['full_name'] || 'Cliente_Sem_Nome';
+      const emailCliente = data['email'] || data['email-1'] || null;
+      const telefoneCliente = data['telefone'] || data['whatsapp'] || data['text-77'] || null;
       const score = data['score'] || data['pontuacao'] || 0;
       const classificacao = data['classificacao'] || data['classificacao_perfil'] || 
                            (score < 50 ? 'Requer Atenção' : (score < 70 ? 'Potencial Moderado' : 'Forte Potencial'));
       
+      console.log(`📝 Salvando lead: ${nome}, ${telefoneCliente}, ${classificacao}, ${score}`);
+      
+      // 1. SALVAR NA TABELA leads_simulador
       if (telefoneCliente) {
         const { data: inserted, error: insertError } = await supabase
           .from('leads_simulador')
@@ -1197,18 +898,46 @@ app.post('/api/submit-avaliacao', async (req, res) => {
         
         if (insertError) {
           console.error('❌ Erro ao salvar lead:', insertError);
+          console.error('Detalhes:', JSON.stringify(insertError));
         } else {
-          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}, Telefone: ${telefoneCliente}`);
+          console.log(`✅ Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
           
+          // 2. ENVIAR MENSAGEM HUMANIZADA NO WHATSAPP
           const primeiroNome = nome.split(' ')[0];
-          let mensagemWhats = `Olá, ${primeiroNome}! Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\nComo posso ajudar? 🚀`;
+          const situacaoProfissional = data['ocupacao'] || data['radio27'] || data['situacao_profissional'] || 'CLT';
+          const historicoViagens = data['historico_viagens'] || data['paises_visitados'] || '';
+          const primeiraViagem = !historicoViagens || historicoViagens.toLowerCase().includes('nunca');
+          
+          let mensagemWhats = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e a partir de agora, vou acompanhar você em todo processo!\n\n`;
+          mensagemWhats += `Recebemos sua avaliação e seu perfil foi classificado como *${classificacao}*. `;
+          
+          if (situacaoProfissional.toLowerCase().includes('clt') || situacaoProfissional.toLowerCase().includes('empregado')) {
+            mensagemWhats += `O fato de você estar como ${situacaoProfissional} é excelente, pois demonstra estabilidade. `;
+          } else if (situacaoProfissional.toLowerCase().includes('autônomo')) {
+            mensagemWhats += `Sua experiência como autônomo é um ponto positivo, e vamos organizar sua documentação financeira da melhor forma. `;
+          } else {
+            mensagemWhats += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
+          }
+          
+          mensagemWhats += `Nosso foco agora será organizar essa comprovação de vínculo e preparar você para a entrevista`;
+          
+          if (primeiraViagem) {
+            mensagemWhats += `, já que será sua primeira viagem internacional.`;
+          } else {
+            mensagemWhats += `.`;
+          }
+          
+          mensagemWhats += `\n\n✅ *Podemos continuar o processo?*\n`;
+          mensagemWhats += `Se sua resposta for *SIM*, te mando agora mesmo o link para o preenchimento do rascunho do formulário DS-160. 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
+      } else {
+        console.error('❌ Telefone não informado, não foi possível salvar o lead');
       }
+      
     } catch (err) {
-      console.error('❌ Erro:', err);
+      console.error('❌ Erro no processamento da avaliação:', err);
     }
   })();
 });
@@ -1341,27 +1070,15 @@ app.post('/api/submit-passaporte', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe (passaporte)');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-          if (isEmailClienteValido(emailCliente, nome)) {
-              try {
-                  await resend.emails.send({
-                      from: 'GetVisa <contato@getvisa.com.br>',
-                      to: [emailCliente],
-                      subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
-                      attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-                  });
-                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
-              } catch (emailErr) {
-                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
-              }
-          } else {
-              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
-          }
-      } else {
-          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
+        await resend.emails.send({
+          from: 'GetVisa <contato@getvisa.com.br>',
+          to: [emailCliente],
+          subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
+          html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
+          attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+        });
+        console.log(`✅ E-mail enviado para o cliente (passaporte): ${emailCliente}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento do passaporte (background):', err);
@@ -1385,6 +1102,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       const classificacaoTitulo = data['classificacao_titulo'] || '';
       const classificacaoMensagem = data['classificacao_mensagem'] || '';
 
+      // ========== ENVIAR MENSAGEM NO WHATSAPP ==========
       if (telefoneCliente && score !== null) {
         const primeiroNome = nome.split(' ')[0];
         const classificacaoTexto = classificacaoTipo === 'urgent' ? 'que Requer Atenção Urgente' 
@@ -1401,7 +1119,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         mensagemWhats += `✅ Correção do DS-160\n`;
         mensagemWhats += `✅ Documentação de suporte reforçada\n`;
         mensagemWhats += `✅ Preparação para entrevista\n\n`;
-        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 380)\n\n`;
+        mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 450)\n\n`;
         mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
         mensagemWhats += `*Falar com especialista:* https://wa.me/5521974601812`;
         
@@ -1487,44 +1205,32 @@ app.post('/api/submit-visto-negado', async (req, res) => {
       });
       console.log('✅ E-mail enviado para a equipe (visto negado)');
 
-      // 🔥 BLOQUEIA ENVIO PARA E-MAILS SUSPEITOS
       if (emailCliente && emailCliente.trim() !== '') {
-          if (isEmailClienteValido(emailCliente, nome)) {
-              let resultadoHtml = '';
-              if (score !== null) {
-                  let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
-                  resultadoHtml = `
-                    <div style="background: #f0f9ff; border-left: 5px solid ${cor}; padding: 15px; margin: 20px 0; border-radius: 12px;">
-                      <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliacao</h3>
-                      <p><strong>Pontuacao:</strong> ${score}/100</p>
-                      <p><strong>Classificacao:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atencao Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
-                      <p><strong>${classificacaoTitulo}</strong></p>
-                      <p>${classificacaoMensagem}</p>
-                    </div>
-                  `;
-              }
-              try {
-                  await resend.emails.send({
-                      from: 'GetVisa <contato@getvisa.com.br>',
-                      to: [emailCliente],
-                      subject: `Resultado da sua avaliacao de visto negado - ${nome}`,
-                      html: `<strong>Ola ${nome},</strong><br>
-                             <p>Recebemos sua solicitacao de analise para reversao de visto negado. Em breve um de nossos especialistas entrara em contato.</p>
-                             ${resultadoHtml}
-                             <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliacao.</p>
-                             <p>Atenciosamente,<br>Equipe GetVisa</p>`,
-                      attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
-                  });
-                  console.log(`✅ E-mail enviado para cliente VÁLIDO: ${emailCliente}`);
-              } catch (emailErr) {
-                  console.error(`❌ Erro ao enviar e-mail para ${emailCliente}:`, emailErr.message);
-              }
-          } else {
-              console.log(`🚨 BLOQUEADO: Tentativa de enviar e-mail para domínio não autorizado ou suspeito: ${emailCliente}`);
-              // Não envia o e-mail, apenas registra no log
-          }
-      } else {
-          console.log(`⚠️ Cliente sem e-mail: ${nome}`);
+        let resultadoHtml = '';
+        if (score !== null) {
+          let cor = classificacaoTipo === 'urgent' ? '#dc2626' : (classificacaoTipo === 'moderate' ? '#ff6b35' : '#0066cc');
+          resultadoHtml = `
+            <div style="background: #f0f9ff; border-left: 5px solid ${cor}; padding: 15px; margin: 20px 0; border-radius: 12px;">
+              <h3 style="margin: 0 0 10px; color: ${cor};">📊 Resultado da sua avaliacao</h3>
+              <p><strong>Pontuacao:</strong> ${score}/100</p>
+              <p><strong>Classificacao:</strong> ${classificacaoTipo === 'urgent' ? 'Requer Atencao Urgente' : classificacaoTipo === 'moderate' ? 'Potencial Moderado' : 'Forte Potencial'}</p>
+              <p><strong>${classificacaoTitulo}</strong></p>
+              <p>${classificacaoMensagem}</p>
+            </div>
+          `;
+        }
+        await resend.emails.send({
+          from: 'GetVisa <contato@getvisa.com.br>',
+          to: [emailCliente],
+          subject: `Resultado da sua avaliacao de visto negado - ${nome}`,
+          html: `<strong>Ola ${nome},</strong><br>
+                 <p>Recebemos sua solicitacao de analise para reversao de visto negado. Em breve um de nossos especialistas entrara em contato.</p>
+                 ${resultadoHtml}
+                 <p>Segue em anexo o PDF completo com todas as suas respostas e o resultado da avaliacao.</p>
+                 <p>Atenciosamente,<br>Equipe GetVisa</p>`,
+          attachments: [{ filename: `Visto_Negado_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+        });
+        console.log(`✅ E-mail enviado para o cliente (visto negado) com resultado: ${emailCliente}`);
       }
     } catch (err) {
       console.error('❌ Erro no processamento do visto negado (background):', err);
@@ -1643,11 +1349,12 @@ app.get('/ping', (req, res) => {
 });
 
 // ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
-  
   if (body.fromMe === true) return;
   const connectedPhone = body.connectedPhone;
   const senderPhone = body.phone || body.from;
@@ -1658,22 +1365,23 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
-    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
+    const cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    console.log(`📞 Mensagem de ${cleanPhone}: "${messageText}"`);
 
+    // 🔍 BUSCAR LEAD NO SUPABASE
     let lead = null;
-    const { data: leads } = await supabase
+    
+    const { data: leads, error } = await supabase
       .from('leads_simulador')
       .select('*')
       .eq('telefone_whatsapp', cleanPhone)
       .order('data_simulacao', { ascending: false });
     
+    console.log(`🔍 Buscando lead para ${cleanPhone}: encontrados ${leads?.length || 0} registros`);
+    
     if (leads && leads.length > 0) {
       lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
+      console.log(`✅ Lead encontrado: ${lead.nome_cliente}, score: ${lead.pontuacao_total}, class: ${lead.classificacao_perfil}`);
     } else {
       console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
     }
@@ -1693,297 +1401,187 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
     
-    // ==================== 1. RESPOSTA "SIM" ====================
-    if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣')) {
+    // ==================== RESPOSTA "SIM" ====================
+    if (lead && messageText === 'sim') {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `📋 *Acesse o rascunho do formulário DS-160:*\n` +
+                       `Vamos dar continuidade ao seu processo!\n\n` +
+                       `📋 *Acesse o formulário DS-160:*\n` +
                        `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
                        `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Aguardamos seu formulario! 🇺🇸✨`;
+                       `Estamos juntos nessa! 🇺🇸✨`;
+      
       await sendReply(cleanPhone, resposta);
+      console.log(`✅ Link do DS-160 enviado para ${primeiroNome}`);
       return;
     }
     
-    // ==================== 2. RESPOSTA "NÃO" ====================
-    if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
-                       `🔍 *O que você gostaria de saber?*\n\n` +
-                       `1️⃣💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣📞 *AJUDA* - Falar com especialista\n` +
-                       `8️⃣📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 3. SAUDAÇÃO (oi, olá, bom dia, boa tarde, boa noite) ====================
-    if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-                 messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-                       `📋 *Como podemos ajudar você hoje?*\n\n` +
-                       `🔍 *Opções disponíveis:*\n` +
-                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
-                       `7️⃣  ✅ *SIM* - Iniciar meu processo\n` +
-                       `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `*Digite o número da opção desejada (1 a 8):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log(`📝 Menu principal enviado para ${primeiroNome}`);
-      return;
-    }
-    
-    // ==================== 4. CONSULTAR AGENDAMENTOS ====================
-    if (lead && (messageText === '8' || messageText === '8️⃣' || 
-                 messageText === 'meus agendamentos' || messageText === 'meus compromissos' || 
-                 messageText === 'minha entrevista' || messageText === 'quando' || 
-                 messageText === 'datas' || messageText === '📅' || messageText === 'agendamentos')) {
-      
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const nomeCompleto = lead.nome_cliente || '';
-      
-      console.log(`📅 Cliente ${primeiroNome} solicitou consulta de agendamentos`);
-      
-      // Buscar agendamentos do cliente pelo nome
-      const { data: agendamentos, error } = await supabase
-        .from('compromissos')
-        .select('*')
-        .ilike('cliente', `%${nomeCompleto}%`)
-        .order('data', { ascending: true });
-      
-      if (error) {
-        console.error('Erro ao buscar agendamentos:', error);
-        const resposta = `❌ *Desculpe, ${primeiroNome}!*\n\nTivemos um problema ao buscar seus agendamentos. Por favor, fale com um especialista: https://wa.me/5521974601812`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-      
-      if (agendamentos && agendamentos.length > 0) {
-        // Separar passados e futuros
-        const hoje = new Date().toISOString().split('T')[0];
-        const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido === 0);
-        const passados = agendamentos.filter(a => a.data < hoje || a.concluido === 1);
-        
-        let resposta = `📅 *Olá, ${primeiroNome}!* 📅\n\n`;
-        
-        if (futuros.length > 0) {
-          resposta += `*🔜 PRÓXIMOS COMPROMISSOS:*\n\n`;
-          for (const ag of futuros) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const emoji = ag.atividade === 'ENTREVISTA' ? '🗣️' : 
-                          ag.atividade === 'CASV' ? '👆' : 
-                          ag.atividade.includes('TREINAMENTO') ? '💻' : 
-                          ag.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-            
-            resposta += `${emoji} *${ag.atividade}*\n`;
-            resposta += `   📆 ${dataFormatada}\n`;
-            resposta += `   ⏰ ${ag.hora}\n`;
-            if (ag.local) resposta += `   📍 ${ag.local}\n`;
-            
-            // Dias restantes
-            const diasRestantes = Math.ceil((new Date(ag.data) - new Date()) / (1000 * 60 * 60 * 24));
-            if (diasRestantes === 0) {
-              resposta += `   ⚠️ *É HOJE!* ⚠️\n`;
-            } else if (diasRestantes === 1) {
-              resposta += `   ⚠️ *É AMANHÃ!* ⚠️\n`;
-            } else if (diasRestantes > 0) {
-              resposta += `   📊 Em ${diasRestantes} dias\n`;
-            }
-            resposta += `\n`;
-          }
-        } else {
-          resposta += `✅ *Você não tem compromissos futuros no momento.*\n\n`;
-        }
-        
-        if (passados.length > 0) {
-          resposta += `*✅ ÚLTIMOS COMPROMISSOS REALIZADOS:*\n\n`;
-          const ultimos = passados.slice(-3);
-          for (const ag of ultimos) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const status = ag.concluido === 1 ? '✅' : '📅';
-            resposta += `${status} ${ag.atividade} - ${dataFormatada}\n`;
-          }
-          if (passados.length > 3) {
-            resposta += `\n_+ ${passados.length - 3} outros compromissos_\n`;
-          }
-        }
-        
-        resposta += `\n🔔 *Você receberá lembretes 3 dias e 1 dia antes de cada compromisso!*\n\n`;
-        resposta += `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
-        
-        await sendReply(cleanPhone, resposta);
-      } else {
-        const resposta = `📅 *Olá, ${primeiroNome}!*\n\n` +
-                         `Você não possui compromissos agendados no momento.\n\n` +
-                         `Gostaria de agendar uma consultoria gratuita?\n` +
-                         `👉 https://calendly.com/getvisa/consultoria\n\n` +
-                         `Digite *MENU* para ver outras opções! 🚀`;
-        await sendReply(cleanPhone, resposta);
-      }
-      return;
-    }
-    
-    // ==================== 5. RESPOSTAS POR NÚMERO (1 a 6) ====================
-
-    // Opção 1 - PREÇO
-    if (lead && (messageText === '1' || messageText === '1️⃣' || 
-                 messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
-      const resposta = `💰 *INVESTIMENTO*\n\n` +
-                       `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-                       `📋 *Assessoria:* R$ 350,00\n\n` +
-                       `*O que a assessoria inclui:*\n` +
-                       `✅ Análise completa do perfil\n` +
-                       `✅ Preenchimento do DS-160\n` +
-                       `✅ Agendamento da entrevista\n` +
-                       `✅ Preparação para entrevista (simulado)\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `📌 Plano especial para família \n\n` +
-                       `Digite *7* ou *SIM* para começar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // Opção 2 - PRAZO
-    if (lead && (messageText === '2' || messageText === '2️⃣' || 
-                 messageText === 'prazo' || messageText === '⏰')) {
-      const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
-                       `📅 *Agendamento da entrevista:*\n` +
-                       `   • Por conta própria: até 8 semanas\n` +
-                       `   • Com nossa assessoria: trabalhamos com antecipação de prazos ⚡\n\n` +
-                       `🔍 *Análise consular:* 7 a 10 dias úteis\n\n` +
-                       `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
-                       `🕒 *TOTAL estimado:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // Opção 3 - DOCUMENTOS
-    if (lead && (messageText === '3' || messageText === '3️⃣' || 
-                 messageText === 'documentos' || messageText === '📄')) {
-      const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
-                       `📌 *OBRIGATÓRIOS:*\n` +
-                       `• Passaporte válido (mínimo 6 meses de validade)\n` +
-                       `• Foto 5x7 recente (fundo branco)\n` +
-                       `• Comprovante da taxa consular MRV paga\n` +
-                       `• DS-160 preenchido (nós ajudamos!)\n\n` +
-                       `📌 *RECOMENDADOS (comprovar vínculos):*\n` +
-                       `• 💰 Comprovante de renda (3 últimos holerites)\n` +
-                       `• 🏦 Extratos bancários (3-6 meses)\n` +
-                       `• 🏠 Comprovante de imóvel ou contrato de aluguel\n` +
-                       `• 🚗 Documento do veículo\n` +
-                       `• 📒 Carteira de trabalho\n` +
-                       `• 👨‍👩‍👧 Certidão de nascimento dos filhos\n\n` +
-                       `Digite *7* ou *SIM* e te ajudo com a documentação! 📋`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // Opção 4 - PROCESSO
-    if (lead && (messageText === '4' || messageText === '4️⃣' || 
-                 messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
-      const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
-                       `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
-                       `   → Avaliamos suas chances de aprovação\n\n` +
-                       `2️⃣ *Preenchimento do DS-160* (nós te enviamos o link)\n` +
-                       `   → Revisamos antes do envio\n\n` +
-                       `3️⃣ *Pagamento da taxa consular*\n` +
-                       `   → ~R$ 950 (taxa oficial do governo dos EUA)\n\n` +
-                       `4️⃣ *Agendamento da entrevista*\n` +
-                       `   → Conseguimos datas mais rápidas ⚡\n\n` +
-                       `5️⃣ *Preparação para entrevista*\n` +
-                       `   → Simulado completo + dicas exclusivas\n\n` +
-                       `6️⃣ *Acompanhamento*\n` +
-                       `   → Até o final do processo!\n\n` +
-                       `⏰ *Prazo médio total:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para iniciar agora! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // Opção 5 - VISTO NEGADO
-    if (lead && (messageText === '5' || messageText === '5️⃣' || 
-                 messageText === 'visto negado' || messageText === 'negado' || 
-                 messageText === 'rejeitado' || messageText === '⚠️')) {
-      const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
-                       `*O que fazer após uma negativa:*\n\n` +
-                       `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
-                       `2️⃣ Reforçar seus vínculos com o Brasil\n` +
-                       `   • Emprego estável, família, bens\n\n` +
-                       `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
-                       `4️⃣ Nova documentação de suporte\n` +
-                       `5️⃣ Preparação intensiva para entrevista\n\n` +
-                       `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
-                       `✅ Revisão completa do caso anterior\n` +
-                       `✅ Estratégia personalizada para sua situação\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 380\n\n` +
-                       `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    // Opção 6 - AJUDA / ESPECIALISTA
-    if (lead && (messageText === '6' || messageText === '6️⃣' || 
-                 messageText === 'ajuda' || messageText === 'especialista' || 
-                 messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
-      const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
-                       `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
-                       `*Contato direto:*\n` +
-                       `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-                       `*📅 Agende uma consultoria gratuita:*\n` +
-                       `https://calendly.com/getvisa/consultoria\n\n` +
-                       `*Horário de atendimento:*\n` +
-                       `Segunda a Sexta, 9h às 18h\n\n` +
-                       `Te aguardo para tirar todas as suas dúvidas! 💬`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 6. LEAD EXISTE (mensagem padrão) ====================
+    // ==================== LEAD EXISTE != ====================
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 'Analisado';
       const pontuacao = lead.pontuacao_total || 0;
       const respostas = lead.respostas_simulador || {};
-      const perfil = respostas.situacao_profissional || 'não informado';
-      const renda = respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || 'não informado';
-      const motivo = respostas.proposito_viagem || 'não informado';
       
-      let resposta = `Olá, ${primeiroNome}! Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
-      resposta += `📊 *Seus dados:*\n• Perfil: ${perfil}\n• Renda: ${renda}\n• Histórico: ${historico}\n• Motivo: ${motivo}\n\n`;
-      resposta += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria (R$ 400)\n\n`;
-      resposta += `📋 *Opções disponíveis:*\n`;
-      resposta += `1️⃣ PREÇO | 2️⃣ PRAZO | 3️⃣ DOCUMENTOS | 4️⃣ PROCESSO | 5️⃣ VISTO NEGADO | 6️⃣ AJUDA | 7️⃣ SIM | 8️⃣ MEUS AGENDAMENTOS\n\n`;
-      resposta += `Digite o número da opção desejada! 🚀`;
+      // Extrair dados do perfil
+      const perfil = respostas.perfil || respostas.radio27 || respostas.ocupacao || 'não informado';
+      const renda = respostas.renda || respostas.renda_mensal || 'não informada';
+      const historico = respostas.historico_viagens || respostas.paises_visitados || 'nunca viajou';
+      const motivo = respostas.proposito_viagem || respostas.radio28 || respostas.motivo || 'não informado';
+      const primeiraViagem = historico.toLowerCase().includes('nunca');
       
+      // Construir resposta HUMANIZADA
+      let resposta = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
+      resposta += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${pontuacao}/100).\n\n`;
+      resposta += `📊 *Seus dados:*\n`;
+      resposta += `• Perfil: ${perfil}\n`;
+      resposta += `• Renda: ${renda}\n`;
+      resposta += `• Histórico: ${historico}\n`;
+      resposta += `• Motivo: ${motivo}\n\n`;
+      
+      resposta += `🔍 *Análise:* `;
+      if (perfil.toLowerCase().includes('estudante')) {
+        resposta += `Como estudante, o consulado valoriza vínculos com o Brasil, como matrícula ativa e planejamento de retorno. `;
+      } else if (perfil.toLowerCase().includes('clt')) {
+        resposta += `Sua estabilidade como CLT é um ponto muito positivo. `;
+      } else {
+        resposta += `Vamos trabalhar para fortalecer seus vínculos com o Brasil. `;
+      }
+      
+      if (primeiraViagem) {
+        resposta += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra para demonstrar seus vínculos. `;
+      }
+      
+      resposta += `\n\n✅ *Podemos dar início ao seu processo?*\n`;
+      resposta += `Se sua resposta for *SIM*, te envio agora o link do formulário DS-160. 🚀`;
+      
+      console.log(`📝 Resposta humanizada para ${primeiroNome}: ${resposta.substring(0, 100)}...`);
       await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== 7. LEAD NÃO EXISTE ====================
+    // ==================== LEAD NÃO EXISTE ====================
     if (!lead) {
       const resposta = `🇺🇸 *GetVisa Assessoria Consular*\n\n` +
-                       `Olá! 👋 Faça sua avaliação gratuita de perfil:\n` +
+                       `Olá! 👋 Seja bem-vindo(a)!\n\n` +
+                       `📋 *Faça sua avaliação gratuita de perfil:*\n` +
                        `https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
                        `Em 2 minutos você descobre suas chances de aprovação! 🚀`;
+      
       await sendReply(cleanPhone, resposta);
+      console.log(`📝 Oferta de avaliação enviada para ${cleanPhone}`);
     }
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
+    console.error(error.stack);
   }
+});
+
+// ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
+app.post('/api/submit-simulador', async (req, res) => {
+  const data = req.body;
+  console.log('📥 [1] Simulador recebido - Dados COMPLETOS:', JSON.stringify(data, null, 2));
+  console.log('📥 [2] Telefone recebido:', data['telefone']);
+  console.log('📥 [3] Nome recebido:', data['nome']);
+  console.log('📥 [4] Email recebido:', data['email']);
+  
+  res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
+
+  (async () => {
+    try {
+      const nome = data['nome'] || data['nome_cliente_contato'] || 'Cliente_Sem_Nome';
+      const telefoneCliente = data['telefone'] || data['telefone_whatsapp_contato'] || null;
+      const emailCliente = data['email'] || data['email_contato'] || null;
+      
+      console.log(`📥 [5] Nome extraído: ${nome}`);
+      console.log(`📥 [6] Telefone extraído: ${telefoneCliente}`);
+      
+      // Buscar ou extrair as respostas
+      const situacaoProfissional = data['situacao_profissional'] || data['perfil'] || '';
+      const renda = data['renda'] || data['renda_mensal'] || '';
+      const historicoViagens = data['historico_viagens'] || data['histórico'] || '';
+      const propositoViagem = data['proposito_viagem'] || data['motivo'] || '';
+      
+      console.log(`📥 [7] Situação: ${situacaoProfissional}`);
+      console.log(`📥 [8] Renda: ${renda}`);
+      console.log(`📥 [9] Histórico: ${historicoViagens}`);
+      console.log(`📥 [10] Motivo: ${propositoViagem}`);
+      
+      // Lógica de pontuação
+      let score = 65;
+      let classificacao = 'Potencial Moderado';
+      
+      if (situacaoProfissional === 'Desempregado(a) no momento') {
+        score = 45;
+        classificacao = 'Requer Atenção';
+      } else if (renda === 'Acima de R$ 15.000') {
+        score = 85;
+        classificacao = 'Forte Potencial';
+      } else if (situacaoProfissional.includes('CLT')) {
+        score = 55;
+        classificacao = 'Perfil Regular';
+      }
+      
+      console.log(`📥 [11] Score calculado: ${score}`);
+      console.log(`📥 [12] Classificação: ${classificacao}`);
+      
+      // Salvar na tabela leads_simulador
+      if (!telefoneCliente) {
+        console.error('❌ [13] Telefone NÃO INFORMADO! Não foi possível salvar.');
+        return;
+      }
+      
+      const insertData = {
+        nome_cliente: nome,
+        telefone_whatsapp: telefoneCliente,
+        email: emailCliente,
+        pontuacao_total: score,
+        classificacao_perfil: classificacao,
+        respostas_simulador: data,
+        data_simulacao: new Date(),
+        status_lead: 'novo'
+      };
+      
+      console.log('📥 [14] Tentando inserir:', JSON.stringify(insertData, null, 2));
+      
+      const { data: inserted, error } = await supabase
+        .from('leads_simulador')
+        .insert(insertData)
+        .select();
+      
+      if (error) {
+        console.error('❌ [15] Erro no Supabase:', error.message);
+        console.error('❌ [15] Código do erro:', error.code);
+      } else {
+        console.log(`✅ [16] Lead salvo com sucesso! ID: ${inserted?.[0]?.id}`);
+        
+        // Enviar WhatsApp humanizado
+        const primeiroNome = nome.split(' ')[0];
+        const primeiraViagem = historicoViagens.includes('Nunca') || historicoViagens.includes('nunca');
+        
+        let mensagem = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e vou te acompanhar.\n\n`;
+        mensagem += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
+        mensagem += `📊 *Seus dados:*\n`;
+        mensagem += `• Situação: ${situacaoProfissional}\n`;
+        mensagem += `• Renda: ${renda}\n`;
+        mensagem += `• Histórico: ${historicoViagens}\n`;
+        mensagem += `• Motivo: ${propositoViagem}\n\n`;
+        
+        if (primeiraViagem) {
+          mensagem += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra.\n\n`;
+        }
+        
+        mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
+        mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160. 🚀`;
+        
+        await enviarWhatsApp(telefoneCliente, mensagem);
+      }
+      
+    } catch (err) {
+      console.error('❌ Erro no processamento:', err);
+    }
+  })();
 });
 
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
@@ -2002,6 +1600,7 @@ app.post('/api/submit-simulador', async (req, res) => {
       const historicoViagens = data['historico_viagens'] || '';
       const propositoViagem = data['proposito_viagem'] || '';
       
+      // Lógica de pontuação
       let score = 65;
       let classificacao = 'Potencial Moderado';
       
@@ -2013,6 +1612,7 @@ app.post('/api/submit-simulador', async (req, res) => {
         classificacao = 'Forte Potencial';
       }
       
+      // Salvar na tabela leads_simulador
       if (telefoneCliente) {
         const { error } = await supabase
           .from('leads_simulador')
@@ -2032,6 +1632,7 @@ app.post('/api/submit-simulador', async (req, res) => {
         } else {
           console.log(`✅ Lead salvo: ${nome} - ${telefoneCliente}`);
           
+          // Enviar WhatsApp humanizado
           const primeiroNome = nome.split(' ')[0];
           const primeiraViagem = historicoViagens === 'Nunca viajei para fora do Brasil';
           
@@ -2059,171 +1660,6 @@ app.post('/api/submit-simulador', async (req, res) => {
     }
   })();
 });
-
-// ==================== SISTEMA DE LEMBRETES AUTOMÁTICOS ====================
-
-// Função para formatar data brasileira
-function formatarDataBR(dataISO) {
-  const [ano, mes, dia] = dataISO.split('-');
-  return `${dia}/${mes}/${ano}`;
-}
-
-// Função para buscar telefone do cliente pelo nome ou cliente_id
-async function buscarTelefoneCliente(clienteNome, clienteId) {
-  // Primeiro tenta buscar pelo cliente_id na tabela clientes
-  if (clienteId) {
-    const { data: cliente } = await supabase
-      .from('clientes')
-      .select('telefone')
-      .eq('id', clienteId)
-      .single();
-    
-    if (cliente?.telefone) {
-      return cliente.telefone.replace(/\D/g, '');
-    }
-  }
-  
-  // Se não achou, tenta pelo nome na tabela leads_simulador
-  const { data: lead } = await supabase
-    .from('leads_simulador')
-    .select('telefone_whatsapp')
-    .ilike('nome_cliente', `%${clienteNome}%`)
-    .order('data_simulacao', { ascending: false })
-    .limit(1)
-    .single();
-  
-  if (lead?.telefone_whatsapp) {
-    return lead.telefone_whatsapp.replace(/\D/g, '');
-  }
-  
-  return null;
-}
-
-// Função para enviar lembrete via WhatsApp
-async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
-  const dataFormatada = formatarDataBR(agendamento.data);
-  const emoji = agendamento.atividade === 'ENTREVISTA' ? '🗣️' : 
-                agendamento.atividade === 'CASV' ? '👆' : 
-                agendamento.atividade.includes('TREINAMENTO') ? '💻' : 
-                agendamento.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-  
-  const diasTexto = diasAntecedencia === 3 ? '3 dias' : '1 dia';
-  
-  let mensagem = `🔔 *LEMBRETE - GetVisa* 🔔\n\n`;
-  mensagem += `Olá, ${nomeCliente.split(' ')[0]}! 👋\n\n`;
-  mensagem += `Faltam *${diasTexto}* para seu compromisso:\n\n`;
-  mensagem += `${emoji} *${agendamento.atividade}*\n`;
-  mensagem += `📆 Data: ${dataFormatada}\n`;
-  mensagem += `⏰ Horário: ${agendamento.hora}\n`;
-  
-  if (agendamento.local) {
-    mensagem += `📍 Local: ${agendamento.local}\n`;
-  }
-  
-  // Dicas específicas por tipo de atividade
-  if (agendamento.atividade === 'ENTREVISTA') {
-    mensagem += `\n📋 *Dicas importantes:*\n`;
-    mensagem += `• Chegue com 30 minutos de antecedência\n`;
-    mensagem += `• Leve: passaporte, DS-160, foto 5x7\n`;
-    mensagem += `• Documentos comprobatórios (renda, vínculos)\n`;
-    mensagem += `• Esteja bem vestido(a) e confiante!\n`;
-  } else if (agendamento.atividade === 'CASV') {
-    mensagem += `\n📋 *Para a Coleta CASV:*\n`;
-    mensagem += `• Leve o passaporte original\n`;
-    mensagem += `• Confirme o local exato no dia\n`;
-    mensagem += `• Não precisa levar documentos comprobatórios\n`;
-  } else if (agendamento.atividade === 'RETIRADA PASSAPORTE') {
-    mensagem += `\n📋 *Retirada do passaporte:*\n`;
-    mensagem += `• Leve o comprovante de agendamento\n`;
-    mensagem += `• Documento de identificação original\n`;
-  }
-  
-  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
-  mensagem += `Digite *MEUS AGENDAMENTOS* para ver todos os seus compromissos.`;
-  
-  // Remove o 55 do início se existir
-  let telefoneLimpo = telefone.toString().replace(/\D/g, '');
-  if (telefoneLimpo.startsWith('55')) {
-    telefoneLimpo = telefoneLimpo.substring(2);
-  }
-  
-  await enviarWhatsApp(telefoneLimpo, mensagem);
-  console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade} em ${agendamento.data}`);
-}
-
-// Função principal para verificar e enviar lembretes
-async function verificarLembretes() {
-  console.log(`🔍 Verificando lembretes - ${new Date().toLocaleString('pt-BR')}`);
-  
-  try {
-    // Buscar agendamentos NÃO CONCLUÍDOS (concluido = 0) e futuros
-    const hoje = new Date().toISOString().split('T')[0];
-    
-    const { data: agendamentos, error } = await supabase
-      .from('compromissos')
-      .select('*')
-      .eq('concluido', 0)
-      .gte('data', hoje);
-    
-    if (error) {
-      console.error('❌ Erro ao buscar agendamentos:', error);
-      return;
-    }
-    
-    const dataAtual = new Date();
-    dataAtual.setHours(0, 0, 0, 0);
-    
-    for (const ag of agendamentos) {
-      const dataAgenda = new Date(ag.data);
-      dataAgenda.setHours(0, 0, 0, 0);
-      
-      const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
-      
-      // Buscar telefone do cliente
-      const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
-      
-      if (!telefone) {
-        console.log(`⚠️ Telefone não encontrado para ${ag.cliente}`);
-        continue;
-      }
-      
-      // Lembrete de 3 dias
-      if (diffDays === 3 && !ag.lembrete_3d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
-        
-        // Marcar como enviado
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_3d_enviado: true })
-          .eq('id', ag.id);
-          
-        console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
-      }
-      
-      // Lembrete de 1 dia
-      if (diffDays === 1 && !ag.lembrete_1d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
-        
-        // Marcar como enviado
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_1d_enviado: true })
-          .eq('id', ag.id);
-          
-        console.log(`✅ Lembrete 1 dia enviado para ${ag.cliente}`);
-      }
-    }
-    
-  } catch (err) {
-    console.error('❌ Erro no sistema de lembretes:', err);
-  }
-}
-
-// Executar verificação a cada 6 horas (ou ajuste conforme necessidade)
-setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
-
-// Executar uma vez ao iniciar
-verificarLembretes();
 
 // ==================== INICIALIZAÇÃO ====================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
