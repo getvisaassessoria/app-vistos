@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static('public')); 
+app.use(express.static('public'));
 
 // ==================== SUPABASE CLIENT ====================
 const supabase = createClient(
@@ -36,7 +36,6 @@ function getRealIp(req) {
 
 /// ==================== BLOQUEIO DE BOTS ====================
 app.use((req, res, next) => {
-    // LIBERAR WEBHOOK DO Z-API (não bloquear)
     if (req.path === '/api/webhook/zapi') {
         console.log(`✅ WEBHOOK Z-API LIBERADO: ${req.method} ${req.path}`);
         return next();
@@ -59,7 +58,6 @@ app.use((req, res, next) => {
     
     next();
 });
-
 
 app.use((req, res, next) => {
     const ip = getRealIp(req);
@@ -745,6 +743,37 @@ Sua análise de perfil foi concluída!
 • Digite *MENU* para ver outras opções
 
 *Vamos trabalhar juntos!* 🚀`;
+}
+
+// ==================== FUNÇÃO MELHORADA PARA BUSCAR LEAD ====================
+async function buscarLeadPorTelefone(telefone) {
+  let cleanPhone = telefone.toString().replace(/\D/g, '');
+  
+  // Remove o 55 se tiver
+  if (cleanPhone.startsWith('55')) {
+    cleanPhone = cleanPhone.substring(2);
+  }
+  
+  // Busca leads com vários formatos possíveis
+  const { data: leads, error } = await supabase
+    .from('leads_simulador')
+    .select('*')
+    .or(`telefone_whatsapp.ilike.%${cleanPhone}%,telefone_whatsapp.ilike.%${cleanPhone.substring(cleanPhone.length - 10)}%`)
+    .order('data_simulacao', { ascending: false })
+    .limit(1);
+  
+  if (error) {
+    console.error('❌ Erro ao buscar lead:', error);
+    return null;
+  }
+  
+  if (leads && leads.length > 0) {
+    console.log(`✅ Lead encontrado: ${leads[0].nome_cliente}, Telefone salvo: ${leads[0].telefone_whatsapp}`);
+    return leads[0];
+  }
+  
+  console.log(`⚠️ Lead não encontrado para telefone: ${telefone} -> limpo: ${cleanPhone}`);
+  return null;
 }
 
 // ==================== MAPEAMENTOS E FUNÇÕES AUXILIARES ====================
@@ -1477,8 +1506,9 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
-// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API (VERSÃO MELHORADA) ====================
 app.post('/api/webhook/zapi', async (req, res) => {
+  console.log('📨 Webhook Z-API recebido');
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
@@ -1509,19 +1539,35 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (cleanPhone.startsWith('55')) {
       cleanPhone = cleanPhone.substring(2);
     }
-    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText.substring(0, 100)}..."`);
+    if (cleanPhone.length === 12) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+    console.log(`📞 Telefone recebido: ${senderPhone} → normalizado: ${cleanPhone} | Mensagem: "${messageText.substring(0, 100)}..."`);
 
-    // Busca lead no Supabase
-    let lead = null;
-    const { data: leads } = await supabase
-      .from('leads_simulador')
-      .select('*')
-      .eq('telefone_whatsapp', cleanPhone)
-      .limit(1);
+    // ==================== BUSCA LEAD MELHORADA ====================
+    let lead = await buscarLeadPorTelefone(cleanPhone);
     
-    if (leads && leads.length > 0) {
-      lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}, Pontuação: ${lead.pontuacao_total}`);
+    // Se não encontrou, busca na tabela clientes
+    if (!lead) {
+      const { data: clientes, error: clientesError } = await supabase
+        .from('clientes')
+        .select('*')
+        .or(`telefone.ilike.%${cleanPhone}%,telefone.ilike.%${cleanPhone.substring(cleanPhone.length - 10)}%`)
+        .limit(1);
+      
+      if (!clientesError && clientes && clientes.length > 0) {
+        console.log(`✅ Cliente encontrado: ${clientes[0].nome_completo}`);
+        
+        // Converte cliente em formato de lead
+        lead = {
+          nome_cliente: clientes[0].nome_completo,
+          telefone_whatsapp: clientes[0].telefone,
+          email: clientes[0].email,
+          pontuacao_total: null,
+          classificacao_perfil: null,
+          respostas_simulador: {}
+        };
+      }
     }
     
     const instance = process.env.ZAPI_INSTANCE;
@@ -1540,24 +1586,56 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ==================== RESPOSTA PERSONALIZADA (PRIORIDADE MÁXIMA) ====================
     if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 Gerando resposta personalizada para ${lead.nome_cliente}`);
+      console.log(`🎯 Gerando resposta personalizada para ${lead.nome_cliente} (Pontuação: ${lead.pontuacao_total})`);
       
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 
                            (lead.pontuacao_total >= 70 ? 'Forte Potencial' : 
                             lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
       
-      const respostas = lead.respostas_simulador || {};
-      const situacao = respostas.situacao_profissional || respostas.ocupacao || 'não informada';
-      const renda = respostas.renda || respostas.renda_mensal || 'não informada';
-      const historico = respostas.historico_viagens || '';
-      const motivo = respostas.proposito_viagem || respostas.motivo_viagem || '';
+      // Busca as respostas do simulador - IMPORTANTE: extrair corretamente
+      let respostas = lead.respostas_simulador || {};
+      
+      // Se respostas estiver vazio, tenta extrair do campo respostas_simulador (que pode ser string JSON)
+      if (typeof respostas === 'string') {
+        try {
+          respostas = JSON.parse(respostas);
+        } catch (e) {
+          console.log('⚠️ Erro ao parsear respostas_simulador:', e);
+          respostas = {};
+        }
+      }
+      
+      // Extrai os dados com fallbacks inteligentes
+      let situacao = respostas.situacao_profissional || respostas.ocupacao || respostas.situacao || '';
+      let renda = respostas.renda_mensal || respostas.renda || '';
+      let historico = respostas.historico_viagens || respostas.historico || '';
+      let motivo = respostas.proposito_viagem || respostas.motivo_viagem || respostas.motivo || '';
+      
+      // Se ainda estiver vazio, tenta extrair de campos genéricos
+      if (!situacao && respostas.perfil_profissional) situacao = respostas.perfil_profissional;
+      if (!renda && respostas.faixa_renda) renda = respostas.faixa_renda;
+      if (!historico && respostas.experiencia_internacional) historico = respostas.experiencia_internacional;
+      
+      console.log(`📊 Dados extraídos - Situação: ${situacao}, Renda: ${renda}, Histórico: ${historico}, Motivo: ${motivo}`);
       
       const respostaPersonalizada = gerarRespostaHumanizada(
-        primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
+        primeiroNome, classificacao, situacao || 'não informada', 
+        renda || 'não informada', historico || 'não informado', 
+        motivo || 'Turismo', lead.pontuacao_total
       );
       
       await sendReply(cleanPhone, respostaPersonalizada);
+      console.log(`✅ Resposta personalizada enviada para ${primeiroNome}`);
+      return;
+    }
+    
+    // Se tem lead mas sem pontuação (veio da tabela clientes), oferece avaliação
+    if (lead && (!lead.pontuacao_total || lead.pontuacao_total === 0)) {
+      console.log(`📊 Lead ${lead.nome_cliente} sem pontuação - oferecendo avaliação`);
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\nOlá, ${primeiroNome}! 👋\n\nJá podemos te ajudar com o visto americano!\n\n📊 *Faça nossa avaliação gratuita de perfil:*\nhttps://getvisa.com.br/simulador-visto-americano-4917\n\nEm 2 minutos você descobre suas chances de aprovação!\n\n*Digite MENU para ver todas as opções.* 🚀`;
+      await sendReply(cleanPhone, resposta);
       return;
     }
 
@@ -1747,9 +1825,14 @@ Em 2 minutos você recebe uma análise personalizada!
         messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite' ||
         messageText === 'hey' || messageText === 'e ai' || messageText === 'e aí') {
       
+      let nomeCliente = '';
+      if (lead && lead.nome_cliente) {
+        nomeCliente = lead.nome_cliente.split(' ')[0];
+      }
+      
       const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
 
-Olá! 👋 Seja bem-vindo(a)!
+Olá${nomeCliente ? ' ' + nomeCliente : ''}! 👋 Seja bem-vindo(a)!
 
 📋 *Como podemos ajudar você hoje?*
 
