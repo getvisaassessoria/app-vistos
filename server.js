@@ -1493,10 +1493,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
     if (!messageText) return;
 
-    // ==================== IGNORAR MENSAGEM COPIADA DO SITE ====================
+    // IGNORAR MENSAGEM COPIADA DO SITE
     if (messageText.includes('fiz a avaliação de perfil no site') && 
         (messageText.includes('meus dados') || messageText.includes('perfil'))) {
-      console.log(`📋 Cliente copiou resultado da avaliação do site - ignorando para não duplicar`);
+      console.log(`📋 Cliente copiou resultado da avaliação do site - ignorando`);
       return;
     }
     
@@ -1511,6 +1511,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText.substring(0, 100)}..."`);
 
+    // Busca lead no Supabase
     let lead = null;
     const { data: leads } = await supabase
       .from('leads_simulador')
@@ -1537,9 +1538,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
     };
 
-    // 🔥 RESPOSTA PERSONALIZADA PARA LEADS COM PONTUAÇÃO 🔥
+    // ==================== RESPOSTA PERSONALIZADA (PRIORIDADE MÁXIMA) ====================
     if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 Gerando resposta personalizada para ${lead.nome_cliente} (${lead.pontuacao_total} pontos)`);
+      console.log(`🎯 Gerando resposta personalizada para ${lead.nome_cliente}`);
       
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 
