@@ -1593,112 +1593,116 @@ app.get('/api/debug/buscar/:telefone', async (req, res) => {
   }
 });
 
-// ==================== WEBHOOK Z-API (VERSÃO CORRIGIDA) ====================
+// ==================== WEBHOOK Z-API (VERSÃO COMPLETA CORRIGIDA) ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('📨 Webhook Z-API recebido');
-  console.log('📦 Body:', JSON.stringify(req.body, null, 2));
+  console.log('📨 Webhook Z-API recebido:', JSON.stringify(req.body, null, 2));
   
+  // Responde imediatamente para o WhatsApp não ficar esperando
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
   
-  if (body.fromMe === true) return;
+  // Ignora mensagens próprias
+  if (body.fromMe === true) {
+    console.log('📤 Mensagem própria, ignorando');
+    return;
+  }
+  
   const connectedPhone = body.connectedPhone;
   const senderPhone = body.phone || body.from;
-  if (senderPhone === connectedPhone) return;
-  if (body.isStatusReply === true || body.waitingMessage === true) return;
+  
+  // Ignora se for o próprio número do atendimento
+  if (senderPhone === connectedPhone) {
+    console.log('🔄 Mensagem do próprio atendimento, ignorando');
+    return;
+  }
+  
+  // Ignora status e waiting messages
+  if (body.isStatusReply === true || body.waitingMessage === true) {
+    console.log('⏳ Status ou waiting message, ignorando');
+    return;
+  }
 
   try {
-    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
-    if (!messageText) return;
-
-    // IGNORAR MENSAGEM COPIADA DO SITE
-    if (messageText.includes('fiz a avaliação de perfil no site') && 
-        (messageText.includes('meus dados') || messageText.includes('perfil'))) {
-      console.log(`📋 Cliente copiou resultado da avaliação do site - ignorando`);
+    // Extrai o texto da mensagem
+    let messageText = '';
+    if (body.text?.message) messageText = body.text.message;
+    else if (body.message?.text) messageText = body.message.text;
+    else if (typeof body.message === 'string') messageText = body.message;
+    else if (body.text) messageText = body.text;
+    
+    messageText = (messageText || '').toLowerCase().trim();
+    
+    if (!messageText) {
+      console.log('📭 Mensagem sem texto, ignorando');
       return;
     }
     
-    if (messageText.includes('perfil:') && messageText.includes('renda:')) {
-      console.log(`📋 Possível resultado de avaliação copiado - ignorando`);
-      return;
-    }
+    console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
+    // Normaliza o telefone do remetente
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) {
       cleanPhone = cleanPhone.substring(2);
     }
-    if (cleanPhone.length === 12) {
-      cleanPhone = cleanPhone.substring(1);
+    // Remove o 9 extra se tiver (ex: 21 9 74601812 -> 21 974601812)
+    if (cleanPhone.length === 11 && cleanPhone.charAt(2) === '9') {
+      // Já está no formato correto
+    } else if (cleanPhone.length === 10) {
+      // Adiciona o 9
+      cleanPhone = cleanPhone.substring(0, 2) + '9' + cleanPhone.substring(2);
     }
-    console.log(`📞 Telefone recebido: ${senderPhone} → normalizado: ${cleanPhone} | Mensagem: "${messageText.substring(0, 100)}..."`);
-
-    // ==================== BUSCA LEAD MELHORADA ====================
+    
+    console.log(`📞 Telefone normalizado para busca: ${cleanPhone}`);
+    
+    // ==================== BUSCA LEAD NO SUPABASE ====================
     let lead = null;
     
-    // Tenta buscar com vários formatos de telefone
-    const phoneVariations = [
-      cleanPhone,
-      `55${cleanPhone}`,
-      cleanPhone.substring(cleanPhone.length - 11),
-      cleanPhone.substring(cleanPhone.length - 10),
-      cleanPhone.substring(cleanPhone.length - 9)
-    ].filter(p => p && p.length >= 10);
+    // Busca 1: Exato
+    const { data: leadsExato, error: error1 } = await supabase
+      .from('leads_simulador')
+      .select('*')
+      .eq('telefone_whatsapp', cleanPhone);
     
-    console.log(`🔍 Buscando lead com variações: ${phoneVariations.join(', ')}`);
+    if (!error1 && leadsExato && leadsExato.length > 0) {
+      lead = leadsExato[0];
+      console.log(`✅ Lead encontrado (busca exata): ${lead.nome_cliente}, Pontuação: ${lead.pontuacao_total}`);
+    }
     
-    for (const phoneVar of phoneVariations) {
-      const { data: leads, error } = await supabase
+    // Busca 2: Contém o número (caso esteja salvo com DDD diferente)
+    if (!lead) {
+      const { data: leadsContem, error: error2 } = await supabase
         .from('leads_simulador')
         .select('*')
-        .ilike('telefone_whatsapp', `%${phoneVar}%`)
-        .order('data_simulacao', { ascending: false })
-        .limit(1);
+        .ilike('telefone_whatsapp', `%${cleanPhone.slice(-10)}%`);
       
-      if (!error && leads && leads.length > 0) {
-        lead = leads[0];
-        console.log(`✅ Lead encontrado! Variação: ${phoneVar}`);
-        console.log(`   Nome: ${lead.nome_cliente}`);
-        console.log(`   Pontuação: ${lead.pontuacao_total}`);
-        console.log(`   Classificação: ${lead.classificacao_perfil}`);
-        break;
+      if (!error2 && leadsContem && leadsContem.length > 0) {
+        lead = leadsContem[0];
+        console.log(`✅ Lead encontrado (busca contém): ${lead.nome_cliente}`);
       }
     }
     
-    // Se não encontrou, busca na tabela clientes
+    // Busca 3: Tabela de clientes
     if (!lead) {
-      for (const phoneVar of phoneVariations) {
-        const { data: clientes, error: clientesError } = await supabase
-          .from('clientes')
+      const { data: clientes, error: error3 } = await supabase
+        .from('clientes')
+        .select('*')
+        .ilike('telefone', `%${cleanPhone.slice(-10)}%`);
+      
+      if (!error3 && clientes && clientes.length > 0) {
+        console.log(`✅ Cliente encontrado: ${clientes[0].nome_completo}`);
+        
+        // Busca lead pelo email do cliente
+        const { data: leadPorEmail, error: error4 } = await supabase
+          .from('leads_simulador')
           .select('*')
-          .ilike('telefone', `%${phoneVar}%`)
+          .eq('email', clientes[0].email)
+          .order('data_simulacao', { ascending: false })
           .limit(1);
         
-        if (!clientesError && clientes && clientes.length > 0) {
-          console.log(`✅ Cliente encontrado: ${clientes[0].nome_completo}`);
-          
-          // Busca se tem lead associado a este cliente
-          const { data: leadDoCliente, error: leadError } = await supabase
-            .from('leads_simulador')
-            .select('*')
-            .eq('email', clientes[0].email)
-            .order('data_simulacao', { ascending: false })
-            .limit(1);
-          
-          if (!leadError && leadDoCliente && leadDoCliente.length > 0) {
-            lead = leadDoCliente[0];
-            console.log(`✅ Lead encontrado via email do cliente! Pontuação: ${lead.pontuacao_total}`);
-          } else {
-            lead = {
-              nome_cliente: clientes[0].nome_completo,
-              telefone_whatsapp: clientes[0].telefone,
-              email: clientes[0].email,
-              pontuacao_total: null,
-              classificacao_perfil: null,
-              respostas_simulador: {}
-            };
-          }
-          break;
+        if (!error4 && leadPorEmail && leadPorEmail.length > 0) {
+          lead = leadPorEmail[0];
+          console.log(`✅ Lead encontrado via email: ${lead.nome_cliente}`);
         }
       }
     }
@@ -1711,250 +1715,65 @@ app.post('/api/webhook/zapi', async (req, res) => {
         console.log('⚠️ Z-API não configurada');
         return;
       }
+      
       const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, message })
-      });
-      console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
+      
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, message })
+        });
+        console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
+      } catch (err) {
+        console.error('❌ Erro ao enviar resposta:', err);
+      }
     };
 
-    // ==================== RESPOSTA PERSONALIZADA ====================
+    // ==================== RESPOSTA PERSONALIZADA SE TIVER LEAD ====================
     if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 Gerando resposta personalizada para ${lead.nome_cliente} (Pontuação: ${lead.pontuacao_total})`);
+      console.log(`🎯 Gerando resposta PERSONALIZADA para ${lead.nome_cliente}`);
       
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 
                            (lead.pontuacao_total >= 70 ? 'Forte Potencial' : 
                             lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
       
+      // Parse das respostas
       let respostas = lead.respostas_simulador || {};
       if (typeof respostas === 'string') {
         try {
           respostas = JSON.parse(respostas);
         } catch (e) {
-          console.log('⚠️ Erro ao parsear respostas_simulador:', e);
           respostas = {};
         }
       }
       
-      let situacao = respostas.situacao_profissional || respostas.ocupacao || respostas.situacao || '';
-      let renda = respostas.renda_mensal || respostas.renda || '';
-      let historico = respostas.historico_viagens || respostas.historico || '';
-      let motivo = respostas.proposito_viagem || respostas.motivo_viagem || respostas.motivo || 'Turismo';
+      const situacao = respostas.situacao_profissional || respostas.ocupacao || '';
+      const renda = respostas.renda_mensal || respostas.renda || '';
+      const historico = respostas.historico_viagens || '';
+      const motivo = respostas.proposito_viagem || 'Turismo';
       
-      console.log(`📊 Dados - Situação: ${situacao}, Renda: ${renda}, Score: ${lead.pontuacao_total}`);
-      
-      // MESMO QUE OS CAMPOS ESTEJAM VAZIOS, ENVIA RESPOSTA PERSONALIZADA
-      const respostaPersonalizada = gerarRespostaHumanizada(
-        primeiroNome, 
-        classificacao, 
-        situacao || 'não informada', 
-        renda || 'não informada', 
-        historico || 'não informado', 
-        motivo, 
-        lead.pontuacao_total
+      const resposta = gerarRespostaHumanizada(
+        primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
       );
       
-      await sendReply(cleanPhone, respostaPersonalizada);
-      console.log(`✅ Resposta personalizada enviada para ${primeiroNome}`);
+      await sendReply(cleanPhone, resposta);
       return;
     }
     
-    // ==================== SE TEM LEAD MAS SEM PONTUAÇÃO ====================
+    // ==================== SE NÃO TEM LEAD, OFERECE AVALIAÇÃO ====================
     if (lead && (!lead.pontuacao_total || lead.pontuacao_total === 0)) {
-      console.log(`📊 Lead ${lead.nome_cliente} sem pontuação - oferecendo avaliação`);
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\nOlá, ${primeiroNome}! 👋\n\nJá podemos te ajudar com o visto americano!\n\n📊 *Faça nossa avaliação gratuita de perfil:*\nhttps://getvisa.com.br/simulador-visto-americano-4917\n\nEm 2 minutos você descobre suas chances de aprovação!\n\n*Digite MENU para ver todas as opções.* 🚀`;
+      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\nOlá, ${primeiroNome}! 👋\n\nVocê já iniciou sua avaliação mas não completou.\n\n📊 *Complete sua avaliação gratuita de perfil:*\nhttps://getvisa.com.br/simulador-visto-americano-4917\n\nEm 2 minutos você descobre suas chances de aprovação!\n\n*Digite MENU para ver todas as opções.* 🚀`;
       await sendReply(cleanPhone, resposta);
       return;
     }
 
-    // ==================== MENU E COMANDOS ====================
-    if (messageText === 'voltar' || messageText === 'menu' || messageText === 'inicio' || messageText === '🔙') {
-      const resposta = `📋 *MENU PRINCIPAL*
-
-1️⃣ 💰 PREÇO - Valores do processo
-2️⃣ ⏰ PRAZO - Tempos estimados
-3️⃣ 📄 DOCUMENTOS - O que é necessário
-4️⃣ 📋 PROCESSO - Passo a passo
-5️⃣ ⚠️ VISTO NEGADO - Casos de negativa
-6️⃣ 📞 AJUDA - Falar com especialista
-7️⃣ 📊 AVALIAÇÃO - Análise gratuita do seu perfil
-
-*Digite o número da opção desejada (1 a 7):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰') {
-      const resposta = `💰 *INVESTIMENTO*
-
-🇺🇸 *Taxa Consular:* ~R$ 950
-📋 *Assessoria:* R$ 350
-
-*O que a assessoria inclui:*
-✅ Análise completa do perfil
-✅ Preenchimento do DS-160
-✅ Agendamento da entrevista
-✅ Preparação para entrevista
-✅ Acompanhamento total
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '2' || messageText === '2️⃣' || messageText === 'prazo' || messageText === '⏰') {
-      const resposta = `⏰ *PRAZOS ESTIMADOS*
-
-📅 Agendamento: até 8 semanas
-🔍 Análise consular: 7 a 10 dias úteis
-📬 Retorno do passaporte: 5 a 7 dias úteis
-
-🕒 *Total estimado:* 30 a 40 dias
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '3' || messageText === '3️⃣' || messageText === 'documentos' || messageText === '📄') {
-      const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*
-
-📌 *OBRIGATÓRIOS:*
-• Passaporte válido
-• Foto 5x7 recente
-• Comprovante da taxa MRV
-• DS-160 preenchido
-
-📌 *RECOMENDADOS (vínculos):*
-• Comprovante de renda
-• Extratos bancários
-• Comprovante de imóvel
-• Certidão de nascimento filhos
-
----
-*Digite VOLTAR para o menu principal!* 📋`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo') {
-      const resposta = `📋 *PASSO A PASSO DO PROCESSO*
-
-1️⃣ Análise de perfil
-2️⃣ Preenchimento do DS-160
-3️⃣ Pagamento da taxa consular (~R$ 950)
-4️⃣ Agendamento da entrevista
-5️⃣ Preparação para entrevista
-6️⃣ Acompanhamento até o final
-
-⏰ *Prazo médio:* 30 a 40 dias
-
----
-*Digite VOLTAR para o menu principal ou SIM para começar!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '5' || messageText === '5️⃣' || messageText === 'visto negado' || messageText === 'negado' || messageText === '⚠️') {
-      const resposta = `⚠️ *VISTO NEGADO? Não desanime!*
-
-*O que fazer após uma negativa:*
-
-1️⃣ Entender o motivo (artigo 214b)
-2️⃣ Reforçar vínculos com o Brasil
-3️⃣ Corrigir o DS-160
-4️⃣ Preparação intensiva para entrevista
-
-*Nossa assessoria especializada em REVERSÃO:*
-✅ Revisão completa do caso
-✅ Estratégia personalizada
-✅ Acompanhamento total
-
-💰 *Investimento especial:* R$ 380 + Taxa Consular
-
----
-*Digite VOLTAR para o menu principal ou SIM para agendar análise!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === '📞') {
-      const mensagemPadrao = encodeURIComponent(`Olá! Gostaria de falar com um especialista sobre meu visto americano.`);
-      const resposta = `💬 *Atendimento GetVisa*
-
-Não encontrou sua resposta? Nossa equipe está aqui para ajudar você!
-
-📱 *Falar com especialista agora:*
-https://wa.me/5521974601812?text=${mensagemPadrao}
-
-📝 *Ou descreva sua dúvida aqui mesmo* (responderemos em até 24h)
-
-⏰ *Horário de atendimento humano:*
-Segunda a Sexta, 9h às 18h
-
----
-*Digite VOLTAR para o menu principal* 🔙
-
-Estamos juntos nessa! 💙🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === '7' || messageText === '7️⃣' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador' || messageText === '📊') {
-      const resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*
-
-Descubra suas chances de aprovação para o visto americano!
-
-📋 *Preencha nosso simulador:*
-https://getvisa.com.br/simulador-visto-americano-4917
-
-⏱️ Leva menos de 2 minutos!
-📊 Você recebe uma análise personalizada
-🎯 Descobre seus pontos fortes e de atenção
-
----
-*Digite VOLTAR para o menu principal!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === 'quero sim') {
-      if (!lead) {
-        const resposta = `📊 *Antes de iniciarmos, que tal descobrir suas chances de aprovação?*
-
-Faça nossa avaliação gratuita de perfil:
-https://getvisa.com.br/simulador-visto-americano-4917
-
-Em 2 minutos você recebe uma análise personalizada!
-
----
-*Digite AVALIAÇÃO para começar ou VOLTAR para o menu!* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-      
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉
-
-📋 *Acesse o rascunho do formulário DS-160:*
-🌐 https://getvisa.com.br/formulario-ds160
-
-⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.
-
----
-*Digite VOLTAR para o menu principal!* 🇺🇸✨`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
+    // ==================== MENU COMPLETO PARA QUEM NÃO TEM LEAD ====================
+    console.log(`📋 Nenhum lead encontrado para ${cleanPhone}, enviando menu completo`);
     
-    // ==================== MENSAGEM DE BOAS-VINDAS SEM LEAD ====================
-    const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
+    const respostaMenu = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
 
 Olá! 👋 Seja bem-vindo(a)!
 
@@ -1973,10 +1792,11 @@ Olá! 👋 Seja bem-vindo(a)!
 📌 *Para uma análise personalizada, preencha nosso simulador:*
 https://getvisa.com.br/simulador-visto-americano-4917`;
     
-    await sendReply(cleanPhone, resposta);
+    await sendReply(cleanPhone, respostaMenu);
     
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
+    console.error('❌ Stack:', error.stack);
   }
 });
 
