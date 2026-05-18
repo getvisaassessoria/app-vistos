@@ -1614,7 +1614,7 @@ app.get('/api/debug/buscar/:telefone', async (req, res) => {
   }
 });
 
-// ==================== WEBHOOK Z-API CORRIGIDO ====================
+/// ==================== WEBHOOK Z-API (COM DOIS FLUXOS) ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('\n🔔 WEBHOOK RECEBIDO:', new Date().toISOString());
   
@@ -1624,30 +1624,40 @@ app.post('/api/webhook/zapi', async (req, res) => {
   try {
     const body = req.body;
     
-    // Ignora mensagens próprias
+    // Ignora mensagens próprias e de status
     if (body.fromMe === true) {
       console.log('📤 Mensagem própria, ignorando');
       return;
     }
-
-    // Extrai telefone
-    const senderPhone = body.phone || body.from;
-    if (!senderPhone) {
-      console.log('⚠️ Sem telefone');
+    
+    if (body.isStatusReply === true || body.waitingMessage === true) {
+      console.log('⏳ Status/waiting, ignorando');
       return;
     }
 
-    // Extrai texto da mensagem
+    const senderPhone = body.phone || body.from;
+    if (!senderPhone) {
+      console.log('⚠️ Sem telefone remetente');
+      return;
+    }
+
+    if (senderPhone === body.connectedPhone) {
+      console.log('🔄 Próprio número, ignorando');
+      return;
+    }
+
+    // Extrai o texto da mensagem
     let messageText = '';
     if (body.text?.message) messageText = body.text.message;
     else if (body.message?.text) messageText = body.message.text;
     else if (typeof body.message === 'string') messageText = body.message;
     else if (typeof body.text === 'string') messageText = body.text;
     
-    messageText = (messageText || '').trim().toLowerCase();
+    messageText = (messageText || '').trim();
+    const messageLower = messageText.toLowerCase();
     
     if (!messageText) {
-      console.log('📭 Sem texto');
+      console.log('📭 Mensagem sem texto');
       return;
     }
 
@@ -1656,14 +1666,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // Normaliza telefone para busca
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
-    console.log(`🔍 Buscando lead com telefone: ${cleanPhone}`);
+    console.log(`🔍 Buscando lead: ${cleanPhone}`);
 
     // ==========================================================
     // BUSCA O LEAD NO SUPABASE
     // ==========================================================
     let lead = null;
     
-    // Busca exata
     const { data: leads } = await supabase
       .from('leads_simulador')
       .select('*')
@@ -1673,9 +1682,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
     
     if (leads && leads.length > 0) {
       lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}, Pontuação: ${lead.pontuacao_total}`);
+      console.log(`✅ Lead encontrado: ${lead.nome_cliente} | Pontuação: ${lead.pontuacao_total}`);
     } else {
-      // Tenta com os últimos 10 dígitos
       const ultimos10 = cleanPhone.slice(-10);
       const { data: leads2 } = await supabase
         .from('leads_simulador')
@@ -1691,7 +1699,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // Função para enviar WhatsApp
-    const sendReply = async (phone, message) => {
+    const sendReply = async (phone, mensagem) => {
       const instance = process.env.ZAPI_INSTANCE;
       const token = process.env.ZAPI_TOKEN;
       const securityToken = process.env.ZAPI_SECURITY_TOKEN;
@@ -1701,32 +1709,33 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return false;
       }
       
+      const phoneFormatted = '55' + phone;
       const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Client-Token': securityToken || ''
+          ...(securityToken && { 'Client-Token': securityToken })
         },
-        body: JSON.stringify({ phone, message })
+        body: JSON.stringify({ phone: phoneFormatted, message: mensagem })
       });
       
-      console.log(`📱 WhatsApp enviado para ${phone}: ${response.status}`);
+      console.log(`📱 WhatsApp enviado para ${phoneFormatted}: ${response.status}`);
       return response.status === 200;
     };
 
     // ==========================================================
-    // PRIORIDADE 1: LEAD COM SIMULAÇÃO -> RESPOSTA PERSONALIZADA
+    // FLUXO A: LEAD JÁ CADASTRADO (tem registro no BD)
     // ==========================================================
     if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 LEAD COM SIMULAÇÃO: ${lead.nome_cliente} (${lead.pontuacao_total} pts)`);
+      console.log(`🎯 [FLUXO A] Lead cadastrado: ${lead.nome_cliente}`);
       
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const classificacao = lead.classificacao_perfil || 
         (lead.pontuacao_total >= 70 ? 'Forte Potencial' :
          lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
       
-      // Parse das respostas do simulador
       let respostas = lead.respostas_simulador || {};
       if (typeof respostas === 'string') {
         try { respostas = JSON.parse(respostas); } catch(e) { respostas = {}; }
@@ -1737,40 +1746,157 @@ app.post('/api/webhook/zapi', async (req, res) => {
       const historico = respostas.historico_viagens || '';
       const motivo = respostas.proposito_viagem || respostas.motivo_viagem || 'Turismo';
       
-      // 🔥🔥🔥 USA A FUNÇÃO HUMANIZADA 🔥🔥🔥
+      // 🔥 RESPOSTA PERSONALIZADA (análise completa)
       const respostaPersonalizada = gerarRespostaHumanizada(
-        primeiroNome, 
-        classificacao, 
-        situacao, 
-        renda, 
-        historico, 
-        motivo, 
-        lead.pontuacao_total
+        primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
       );
       
       await sendReply(cleanPhone, respostaPersonalizada);
-      console.log(`✅ Resposta PERSONALIZADA enviada para ${lead.nome_cliente}`);
+      console.log(`✅ [FLUXO A] Resposta personalizada enviada`);
       return;
     }
     
     // ==========================================================
-    // PRIORIDADE 2: SEM LEAD -> BOAS-VINDAS + LINK
+    // FLUXO B: LEAD NÃO CADASTRADO -> MENU 1-7
     // ==========================================================
-    console.log(`📋 Novo lead (sem simulação): ${cleanPhone}`);
+    console.log(`🎯 [FLUXO B] Lead NÃO cadastrado: ${cleanPhone}`);
     
-    const welcomeMsg = 
-      `🇺🇸 *Olá! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-      `Ainda não identificamos seu perfil em nosso sistema.\n\n` +
-      `📊 *Faça nossa avaliação gratuita:*\n` +
-      `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-      `✨ *Em apenas 2 minutos você:*\n` +
-      `• Descobre suas chances de aprovação\n` +
-      `• Recebe uma análise personalizada\n` +
-      `• Libera acesso a todas as opções do menu\n\n` +
-      `Após o teste, volte aqui e terei todas as informações para você! 🚀`;
+    // Detecta se a mensagem é uma opção do menu (1-7)
+    const isMenuOption = ['1', '2', '3', '4', '5', '6', '7', 'menu', 'opções', 'opcoes'].includes(messageLower);
+    const isPriceQuestion = messageLower.includes('preço') || messageLower.includes('preco') || messageLower.includes('custo') || messageLower.includes('valor');
+    const isDeadlineQuestion = messageLower.includes('prazo') || messageLower.includes('tempo') || messageLower.includes('demora');
+    const isDocsQuestion = messageLower.includes('documento') || messageLower.includes('papel') || messageLower.includes('necessário');
+    const isProcessQuestion = messageLower.includes('processo') || messageLower.includes('passo') || messageLower.includes('etapa');
+    const isDeniedQuestion = messageLower.includes('negado') || messageLower.includes('negativa') || messageLower.includes('recusado');
+    const isHelpQuestion = messageLower.includes('ajuda') || messageLower.includes('especialista') || messageLower.includes('falar') || messageLower.includes('contato');
+    const isEvaluationQuestion = messageLower.includes('avaliação') || messageLower.includes('simulador') || messageLower.includes('teste');
     
-    await sendReply(cleanPhone, welcomeMsg);
-    console.log(`✅ Boas-vindas enviadas para ${cleanPhone}`);
+    // RESPOSTA 1: PREÇO
+    if (isPriceQuestion || messageLower === '1') {
+      const resposta = 
+        `💰 *INVESTIMENTO*\n\n` +
+        `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
+        `📋 *Assessoria GetVisa:* R$ 350 (2x R$ 175)\n\n` +
+        `*O que a assessoria inclui:*\n` +
+        `✅ Análise completa do perfil\n` +
+        `✅ Preenchimento do DS-160\n` +
+        `✅ Agendamento da entrevista\n` +
+        `✅ Preparação para entrevista (simulado)\n` +
+        `✅ Acompanhamento total\n\n` +
+        `*Digite MENU para voltar ou 7 para avaliação gratuita* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 2: PRAZO
+    if (isDeadlineQuestion || messageLower === '2') {
+      const resposta = 
+        `⏰ *PRAZOS ESTIMADOS*\n\n` +
+        `📅 Agendamento da entrevista: até 8 semanas\n` +
+        `🔍 Análise consular: 7 a 10 dias úteis\n` +
+        `📬 Retorno do passaporte: 5 a 7 dias úteis\n\n` +
+        `🕒 *Total estimado:* 30 a 40 dias\n\n` +
+        `*Digite MENU para voltar ou 7 para avaliação gratuita* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 3: DOCUMENTOS
+    if (isDocsQuestion || messageLower === '3') {
+      const resposta = 
+        `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
+        `📌 *Obrigatórios:*\n` +
+        `• Passaporte válido (mínimo 6 meses)\n` +
+        `• Foto 5x7 recente (fundo branco)\n` +
+        `• Comprovante da taxa consular MRV paga\n` +
+        `• DS-160 preenchido (nós ajudamos!)\n\n` +
+        `📌 *Recomendados (comprovar vínculos):*\n` +
+        `• Comprovante de renda (3 holerites)\n` +
+        `• Extratos bancários (3-6 meses)\n` +
+        `• Comprovante de imóvel ou aluguel\n` +
+        `• Carteira de trabalho\n\n` +
+        `*Digite MENU para voltar ou 7 para avaliação gratuita* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 4: PROCESSO
+    if (isProcessQuestion || messageLower === '4') {
+      const resposta = 
+        `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
+        `1️⃣ Análise de perfil\n` +
+        `2️⃣ Preenchimento do DS-160\n` +
+        `3️⃣ Pagamento da taxa consular (~R$ 950)\n` +
+        `4️⃣ Agendamento da entrevista\n` +
+        `5️⃣ Coleta biométrica (CASV)\n` +
+        `6️⃣ Entrevista no Consulado\n` +
+        `7️⃣ Retirada do passaporte com visto\n\n` +
+        `*Digite MENU para voltar ou 7 para avaliação gratuita* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 5: VISTO NEGADO
+    if (isDeniedQuestion || messageLower === '5') {
+      const resposta = 
+        `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
+        `*O que fazer após uma negativa:*\n\n` +
+        `1️⃣ Entender o motivo (artigo 214b - falta de vínculos)\n` +
+        `2️⃣ Reforçar seus vínculos com o Brasil\n` +
+        `3️⃣ Corrigir o DS-160\n` +
+        `4️⃣ Preparação intensiva para entrevista\n\n` +
+        `*Nossa assessoria especializada em REVERSÃO:*\n` +
+        `💰 *Investimento especial:* Assessoria R$ 380\n\n` +
+        `*Digite 7 para avaliação gratuita* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 6: AJUDA / ESPECIALISTA
+    if (isHelpQuestion || messageLower === '6') {
+      const resposta = 
+        `📞 *FALAR COM ESPECIALISTA*\n\n` +
+        `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+        `*Contato direto:*\n` +
+        `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+        `*Horário de atendimento:*\n` +
+        `Segunda a Sexta, 9h às 18h\n\n` +
+        `*Digite MENU para voltar* 💬`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // RESPOSTA 7: AVALIAÇÃO GRATUITA
+    if (isEvaluationQuestion || messageLower === '7') {
+      const resposta = 
+        `📊 *ANÁLISE GRATUITA DE PERFIL*\n\n` +
+        `Descubra suas chances de aprovação!\n\n` +
+        `📋 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+        `⏱️ Menos de 2 minutos!\n\n` +
+        `Após o simulador, seus resultados chegarão aqui! 🚀\n\n` +
+        `*Digite MENU para voltar*`;
+      await sendReply(cleanPhone, resposta);
+      return;
+    }
+    
+    // MENU PRINCIPAL (qualquer outra mensagem)
+    const menuMessage = 
+      `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\n` +
+      `Olá! 👋 Seja bem-vindo(a)!\n\n` +
+      `📋 *Como podemos ajudar você hoje?*\n\n` +
+      `1️⃣ 💰 PREÇO - Valores do processo\n` +
+      `2️⃣ ⏰ PRAZO - Tempos estimados\n` +
+      `3️⃣ 📄 DOCUMENTOS - O que é necessário\n` +
+      `4️⃣ 📋 PROCESSO - Passo a passo\n` +
+      `5️⃣ ⚠️ VISTO NEGADO - Casos de negativa\n` +
+      `6️⃣ 📞 AJUDA - Falar com especialista\n` +
+      `7️⃣ 📊 AVALIAÇÃO - Análise gratuita do seu perfil\n\n` +
+      `*Digite o número da opção desejada (1 a 7):* 🚀\n\n` +
+      `📌 *Para uma análise personalizada, preencha nosso simulador:*\n` +
+      `https://getvisa.com.br/simulador-visto-americano-4917`;
+    
+    await sendReply(cleanPhone, menuMessage);
+    console.log(`✅ [FLUXO B] Menu enviado`);
 
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
