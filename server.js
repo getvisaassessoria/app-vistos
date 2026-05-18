@@ -252,29 +252,50 @@ function isEmailClienteValido(email, nomeCliente) {
 }
 
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
+// ==================== NORMALIZAÇÃO DE TELEFONE ====================
+function normalizarTelefoneParaBusca(telefone) {
+  let num = telefone.toString().replace(/\D/g, '');
+  if (num.startsWith('55')) num = num.substring(2);
+  if (num.length === 10) num = num.substring(0, 2) + '9' + num.substring(2);
+  console.log(`🔍 Telefone para busca: ${num}`);
+  return num;
+}
+
+function normalizarTelefoneParaEnvio(telefone) {
+  let num = telefone.toString().replace(/\D/g, '');
+  if (num.startsWith('55')) num = num.substring(2);
+  if (num.length === 10) num = num.substring(0, 2) + '9' + num.substring(2);
+  num = '55' + num;
+  console.log(`📤 Telefone para envio: ${num}`);
+  return num;
+}
+
+// ==================== ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
   try {
     const instance = process.env.ZAPI_INSTANCE;
     const token = process.env.ZAPI_TOKEN;
     const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-    
+
     if (!instance || !token) {
       console.log('⚠️ Z-API não configurada');
       return false;
     }
-    
-    const cleanPhone = telefone.toString().replace(/\D/g, '');
+
+    const phoneFormatado = normalizarTelefoneParaEnvio(telefone);
     const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-    
+
     const response = await fetch(url, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ phone: cleanPhone, message: mensagem })
-});
-    
-    console.log(`📱 WhatsApp enviado para ${cleanPhone}: ${response.status}`);
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(securityToken && { 'Client-Token': securityToken })
+      },
+      body: JSON.stringify({ phone: phoneFormatado, message: mensagem })
+    });
+
+    const result = await response.json().catch(() => ({}));
+    console.log(`📱 WhatsApp enviado para ${phoneFormatado}: status ${response.status}`, result);
     return response.status === 200;
   } catch (error) {
     console.error('❌ Erro ao enviar WhatsApp:', error.message);
@@ -1594,206 +1615,290 @@ app.get('/api/debug/buscar/:telefone', async (req, res) => {
 });
 
 // ==================== WEBHOOK Z-API (VERSÃO COMPLETA CORRIGIDA) ====================
+// ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('📨 Webhook Z-API recebido:', JSON.stringify(req.body, null, 2));
-  
-  // Responde imediatamente para o WhatsApp não ficar esperando
-  res.status(200).json({ status: 'ok' });
+  console.log('\n🔔🔔🔔 WEBHOOK Z-API RECEBIDO 🔔🔔🔔');
+  console.log('📅 Horário:', new Date().toISOString());
+  console.log('📦 Body completo:', JSON.stringify(req.body, null, 2));
 
-  const body = req.body;
-  
-  // Ignora mensagens próprias
-  if (body.fromMe === true) {
-    console.log('📤 Mensagem própria, ignorando');
-    return;
-  }
-  
-  const connectedPhone = body.connectedPhone;
-  const senderPhone = body.phone || body.from;
-  
-  // Ignora se for o próprio número do atendimento
-  if (senderPhone === connectedPhone) {
-    console.log('🔄 Mensagem do próprio atendimento, ignorando');
-    return;
-  }
-  
-  // Ignora status e waiting messages
-  if (body.isStatusReply === true || body.waitingMessage === true) {
-    console.log('⏳ Status ou waiting message, ignorando');
-    return;
-  }
+  res.status(200).json({ status: 'ok', received: true });
 
   try {
-    // Extrai o texto da mensagem
-    let messageText = '';
-    if (body.text?.message) messageText = body.text.message;
-    else if (body.message?.text) messageText = body.message.text;
-    else if (typeof body.message === 'string') messageText = body.message;
-    else if (body.text) messageText = body.text;
-    
-    messageText = (messageText || '').toLowerCase().trim();
-    
-    if (!messageText) {
-      console.log('📭 Mensagem sem texto, ignorando');
+    const body = req.body;
+
+    if (body.fromMe === true) {
+      console.log('📤 Mensagem própria, ignorando');
       return;
     }
-    
-    console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
-    // Normaliza o telefone do remetente
-    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) {
-      cleanPhone = cleanPhone.substring(2);
+    if (body.isStatusReply === true || body.waitingMessage === true) {
+      console.log('⏳ Status/waiting, ignorando');
+      return;
     }
-    // Remove o 9 extra se tiver (ex: 21 9 74601812 -> 21 974601812)
-    if (cleanPhone.length === 11 && cleanPhone.charAt(2) === '9') {
-      // Já está no formato correto
-    } else if (cleanPhone.length === 10) {
-      // Adiciona o 9
-      cleanPhone = cleanPhone.substring(0, 2) + '9' + cleanPhone.substring(2);
+
+    const senderPhone = body.phone || body.from;
+
+    if (!senderPhone) {
+      console.log('⚠️ Sem telefone remetente, ignorando');
+      return;
     }
-    
-    console.log(`📞 Telefone normalizado para busca: ${cleanPhone}`);
-    
-    // ==================== BUSCA LEAD NO SUPABASE ====================
+
+    if (senderPhone === body.connectedPhone) {
+      console.log('🔄 Próprio número, ignorando');
+      return;
+    }
+
+    // ========== EXTRAÇÃO DO TEXTO ==========
+    let messageText = '';
+
+    if (body.text?.message) {
+      messageText = body.text.message;
+    } else if (body.message?.text) {
+      messageText = body.message.text;
+    } else if (typeof body.message === 'string') {
+      messageText = body.message;
+    } else if (typeof body.text === 'string') {
+      messageText = body.text;
+    } else if (body.text && typeof body.text === 'object') {
+      messageText = body.text.message || body.text.text || '';
+    }
+
+    messageText = (messageText || '').trim();
+
+    if (!messageText) {
+      console.log('📭 Sem texto (mídia/sticker), ignorando');
+      return;
+    }
+
+    const cmd = messageText.toLowerCase();
+    console.log(`📩 Mensagem de ${senderPhone}: "${messageText}"`);
+
+    // ========== NORMALIZA TELEFONE ==========
+    const cleanPhoneBusca = normalizarTelefoneParaBusca(senderPhone);
+
+    // ========== FUNÇÃO DE ENVIO ==========
+    const sendReply = async (mensagem) => {
+      return await enviarWhatsApp(cleanPhoneBusca, mensagem);
+    };
+
+    // ========== BUSCA LEAD ==========
     let lead = null;
-    
-    // Busca 1: Exato
-    const { data: leadsExato, error: error1 } = await supabase
+
+    // Busca 1: exata
+    const { data: leadsExatos, error: erro1 } = await supabase
       .from('leads_simulador')
       .select('*')
-      .eq('telefone_whatsapp', cleanPhone);
-    
-    if (!error1 && leadsExato && leadsExato.length > 0) {
-      lead = leadsExato[0];
-      console.log(`✅ Lead encontrado (busca exata): ${lead.nome_cliente}, Pontuação: ${lead.pontuacao_total}`);
+      .eq('telefone_whatsapp', cleanPhoneBusca)
+      .order('data_simulacao', { ascending: false })
+      .limit(1);
+
+    if (!erro1 && leadsExatos && leadsExatos.length > 0) {
+      lead = leadsExatos[0];
+      console.log(`✅ Lead exato: ${lead.nome_cliente}`);
     }
-    
-    // Busca 2: Contém o número (caso esteja salvo com DDD diferente)
+
+    // Busca 2: últimos 10 dígitos
     if (!lead) {
-      const { data: leadsContem, error: error2 } = await supabase
+      const { data: leadsFallback, error: erro2 } = await supabase
         .from('leads_simulador')
         .select('*')
-        .ilike('telefone_whatsapp', `%${cleanPhone.slice(-10)}%`);
-      
-      if (!error2 && leadsContem && leadsContem.length > 0) {
-        lead = leadsContem[0];
-        console.log(`✅ Lead encontrado (busca contém): ${lead.nome_cliente}`);
+        .ilike('telefone_whatsapp', `%${cleanPhoneBusca.slice(-10)}%`)
+        .order('data_simulacao', { ascending: false })
+        .limit(1);
+
+      if (!erro2 && leadsFallback && leadsFallback.length > 0) {
+        lead = leadsFallback[0];
+        console.log(`✅ Lead fallback: ${lead.nome_cliente}`);
       }
     }
-    
-    // Busca 3: Tabela de clientes
+
+    // Busca 3: tabela clientes cruzando com leads por email
     if (!lead) {
-      const { data: clientes, error: error3 } = await supabase
+      const { data: clientes, error: erro3 } = await supabase
         .from('clientes')
         .select('*')
-        .ilike('telefone', `%${cleanPhone.slice(-10)}%`);
-      
-      if (!error3 && clientes && clientes.length > 0) {
-        console.log(`✅ Cliente encontrado: ${clientes[0].nome_completo}`);
-        
-        // Busca lead pelo email do cliente
-        const { data: leadPorEmail, error: error4 } = await supabase
+        .ilike('telefone', `%${cleanPhoneBusca.slice(-10)}%`)
+        .limit(1);
+
+      if (!erro3 && clientes && clientes.length > 0 && clientes[0].email) {
+        const { data: leadPorEmail } = await supabase
           .from('leads_simulador')
           .select('*')
           .eq('email', clientes[0].email)
           .order('data_simulacao', { ascending: false })
           .limit(1);
-        
-        if (!error4 && leadPorEmail && leadPorEmail.length > 0) {
+
+        if (leadPorEmail && leadPorEmail.length > 0) {
           lead = leadPorEmail[0];
-          console.log(`✅ Lead encontrado via email: ${lead.nome_cliente}`);
+          console.log(`✅ Lead via email: ${lead.nome_cliente}`);
         }
       }
     }
-    
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    
-    const sendReply = async (phone, message) => {
-      if (!instance || !token) {
-        console.log('⚠️ Z-API não configurada');
-        return;
-      }
-      
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, message })
-        });
-        console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
-      } catch (err) {
-        console.error('❌ Erro ao enviar resposta:', err);
-      }
-    };
 
-    // ==================== RESPOSTA PERSONALIZADA SE TIVER LEAD ====================
+    // ========== COMANDOS DO MENU (prioridade máxima) ==========
+
+    if (cmd === '1' || cmd === 'preço' || cmd === 'preco') {
+      await sendReply(
+        `💰 *INVESTIMENTO*\n\n` +
+        `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
+        `📋 *Assessoria GetVisa:* R$ 350 (2x R$ 175)\n\n` +
+        `*Incluído na assessoria:*\n` +
+        `✅ Análise completa do perfil\n` +
+        `✅ Preenchimento do DS-160\n` +
+        `✅ Agendamento da entrevista\n` +
+        `✅ Preparação para entrevista\n` +
+        `✅ Acompanhamento total\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '2' || cmd === 'prazo') {
+      await sendReply(
+        `⏰ *PRAZOS ESTIMADOS*\n\n` +
+        `📅 Agendamento: até 8 semanas\n` +
+        `🔍 Análise consular: 7 a 10 dias úteis\n` +
+        `📬 Retorno do passaporte: 5 a 7 dias úteis\n\n` +
+        `🕒 *Total estimado:* 30 a 40 dias\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '3' || cmd === 'documentos') {
+      await sendReply(
+        `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
+        `📌 *Obrigatórios:*\n` +
+        `• Passaporte válido\n` +
+        `• Foto 5x7 recente\n` +
+        `• Comprovante da taxa MRV\n` +
+        `• DS-160 preenchido\n\n` +
+        `📌 *Recomendados:*\n` +
+        `• Comprovante de renda\n` +
+        `• Extratos bancários (3 meses)\n` +
+        `• Comprovante de imóvel ou aluguel\n` +
+        `• Vínculo empregatício\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '4' || cmd === 'processo') {
+      await sendReply(
+        `📋 *PASSO A PASSO*\n\n` +
+        `1️⃣ Análise de perfil\n` +
+        `2️⃣ Preenchimento do DS-160\n` +
+        `3️⃣ Pagamento da taxa consular (~R$ 950)\n` +
+        `4️⃣ Agendamento da entrevista\n` +
+        `5️⃣ Coleta biométrica (CASV)\n` +
+        `6️⃣ Entrevista no Consulado\n` +
+        `7️⃣ Retirada do passaporte com visto\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '5' || cmd === 'negado' || cmd === 'visto negado') {
+      await sendReply(
+        `⚠️ *VISTO NEGADO?*\n\n` +
+        `Não desanime! Muitos casos são revertidos.\n\n` +
+        `*O que fazemos:*\n` +
+        `✅ Análise do motivo da negativa\n` +
+        `✅ Correção e reforço do DS-160\n` +
+        `✅ Documentação reforçada\n` +
+        `✅ Preparação intensiva para entrevista\n\n` +
+        `💰 *Assessoria especializada:* R$ 380\n\n` +
+        `Digite *SIM* para falar com um especialista.\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '6' || cmd === 'ajuda' || cmd === 'especialista' || cmd === 'atendimento') {
+      await sendReply(
+        `📞 *FALAR COM ESPECIALISTA*\n\n` +
+        `👉 https://wa.me/5521985234917\n\n` +
+        `⏰ Segunda a Sexta, 9h às 18h\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === '7' || cmd === 'avaliacao' || cmd === 'avaliação' || cmd === 'simulador') {
+      await sendReply(
+        `📊 *ANÁLISE GRATUITA DE PERFIL*\n\n` +
+        `Descubra suas chances de aprovação!\n\n` +
+        `📋 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+        `⏱️ Menos de 2 minutos!\n\n` +
+        `*Digite MENU para voltar.*`
+      );
+      return;
+    }
+
+    if (cmd === 'sim' || cmd === 'quero' || cmd === 'contratar') {
+      if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
+        await sendReply(
+          `🎉 *Ótimo, ${(lead.nome_cliente || 'Cliente').split(' ')[0]}!*\n\n` +
+          `Acesse o formulário DS-160:\n` +
+          `📋 https://getvisa.com.br/formulario-ds160\n\n` +
+          `Preencha com atenção. Nossa equipe entrará em contato em breve!\n\n` +
+          `Dúvidas? Digite *AJUDA*`
+        );
+      } else {
+        await sendReply(
+          `🎉 *Perfeito!*\n\n` +
+          `Primeiro faça nossa análise gratuita:\n` +
+          `📊 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+          `Leva menos de 2 minutos e você já recebe o resultado aqui! 🚀`
+        );
+      }
+      return;
+    }
+
+    // ========== RESPOSTA PERSONALIZADA (lead com simulação feita) ==========
     if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 Gerando resposta PERSONALIZADA para ${lead.nome_cliente}`);
-      
+      console.log(`🎯 Resposta personalizada para ${lead.nome_cliente}`);
+
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const classificacao = lead.classificacao_perfil || 
-                           (lead.pontuacao_total >= 70 ? 'Forte Potencial' : 
-                            lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
-      
-      // Parse das respostas
+      const classificacao = lead.classificacao_perfil ||
+        (lead.pontuacao_total >= 70 ? 'Forte Potencial' :
+         lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
+
       let respostas = lead.respostas_simulador || {};
       if (typeof respostas === 'string') {
-        try {
-          respostas = JSON.parse(respostas);
-        } catch (e) {
-          respostas = {};
-        }
+        try { respostas = JSON.parse(respostas); } catch (e) { respostas = {}; }
       }
-      
+
       const situacao = respostas.situacao_profissional || respostas.ocupacao || '';
       const renda = respostas.renda_mensal || respostas.renda || '';
       const historico = respostas.historico_viagens || '';
       const motivo = respostas.proposito_viagem || 'Turismo';
-      
-      const resposta = gerarRespostaHumanizada(
+
+      const respostaPersonalizada = gerarRespostaHumanizada(
         primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
       );
-      
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== SE NÃO TEM LEAD, OFERECE AVALIAÇÃO ====================
-    if (lead && (!lead.pontuacao_total || lead.pontuacao_total === 0)) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\nOlá, ${primeiroNome}! 👋\n\nVocê já iniciou sua avaliação mas não completou.\n\n📊 *Complete sua avaliação gratuita de perfil:*\nhttps://getvisa.com.br/simulador-visto-americano-4917\n\nEm 2 minutos você descobre suas chances de aprovação!\n\n*Digite MENU para ver todas as opções.* 🚀`;
-      await sendReply(cleanPhone, resposta);
+
+      await sendReply(respostaPersonalizada);
       return;
     }
 
-    // ==================== MENU COMPLETO PARA QUEM NÃO TEM LEAD ====================
-    console.log(`📋 Nenhum lead encontrado para ${cleanPhone}, enviando menu completo`);
-    
-    const respostaMenu = `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸
+    // ========== BOAS-VINDAS PADRÃO (sem lead) ==========
+    console.log(`📋 Sem lead para ${cleanPhoneBusca}, enviando menu`);
 
-Olá! 👋 Seja bem-vindo(a)!
+    await sendReply(
+      `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\n` +
+      `Olá! 👋 Seja bem-vindo(a)!\n\n` +
+      `📋 *Como podemos ajudar você hoje?*\n\n` +
+      `1️⃣ 💰 PREÇO\n` +
+      `2️⃣ ⏰ PRAZO\n` +
+      `3️⃣ 📄 DOCUMENTOS\n` +
+      `4️⃣ 📋 PROCESSO\n` +
+      `5️⃣ ⚠️ VISTO NEGADO\n` +
+      `6️⃣ 📞 AJUDA\n` +
+      `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
+      `*Digite o número da opção (1 a 7):* 🚀`
+    );
 
-📋 *Como podemos ajudar você hoje?*
-
-1️⃣ 💰 *PREÇO* - Valores do processo
-2️⃣ ⏰ *PRAZO* - Tempos estimados
-3️⃣ 📄 *DOCUMENTOS* - O que é necessário
-4️⃣ 📋 *PROCESSO* - Passo a passo
-5️⃣ ⚠️ *VISTO NEGADO* - Casos de negativa
-6️⃣ 📞 *AJUDA* - Falar com especialista
-7️⃣ 📊 *AVALIAÇÃO* - Análise gratuita do seu perfil
-
-*Digite o número da opção desejada (1 a 7):* 🚀
-
-📌 *Para uma análise personalizada, preencha nosso simulador:*
-https://getvisa.com.br/simulador-visto-americano-4917`;
-    
-    await sendReply(cleanPhone, respostaMenu);
-    
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
     console.error('❌ Stack:', error.stack);
