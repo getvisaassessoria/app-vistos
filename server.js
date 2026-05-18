@@ -1290,368 +1290,171 @@ app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
 
-// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API CORRIGIDO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('📥 Webhook recebido:', JSON.stringify(req.body, null, 2));
+  // Responde OK imediatamente
   res.status(200).json({ status: 'ok' });
-
-  const body = req.body;
   
-  if (body.fromMe === true) return;
-  const connectedPhone = body.connectedPhone;
-  const senderPhone = body.phone || body.from;
-  if (senderPhone === connectedPhone) return;
-  if (body.isStatusReply === true || body.waitingMessage === true) return;
-
-  try {
-    // CORREÇÃO AQUI: Extrair a mensagem corretamente
-    let messageText = '';
-    
-    // Tenta diferentes formatos de mensagem da Z-API
-    if (body.text?.message) {
-      messageText = body.text.message;
-    } else if (body.text) {
-      messageText = typeof body.text === 'string' ? body.text : body.text.message || '';
-    } else if (body.message?.text) {
-      messageText = body.message.text;
-    } else if (body.message) {
-      messageText = typeof body.message === 'string' ? body.message : body.message.text || '';
-    } else if (body.content) {
-      messageText = body.content;
-    }
-    
-    messageText = messageText.toString().toLowerCase().trim();
-    
-    if (!messageText) {
-      console.log('⚠️ Mensagem vazia, ignorando');
-      return;
-    }
-
-    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-    console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
-
-    // Buscar lead no banco
-    let lead = null;
-    const { data: leads } = await supabase
-      .from('leads_simulador')
-      .select('*')
-      .eq('telefone_whatsapp', cleanPhone)
-      .order('data_simulacao', { ascending: false });
-    
-    if (leads && leads.length > 0) {
-      lead = leads[0];
-      console.log(`✅ Lead encontrado: ${lead.nome_cliente}`);
-    } else {
-      console.log(`❌ Lead NÃO encontrado para ${cleanPhone}`);
-    }
-    
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-    
-    const sendReply = async (phone, message) => {
+  console.log('🔔 Webhook recebido:', new Date().toISOString());
+  
+  // Processa em background
+  (async () => {
+    try {
+      const body = req.body;
+      
+      // IGNORAR mensagens enviadas pelo próprio bot
+      if (body.fromMe === true) {
+        console.log('⚠️ Ignorando mensagem enviada pelo próprio bot');
+        return;
+      }
+      
+      // Extrair telefone
+      let telefone = body.phone || body.from;
+      if (!telefone) {
+        console.log('❌ Telefone não encontrado');
+        return;
+      }
+      
+      // Extrair mensagem
+      let mensagem = '';
+      if (body.text?.message) {
+        mensagem = body.text.message;
+      } else if (body.message) {
+        mensagem = typeof body.message === 'string' ? body.message : body.message.text || '';
+      } else if (body.text && typeof body.text === 'string') {
+        mensagem = body.text;
+      }
+      
+      mensagem = mensagem?.toString().trim() || '';
+      
+      if (!mensagem) {
+        console.log('⚠️ Mensagem vazia');
+        return;
+      }
+      
+      console.log(`📞 ${telefone} enviou: "${mensagem}"`);
+      
+      // Limpar telefone
+      let cleanPhone = telefone.toString().replace(/\D/g, '');
+      if (cleanPhone.startsWith('55')) {
+        cleanPhone = cleanPhone.substring(2);
+      }
+      if (cleanPhone.length === 12) {
+        cleanPhone = cleanPhone.substring(1);
+      }
+      
+      // Config Z-API
+      const instance = process.env.ZAPI_INSTANCE;
+      const token = process.env.ZAPI_TOKEN;
+      const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+      
       if (!instance || !token) {
-        console.log('⚠️ Z-API não configurada');
+        console.log('❌ Z-API não configurada');
         return;
       }
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Client-Token': securityToken || '' 
-        },
-        body: JSON.stringify({ phone, message })
-      });
-      console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
-      const result = await response.json();
-      console.log('✅ Resposta Z-API:', result);
-    };
-    
-    // ==================== 1. RESPOSTA "SIM" ====================
-    if (lead && (messageText === 'sim' || messageText === 'sim!' || messageText === 'quero' || messageText === '7' || messageText === '7️⃣')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🎉 *Perfeito, ${primeiroNome}!* 🎉\n\n` +
-                       `📋 *Acesse o rascunho do formulário DS-160:*\n` +
-                       `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
-                       `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
-                       `Aguardamos seu formulario! 🇺🇸✨`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 2. RESPOSTA "NÃO" ====================
-    if (lead && (messageText === 'não' || messageText === 'nao' || messageText === 'n')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `😊 *Tudo bem, ${primeiroNome}! Posso te ajudar com mais informações.*\n\n` +
-                       `🔍 *O que você gostaria de saber?*\n\n` +
-                       `1️⃣💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣📞 *AJUDA* - Falar com especialista\n` +
-                       `8️⃣📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `Digite o número da opção (1 a 6 ou 8) ou *SIM* para começar! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 3. SAUDAÇÃO - ENVIA MENU COMPLETO ====================
-    if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
-                 messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite' ||
-                 messageText === 'menu' || messageText === 'ajuda' || messageText === '?')) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-                       `📋 *Como podemos ajudar você hoje?*\n\n` +
-                       `🔍 *Opções disponíveis:*\n` +
-                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
-                       `7️⃣  ✅ *SIM* - Iniciar meu processo\n` +
-                       `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `*Digite o número da opção desejada (1 a 8):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log(`📝 Menu principal enviado para ${primeiroNome}`);
-      return;
-    }
-    
-    // ==================== 4. CONSULTAR AGENDAMENTOS ====================
-    if (lead && (messageText === '8' || messageText === '8️⃣' || 
-                 messageText === 'meus agendamentos' || messageText === 'meus compromissos' || 
-                 messageText === 'minha entrevista' || messageText === 'quando' || 
-                 messageText === 'datas' || messageText === '📅' || messageText === 'agendamentos')) {
       
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const nomeCompleto = lead.nome_cliente || '';
+      const sendMessage = async (texto) => {
+        const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-Token': securityToken || ''
+          },
+          body: JSON.stringify({ phone: cleanPhone, message: texto })
+        });
+        console.log(`📱 Resposta enviada: ${response.status}`);
+        return response.ok;
+      };
       
-      console.log(`📅 Cliente ${primeiroNome} solicitou consulta de agendamentos`);
-      
-      const { data: agendamentos, error } = await supabase
-        .from('compromissos')
+      // Buscar lead no banco
+      const { data: leads } = await supabase
+        .from('leads_simulador')
         .select('*')
-        .ilike('cliente', `%${nomeCompleto}%`)
-        .order('data', { ascending: true });
+        .eq('telefone_whatsapp', cleanPhone)
+        .order('data_simulacao', { ascending: false });
       
-      if (error) {
-        console.error('Erro ao buscar agendamentos:', error);
-        const resposta = `❌ *Desculpe, ${primeiroNome}!*\n\nTivemos um problema ao buscar seus agendamentos. Por favor, fale com um especialista: https://wa.me/5521974601812`;
-        await sendReply(cleanPhone, resposta);
+      const lead = leads?.[0];
+      const nome = lead?.nome_cliente?.split(' ')[0] || 'cliente';
+      const lowerMsg = mensagem.toLowerCase();
+      
+      // ========== FLUXO PRINCIPAL ==========
+      
+      // Se NÃO tem lead, envia link do simulador
+      if (!lead) {
+        const resposta = `🇺🇸 *Olá! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
+                         `📋 *Faça nossa avaliação gratuita:*\n` +
+                         `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
+                         `✨ *Em apenas 2 minutos você descobre suas chances de aprovação!*`;
+        await sendMessage(resposta);
         return;
       }
       
-      if (agendamentos && agendamentos.length > 0) {
-        const hoje = new Date().toISOString().split('T')[0];
-        const futuros = agendamentos.filter(a => a.data >= hoje && a.concluido === 0);
-        const passados = agendamentos.filter(a => a.data < hoje || a.concluido === 1);
-        
-        let resposta = `📅 *Olá, ${primeiroNome}!* 📅\n\n`;
-        
-        if (futuros.length > 0) {
-          resposta += `*🔜 PRÓXIMOS COMPROMISSOS:*\n\n`;
-          for (const ag of futuros) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const emoji = ag.atividade === 'ENTREVISTA' ? '🗣️' : 
-                          ag.atividade === 'CASV' ? '👆' : 
-                          ag.atividade.includes('TREINAMENTO') ? '💻' : 
-                          ag.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-            
-            resposta += `${emoji} *${ag.atividade}*\n`;
-            resposta += `   📆 ${dataFormatada}\n`;
-            resposta += `   ⏰ ${ag.hora}\n`;
-            if (ag.local) resposta += `   📍 ${ag.local}\n`;
-            
-            const diasRestantes = Math.ceil((new Date(ag.data) - new Date()) / (1000 * 60 * 60 * 24));
-            if (diasRestantes === 0) {
-              resposta += `   ⚠️ *É HOJE!* ⚠️\n`;
-            } else if (diasRestantes === 1) {
-              resposta += `   ⚠️ *É AMANHÃ!* ⚠️\n`;
-            } else if (diasRestantes > 0) {
-              resposta += `   📊 Em ${diasRestantes} dias\n`;
-            }
-            resposta += `\n`;
-          }
-        } else {
-          resposta += `✅ *Você não tem compromissos futuros no momento.*\n\n`;
-        }
-        
-        if (passados.length > 0) {
-          resposta += `*✅ ÚLTIMOS COMPROMISSOS REALIZADOS:*\n\n`;
-          const ultimos = passados.slice(-3);
-          for (const ag of ultimos) {
-            const dataFormatada = formatarDataBR(ag.data);
-            const status = ag.concluido === 1 ? '✅' : '📅';
-            resposta += `${status} ${ag.atividade} - ${dataFormatada}\n`;
-          }
-          if (passados.length > 3) {
-            resposta += `\n_+ ${passados.length - 3} outros compromissos_\n`;
-          }
-        }
-        
-        resposta += `\n🔔 *Você receberá lembretes 3 dias e 1 dia antes de cada compromisso!*\n\n`;
-        resposta += `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
-        
-        await sendReply(cleanPhone, resposta);
-      } else {
-        const resposta = `📅 *Olá, ${primeiroNome}!*\n\n` +
-                         `Você não possui compromissos agendados no momento.\n\n` +
-                         `Gostaria de agendar uma consultoria gratuita?\n` +
-                         `👉 https://calendly.com/getvisa/consultoria\n\n` +
-                         `Digite *MENU* para voltar ou *SIM* para iniciar seu processo! 🚀`;
-        await sendReply(cleanPhone, resposta);
+      // ========== LEAD EXISTE ==========
+      
+      // Opção SIM
+      if (lowerMsg === 'sim' || lowerMsg === 'sim!' || lowerMsg === 'quero' || lowerMsg === '7') {
+        const resposta = `🎉 *Perfeito, ${nome}!* 🎉\n\n` +
+                         `📋 *Acesse o rascunho do formulário DS-160:*\n` +
+                         `🌐 https://getvisa.com.br/formulario-ds160\n\n` +
+                         `⚠️ Preencha com atenção. Após o envio, nossa equipe fará a análise.\n\n` +
+                         `Aguardamos seu formulario! 🇺🇸✨`;
+        await sendMessage(resposta);
+        return;
       }
-      return;
+      
+      // Opção NÃO
+      if (lowerMsg === 'não' || lowerMsg === 'nao' || lowerMsg === 'n') {
+        const resposta = `😊 *Tudo bem, ${nome}!*\n\n` +
+                         `📋 *Opções disponíveis:*\n\n` +
+                         `1️⃣ 💰 PREÇO\n` +
+                         `2️⃣ ⏰ PRAZO\n` +
+                         `3️⃣ 📄 DOCUMENTOS\n` +
+                         `4️⃣ 📋 PROCESSO\n` +
+                         `5️⃣ ⚠️ VISTO NEGADO\n` +
+                         `6️⃣ 📞 AJUDA\n` +
+                         `8️⃣ 📅 AGENDAMENTOS\n\n` +
+                         `*Digite o número da opção desejada* 🚀`;
+        await sendMessage(resposta);
+        return;
+      }
+      
+      // Opções numéricas
+      const opcoes = {
+        '1': `💰 *INVESTIMENTO*\n\n🇺🇸 Taxa Consular: ~R$ 950\n📋 Assessoria: R$ 350\n\n✅ Inclui: DS-160, agendamento, preparação para entrevista\n\nDigite *SIM* para começar!`,
+        '2': `⏰ *PRAZOS ESTIMADOS*\n\n📅 Agendamento: 30-40 dias\n🔍 Análise consular: 7-10 dias úteis\n📬 Retorno: 5-7 dias úteis\n\nTotal: ~30-40 dias\n\nDigite *SIM* para acelerar!`,
+        '3': `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 OBRIGATÓRIOS:\n• Passaporte válido\n• Foto 5x7 fundo branco\n• Comprovante da taxa MRV\n• DS-160\n\n📌 RECOMENDADOS:\n• Comprovante de renda\n• Extratos bancários\n• Comprovante de imóvel/veículo\n\nDigite *SIM* para começar!`,
+        '4': `📋 *PASSO A PASSO*\n\n1️⃣ Análise de perfil\n2️⃣ Preenchimento do DS-160\n3️⃣ Pagamento da taxa\n4️⃣ Agendamento\n5️⃣ Preparação para entrevista\n6️⃣ Acompanhamento\n\n⏰ Prazo total: 30-40 dias\n\nDigite *SIM* para iniciar!`,
+        '5': `⚠️ *VISTO NEGADO?*\n\nOferecemos assessoria especializada para REVERSÃO de casos negados:\n\n✅ Revisão completa do caso\n✅ Correção do DS-160\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 Investimento especial: Taxa + R$ 380\n\nDigite *SIM* para análise do seu caso!`,
+        '6': `📞 *FALE COM UM ESPECIALISTA*\n\nMeu nome é Moisés e estou aqui para ajudar!\n\n🐱‍👤 WhatsApp: https://wa.me/5521974601812\n\n📅 Agende consultoria gratuita:\nhttps://calendly.com/getvisa/consultoria\n\nHorário: Seg-Sex, 9h às 18h`,
+        '8': `📅 *AGENDAMENTOS*\n\nVocê será notificado automaticamente dos seus compromissos.\n\nPara consultar agendamentos, fale com especialista:\nhttps://wa.me/5521974601812`
+      };
+      
+      if (opcoes[lowerMsg]) {
+        await sendMessage(opcoes[lowerMsg]);
+        return;
+      }
+      
+      // ========== QUALQUER OUTRA MENSAGEM (oi, ola, bom dia, teste, dor de barriga, etc.) ==========
+      const resposta = `🇺🇸 *Olá, ${nome}!* 🇺🇸\n\n` +
+                       `📋 *Como posso ajudar você hoje?*\n\n` +
+                       `1️⃣ 💰 *PREÇO* - Valores do processo\n` +
+                       `2️⃣ ⏰ *PRAZO* - Tempos estimados\n` +
+                       `3️⃣ 📄 *DOCUMENTOS* - O que é necessário\n` +
+                       `4️⃣ 📋 *PROCESSO* - Passo a passo\n` +
+                       `5️⃣ ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
+                       `6️⃣ 📞 *AJUDA* - Falar com especialista\n` +
+                       `7️⃣ ✅ *SIM* - Iniciar meu processo\n` +
+                       `8️⃣ 📅 *AGENDAMENTOS* - Consultar compromissos\n\n` +
+                       `*Digite o número da opção desejada (1 a 8)* 🚀`;
+      
+      await sendMessage(resposta);
+      console.log(`📝 Menu enviado para "${mensagem}"`);
+      
+    } catch (error) {
+      console.error('❌ Erro no webhook:', error);
     }
-    
-    // ==================== 5. RESPOSTAS POR NÚMERO (1 a 6) ====================
-
-    if (lead && (messageText === '1' || messageText === '1️⃣' || messageText === 'preço' || messageText === 'preco' || messageText === '💰')) {
-      const resposta = `💰 *INVESTIMENTO*\n\n` +
-                       `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-                       `📋 *Assessoria:* R$ 350,00\n\n` +
-                       `*O que a assessoria inclui:*\n` +
-                       `✅ Análise completa do perfil\n` +
-                       `✅ Preenchimento do DS-160\n` +
-                       `✅ Agendamento da entrevista\n` +
-                       `✅ Preparação para entrevista (simulado)\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `📌 Plano especial para família \n\n` +
-                       `Digite *7* ou *SIM* para começar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '2' || messageText === '2️⃣' || messageText === 'prazo' || messageText === '⏰')) {
-      const resposta = `⏰ *PRAZOS ESTIMADOS*\n\n` +
-                       `📅 *Agendamento da entrevista:*\n` +
-                       `   • Por conta própria: até 8 semanas\n` +
-                       `   • Com nossa assessoria: trabalhamos com antecipação de prazos ⚡\n\n` +
-                       `🔍 *Análise consular:* 7 a 10 dias úteis\n\n` +
-                       `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
-                       `🕒 *TOTAL estimado:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para acelerar seu processo! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '3' || messageText === '3️⃣' || messageText === 'documentos' || messageText === '📄')) {
-      const resposta = `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
-                       `📌 *OBRIGATÓRIOS:*\n` +
-                       `• Passaporte válido (mínimo 6 meses de validade)\n` +
-                       `• Foto 5x7 recente (fundo branco)\n` +
-                       `• Comprovante da taxa consular MRV paga\n` +
-                       `• DS-160 preenchido (nós ajudamos!)\n\n` +
-                       `📌 *RECOMENDADOS (comprovar vínculos):*\n` +
-                       `• 💰 Comprovante de renda (3 últimos holerites)\n` +
-                       `• 🏦 Extratos bancários (3-6 meses)\n` +
-                       `• 🏠 Comprovante de imóvel ou contrato de aluguel\n` +
-                       `• 🚗 Documento do veículo\n` +
-                       `• 📒 Carteira de trabalho\n` +
-                       `• 👨‍👩‍👧 Certidão de nascimento dos filhos\n\n` +
-                       `Digite *7* ou *SIM* e te ajudo com a documentação! 📋`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '4' || messageText === '4️⃣' || messageText === 'processo' || messageText === 'passo a passo' || messageText === '📋')) {
-      const resposta = `📋 *PASSO A PASSO DO PROCESSO*\n\n` +
-                       `1️⃣ *Análise de perfil* (você já fez ✅)\n` +
-                       `   → Avaliamos suas chances de aprovação\n\n` +
-                       `2️⃣ *Preenchimento do DS-160* (nós te enviamos o link)\n` +
-                       `   → Revisamos antes do envio\n\n` +
-                       `3️⃣ *Pagamento da taxa consular*\n` +
-                       `   → ~R$ 950 (taxa oficial do governo dos EUA)\n\n` +
-                       `4️⃣ *Agendamento da entrevista*\n` +
-                       `   → Conseguimos datas mais rápidas ⚡\n\n` +
-                       `5️⃣ *Preparação para entrevista*\n` +
-                       `   → Simulado completo + dicas exclusivas\n\n` +
-                       `6️⃣ *Acompanhamento*\n` +
-                       `   → Até o final do processo!\n\n` +
-                       `⏰ *Prazo médio total:* 30 a 40 dias\n\n` +
-                       `Digite *7* ou *SIM* para iniciar agora! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '5' || messageText === '5️⃣' || messageText === 'visto negado' || messageText === 'negado' || messageText === 'rejeitado' || messageText === '⚠️')) {
-      const resposta = `⚠️ *VISTO NEGADO? Não desanime!*\n\n` +
-                       `*O que fazer após uma negativa:*\n\n` +
-                       `1️⃣ Entender o motivo da negativa (artigo 214b - falta de vínculos)\n\n` +
-                       `2️⃣ Reforçar seus vínculos com o Brasil\n` +
-                       `   • Emprego estável, família, bens\n\n` +
-                       `3️⃣ Corrigir o DS-160 com atenção redobrada\n` +
-                       `4️⃣ Nova documentação de suporte\n` +
-                       `5️⃣ Preparação intensiva para entrevista\n\n` +
-                       `*🔄 Nossa assessoria especializada em REVERSÃO:*\n` +
-                       `✅ Revisão completa do caso anterior\n` +
-                       `✅ Estratégia personalizada para sua situação\n` +
-                       `✅ Acompanhamento até o final do processo\n\n` +
-                       `💰 *Investimento especial:* Taxa Consular + Assessoria R$ 380\n\n` +
-                       `Digite *7* ou *SIM* para agendar uma análise do seu caso! 🚀`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-
-    if (lead && (messageText === '6' || messageText === '6️⃣' || messageText === 'ajuda' || messageText === 'especialista' || messageText === 'contato' || messageText === 'falar' || messageText === '📞')) {
-      const resposta = `📞 *FALAR COM UM ESPECIALISTA*\n\n` +
-                       `Meu nome é *Moisés* e estou aqui para te ajudar pessoalmente!\n\n` +
-                       `*Contato direto:*\n` +
-                       `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-                       `*📅 Agende uma consultoria gratuita:*\n` +
-                       `https://calendly.com/getvisa/consultoria\n\n` +
-                       `*Horário de atendimento:*\n` +
-                       `Segunda a Sexta, 9h às 18h\n\n` +
-                       `Te aguardo para tirar todas as suas dúvidas! 💬`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-    // ==================== 6. LEAD EXISTE MAS MENSAGEM NÃO RECONHECIDA ====================
-    // QUALQUER outra mensagem (incluindo "OLA", "dor de barriga", etc.) vai cair aqui e receber o MENU
-    if (lead) {
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const resposta = `🇺🇸 *Olá, ${primeiroNome}!* 🇺🇸\n\n` +
-                       `📋 *Por favor, escolha uma das opções abaixo para eu te ajudar melhor:*\n\n` +
-                       `1️⃣  💰 *PREÇO* - Valores do processo\n` +
-                       `2️⃣  ⏰ *PRAZO* - Tempos estimados\n` +
-                       `3️⃣  📄 *DOCUMENTOS* - O que é necessário\n` +
-                       `4️⃣  📋 *PROCESSO* - Passo a passo\n` +
-                       `5️⃣  ⚠️ *VISTO NEGADO* - Casos de negativa\n` +
-                       `6️⃣  📞 *AJUDA* - Falar com especialista\n` +
-                       `7️⃣  ✅ *SIM* - Iniciar meu processo\n` +
-                       `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
-                       `*Digite o número da opção desejada (1 a 8):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log(`📝 Menu enviado para ${primeiroNome} (mensagem não reconhecida: "${messageText}")`);
-      return;
-    }
-    
-    // ==================== 7. LEAD NÃO EXISTE ====================
-    if (!lead) {
-      const resposta = `🇺🇸 *Olá! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
-                       `Ainda não identificamos seu perfil em nosso sistema.\n\n` +
-                       `📋 *Para te ajudar da melhor forma, faça nossa avaliação gratuita:*\n` +
-                       `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-                       `✨ *Em apenas 2 minutos você:*\n` +
-                       `• Descobre suas chances de aprovação\n` +
-                       `• Recebe uma análise personalizada\n` +
-                       `• Libera acesso a todas as opções do menu\n\n` +
-                       `Após o teste, volte aqui e terei todas as informações para você!\n\n` +
-                       `Enquanto isso, posso te ajudar com informações gerais?\n` +
-                       `Digite *PREÇO*, *PRAZO* ou *DOCUMENTOS* 💬`;
-      await sendReply(cleanPhone, resposta);
-      return;
-    }
-    
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error);
-  }
+  })();
 });
 
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
