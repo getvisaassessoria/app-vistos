@@ -1292,6 +1292,7 @@ app.get('/ping', (req, res) => {
 
 // ==================== WEBHOOK Z-API ====================
 app.post('/api/webhook/zapi', async (req, res) => {
+  console.log('📥 Webhook recebido:', JSON.stringify(req.body, null, 2));
   res.status(200).json({ status: 'ok' });
 
   const body = req.body;
@@ -1303,8 +1304,28 @@ app.post('/api/webhook/zapi', async (req, res) => {
   if (body.isStatusReply === true || body.waitingMessage === true) return;
 
   try {
-    const messageText = (body.text?.message || body.message?.text || body.message || '').toLowerCase().trim();
-    if (!messageText) return;
+    // CORREÇÃO AQUI: Extrair a mensagem corretamente
+    let messageText = '';
+    
+    // Tenta diferentes formatos de mensagem da Z-API
+    if (body.text?.message) {
+      messageText = body.text.message;
+    } else if (body.text) {
+      messageText = typeof body.text === 'string' ? body.text : body.text.message || '';
+    } else if (body.message?.text) {
+      messageText = body.message.text;
+    } else if (body.message) {
+      messageText = typeof body.message === 'string' ? body.message : body.message.text || '';
+    } else if (body.content) {
+      messageText = body.content;
+    }
+    
+    messageText = messageText.toString().toLowerCase().trim();
+    
+    if (!messageText) {
+      console.log('⚠️ Mensagem vazia, ignorando');
+      return;
+    }
 
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) {
@@ -1312,6 +1333,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     console.log(`📞 Telefone: ${cleanPhone} | Mensagem: "${messageText}"`);
 
+    // Buscar lead no banco
     let lead = null;
     const { data: leads } = await supabase
       .from('leads_simulador')
@@ -1331,14 +1353,22 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const securityToken = process.env.ZAPI_SECURITY_TOKEN;
     
     const sendReply = async (phone, message) => {
-      if (!instance || !token) return;
+      if (!instance || !token) {
+        console.log('⚠️ Z-API não configurada');
+        return;
+      }
       const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Client-Token': securityToken || '' 
+        },
         body: JSON.stringify({ phone, message })
       });
       console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
+      const result = await response.json();
+      console.log('✅ Resposta Z-API:', result);
     };
     
     // ==================== 1. RESPOSTA "SIM" ====================
@@ -1373,7 +1403,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // ==================== 3. SAUDAÇÃO - ENVIA MENU COMPLETO ====================
     if (lead && (messageText === 'oi' || messageText === 'olá' || messageText === 'ola' || 
                  messageText === 'bom dia' || messageText === 'boa tarde' || messageText === 'boa noite' ||
-                 messageText === 'menu' || messageText === 'ajuda')) {
+                 messageText === 'menu' || messageText === 'ajuda' || messageText === '?')) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🇺🇸 *Olá, ${primeiroNome}! Seja bem-vindo(a) à GetVisa!* 🇺🇸\n\n` +
                        `📋 *Como podemos ajudar você hoje?*\n\n` +
@@ -1583,7 +1613,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ==================== 6. LEAD EXISTE MAS MENSAGEM NÃO RECONHECIDA ====================
-    // MESMO PARA MENSAGENS GENÉRICAS COMO "dor de barriga", ENVIA O MENU
+    // QUALQUER outra mensagem (incluindo "OLA", "dor de barriga", etc.) vai cair aqui e receber o MENU
     if (lead) {
       const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
       const resposta = `🇺🇸 *Olá, ${primeiroNome}!* 🇺🇸\n\n` +
@@ -1598,6 +1628,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                        `8️⃣  📅 *MEUS AGENDAMENTOS* - Consultar compromissos\n\n` +
                        `*Digite o número da opção desejada (1 a 8):* 🚀`;
       await sendReply(cleanPhone, resposta);
+      console.log(`📝 Menu enviado para ${primeiroNome} (mensagem não reconhecida: "${messageText}")`);
       return;
     }
     
