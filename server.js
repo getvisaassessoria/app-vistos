@@ -1614,8 +1614,7 @@ app.get('/api/debug/buscar/:telefone', async (req, res) => {
   }
 });
 
-// ==================== WEBHOOK Z-API (VERSÃO COMPLETA CORRIGIDA) ====================
-// ==================== WEBHOOK Z-API ====================
+// ==================== WEBHOOK Z-API CORRIGIDO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('\n🔔🔔🔔 WEBHOOK Z-API RECEBIDO 🔔🔔🔔');
   console.log('📅 Horário:', new Date().toISOString());
@@ -1735,7 +1734,60 @@ app.post('/api/webhook/zapi', async (req, res) => {
       }
     }
 
-    // ========== COMANDOS DO MENU (prioridade máxima) ==========
+    // ==========================================================
+    // 🔥🔥🔥 LÓGICA CORRIGIDA - PRIORIDADE PARA RESPOSTA PERSONALIZADA 🔥🔥🔥
+    // ==========================================================
+
+    // PRIORIDADE 1: Lead com simulação feita (RESPOSTA PERSONALIZADA)
+    // Isso funciona para QUALQUER mensagem que o lead enviar, não só comandos específicos!
+    if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
+      console.log(`🎯 Resposta personalizada para ${lead.nome_cliente} (pontuação: ${lead.pontuacao_total})`);
+      console.log(`📝 Mensagem enviada pelo lead: "${messageText}"`);
+
+      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
+      const classificacao = lead.classificacao_perfil ||
+        (lead.pontuacao_total >= 70 ? 'Forte Potencial' :
+         lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
+
+      let respostas = lead.respostas_simulador || {};
+      if (typeof respostas === 'string') {
+        try { respostas = JSON.parse(respostas); } catch (e) { respostas = {}; }
+      }
+
+      const situacao = respostas.situacao_profissional || respostas.ocupacao || '';
+      const renda = respostas.renda_mensal || respostas.renda || '';
+      const historico = respostas.historico_viagens || '';
+      const motivo = respostas.proposito_viagem || respostas.motivo_viagem || 'Turismo';
+
+      const respostaPersonalizada = gerarRespostaHumanizada(
+        primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
+      );
+
+      // Adiciona um lembrete do que o lead pode fazer depois
+      const mensagemCompleta = respostaPersonalizada + `\n\n---\n💡 *Dica:* Digite *MENU* para ver todas as opções disponíveis (preços, prazos, documentos).`;
+
+      await sendReply(mensagemCompleta);
+      console.log(`✅ Resposta personalizada enviada para ${lead.nome_cliente}`);
+      return;
+    }
+
+    // PRIORIDADE 2: Comandos do MENU (apenas se NÃO tiver lead ou lead sem simulação)
+    
+    // Menu principal
+    if (cmd === 'menu' || cmd === 'opções' || cmd === 'opcoes') {
+      await sendReply(
+        `🇺🇸 *GETVISA - Menu Principal* 🇺🇸\n\n` +
+        `1️⃣ 💰 PREÇO\n` +
+        `2️⃣ ⏰ PRAZO\n` +
+        `3️⃣ 📄 DOCUMENTOS\n` +
+        `4️⃣ 📋 PROCESSO\n` +
+        `5️⃣ ⚠️ VISTO NEGADO\n` +
+        `6️⃣ 📞 AJUDA\n` +
+        `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
+        `*Digite o número da opção (1 a 7):* 🚀`
+      );
+      return;
+    }
 
     if (cmd === '1' || cmd === 'preço' || cmd === 'preco') {
       await sendReply(
@@ -1855,35 +1907,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // ========== RESPOSTA PERSONALIZADA (lead com simulação feita) ==========
-    if (lead && lead.pontuacao_total && lead.pontuacao_total > 0) {
-      console.log(`🎯 Resposta personalizada para ${lead.nome_cliente}`);
-
-      const primeiroNome = (lead.nome_cliente || 'Cliente').split(' ')[0];
-      const classificacao = lead.classificacao_perfil ||
-        (lead.pontuacao_total >= 70 ? 'Forte Potencial' :
-         lead.pontuacao_total >= 50 ? 'Potencial Moderado' : 'Requer Atenção');
-
-      let respostas = lead.respostas_simulador || {};
-      if (typeof respostas === 'string') {
-        try { respostas = JSON.parse(respostas); } catch (e) { respostas = {}; }
-      }
-
-      const situacao = respostas.situacao_profissional || respostas.ocupacao || '';
-      const renda = respostas.renda_mensal || respostas.renda || '';
-      const historico = respostas.historico_viagens || '';
-      const motivo = respostas.proposito_viagem || 'Turismo';
-
-      const respostaPersonalizada = gerarRespostaHumanizada(
-        primeiroNome, classificacao, situacao, renda, historico, motivo, lead.pontuacao_total
-      );
-
-      await sendReply(respostaPersonalizada);
-      return;
-    }
-
-    // ========== BOAS-VINDAS PADRÃO (sem lead) ==========
-    console.log(`📋 Sem lead para ${cleanPhoneBusca}, enviando menu`);
+    // PRIORIDADE 3: Fallback - Nada reconhecido
+    console.log(`📋 Nenhuma condição atendida para ${cleanPhoneBusca}, enviando menu padrão`);
 
     await sendReply(
       `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\n` +
