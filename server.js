@@ -1376,6 +1376,23 @@ app.post('/api/webhook/zapi', async (req, res) => {
   try {
     const body = req.body;
     
+    // No início do webhook, adicione esta condição ANTES de todas
+if (messageText === '0' || messageText === 'menu' || messageText === 'voltar') {
+  const resposta = 
+    `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
+    `1️⃣ 💰 PREÇO\n` +
+    `2️⃣ ⏰ PRAZO\n` +
+    `3️⃣ 📄 DOCUMENTOS\n` +
+    `4️⃣ 📋 PROCESSO\n` +
+    `5️⃣ ⚠️ VISTO NEGADO\n` +
+    `6️⃣ 📞 AJUDA\n` +
+    `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
+    `*Digite o número da opção (1 a 7) ou 0 para MENU:* 🚀`;
+  await sendReply(cleanPhone, resposta);
+  console.log('✅ MENU enviado via 0');
+  return;
+}
+    
     // Ignora mensagens próprias e de status
     if (body.fromMe === true) {
       console.log('📤 Mensagem própria, ignorando');
@@ -1471,7 +1488,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `✅ Agendamento da entrevista\n` +
         `✅ Preparação para entrevista\n` +
         `✅ Acompanhamento total\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PREÇO enviada');
       return;
@@ -1485,7 +1502,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `🔍 *Análise consular:* 7 a 10 dias úteis\n` +
         `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
         `🕒 *Total estimado:* 30 a 40 dias\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PRAZO enviada');
       return;
@@ -1504,7 +1521,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `• Comprovante de renda\n` +
         `• Extratos bancários (3 meses)\n` +
         `• Comprovante de imóvel/veículo\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de DOCUMENTOS enviada');
       return;
@@ -1521,7 +1538,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `5️⃣ Coleta biométrica (CASV)\n` +
         `6️⃣ Entrevista no Consulado\n` +
         `7️⃣ Retirada do passaporte\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PROCESSO enviada');
       return;
@@ -1538,7 +1555,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `✅ Documentação reforçada\n` +
         `✅ Preparação intensiva\n\n` +
         `💰 *Assessoria especializada:* R$ 380\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de VISTO NEGADO enviada');
       return;
@@ -1553,7 +1570,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `🐱‍👤 *WhatsApp:* https://wa.me/5521985234917\n\n` +
         `📅 *Agende consultoria:* https://calendly.com/getvisa/consultoria\n\n` +
         `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de AJUDA enviada');
       return;
@@ -1567,7 +1584,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
         `⏱️ Menos de 2 minutos!\n\n` +
         `Após o simulador, seus resultados chegarão aqui! 🚀\n\n` +
-        `📌 *Digite MENU para voltar ao início* 🚀`;
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de AVALIAÇÃO enviada');
       return;
@@ -1585,7 +1602,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       `5️⃣ ⚠️ VISTO NEGADO\n` +
       `6️⃣ 📞 AJUDA\n` +
       `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-      `*Digite o número da opção (1 a 7):* 🚀`;
+      `*Digite o número da opção (1 a 7) ou 0 para repetir este MENU:* 🚀`;
     
     await sendReply(cleanPhone, menuMessage);
     console.log('✅ MENU (fallback) enviado');
