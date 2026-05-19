@@ -20,50 +20,86 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ==================== ANTI-SPAM ====================
+// ==================== ANTI-SPAM REFORÇADO ====================
+function isSpamValue(valor) {
+  if (!valor) return true;
+  const str = valor.toString().toLowerCase();
+  const spamPatterns = [
+    /^[a-z]{10,}$/,           // letras aleatórias
+    /[bcdfghjklmnpqrstvwxyz]{4,}/, // muitas consoantes
+    /^(\d)\1+$/,              // números repetidos
+    /^(teste|spam|fake|bot)+$/i // palavras comuns de spam
+  ];
+  return spamPatterns.some(pattern => pattern.test(str));
+}
+
 function isSpamData(dados) {
   const nome = dados.nome || dados.nome_cliente || dados.full_name || '';
   const telefone = dados.telefone || dados.whatsapp || dados.telefone_whatsapp || '';
   const email = dados.email || '';
   
-  // Nome com 10+ letras sem espaço (spam)
+  // 1. Nome com 10+ letras sem espaço (spam)
   if (/^[a-z]{10,}$/i.test(nome)) {
-    console.log('🚫 Spam: nome aleatório', nome);
+    console.log('🚫 Spam bloqueado: nome aleatório', nome);
     return true;
   }
   
-  // Nome com 4+ consoantes seguidas
+  // 2. Nome com 4+ consoantes seguidas
   if (/[bcdfghjklmnpqrstvwxyz]{4,}/i.test(nome)) {
-    console.log('🚫 Spam: muitas consoantes', nome);
+    console.log('🚫 Spam bloqueado: muitas consoantes', nome);
     return true;
   }
   
-  // Nome muito curto
+  // 3. Nome muito curto (menos de 3 letras)
   if (nome.length > 0 && nome.length < 3) {
-    console.log('🚫 Spam: nome muito curto', nome);
+    console.log('🚫 Spam bloqueado: nome muito curto', nome);
     return true;
   }
   
-  // Telefone com letras
+  // 4. Telefone com letras
   if (telefone && /[a-zA-Z]/.test(telefone)) {
-    console.log('🚫 Spam: telefone com letras', telefone);
+    console.log('🚫 Spam bloqueado: telefone com letras', telefone);
     return true;
   }
   
-  // Telefone inválido
+  // 5. Telefone muito curto (menos de 10 dígitos)
   const telefoneLimpo = telefone?.toString().replace(/\D/g, '') || '';
   if (telefoneLimpo.length > 0 && telefoneLimpo.length < 10) {
-    console.log('🚫 Spam: telefone curto', telefone);
+    console.log('🚫 Spam bloqueado: telefone curto', telefone);
     return true;
   }
   
-  // Email temporário
-  const dominiosSpam = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway'];
+  // 6. Telefone com padrão repetido (ex: 1111111111)
+  if (telefoneLimpo && /^(\d)\1+$/.test(telefoneLimpo)) {
+    console.log('🚫 Spam bloqueado: telefone repetido', telefone);
+    return true;
+  }
+  
+  // 7. Email de domínio temporário
+  const dominiosSpam = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway', 'fake', 'spam'];
   for (const dominio of dominiosSpam) {
     if (email.toLowerCase().includes(dominio)) {
-      console.log('🚫 Spam: email temporário', email);
+      console.log('🚫 Spam bloqueado: email temporário', email);
       return true;
     }
+  }
+  
+  // 8. Email sem @ ou inválido
+  if (email && (!email.includes('@') || email.split('@').length !== 2)) {
+    console.log('🚫 Spam bloqueado: email inválido', email);
+    return true;
+  }
+  
+  // 9. Verificar se tem pelo menos um campo válido
+  const camposRelevantes = ['nome', 'nome_cliente', 'full_name', 'telefone', 'whatsapp', 'email', 'telefone_whatsapp'];
+  const temDadoValido = camposRelevantes.some(campo => {
+    const valor = dados[campo];
+    return valor && valor.toString().trim().length > 0 && !isSpamValue(valor);
+  });
+  
+  if (!temDadoValido) {
+    console.log('🚫 Spam bloqueado: nenhum dado válido');
+    return true;
   }
   
   return false;
@@ -100,6 +136,17 @@ async function enviarWhatsApp(telefone, mensagem) {
     return false;
   }
 }
+
+// ==================== ROTA DE SAÚDE PARA KEEP-ALIVE ====================
+app.get('/health', (req, res) => {
+  console.log('🏓 Ping recebido em', new Date().toLocaleString('pt-BR'));
+  res.status(200).send('OK');
+});
+
+// ==================== ROTA DE PING ====================
+app.get('/ping', (req, res) => {
+  res.status(200).send('ok');
+});
 
 // ==================== VALIDAÇÃO DS-160 OFICIAL ====================
 function validateDS160(data) {
@@ -1359,11 +1406,6 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   const { error } = await supabase.from('compromissos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
-});
-
-// ==================== ROTA DE PING ====================
-app.get('/ping', (req, res) => {
-  res.status(200).send('ok');
 });
 
 // ==================== WEBHOOK Z-API CORRIGIDO ====================
