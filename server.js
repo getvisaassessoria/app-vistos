@@ -1658,12 +1658,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // Mensagem não reconhecida
     const naoReconhecido = 
-      `😊 *Não entendi o comando*\n\n` +
-      `Para usar o sistema, digite:\n` +
-      `• *0* para ver o MENU principal\n` +
-      `• *MENU* para recomeçar\n\n` +
-      `Caso precise de ajuda, fale com um especialista:\n` +
-      `https://wa.me/5521974601812`;
+      `😊 *Sua pergunta não foi respondida?*\n\n` +
+      `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
+      `📋 *Para contratar nossos serviços:*\n` +
+      `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
+      `🎯 *Para navegar no sistema:*\n` +
+      `• Digite *0* para ver o MENU principal\n` +
+      `• Digite *MENU* para recomeçar\n\n` +
+      `📞 *Fale com um especialista:*\n` +
+      `https://wa.me/5521974601812\n\n` +
+      `*Aguardamos seu contato!* 🚀`;
     
     await sendReply(cleanPhone, naoReconhecido);
 
