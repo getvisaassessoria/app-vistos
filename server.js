@@ -20,15 +20,28 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// ==================== ESTADO DA CONVERSA ====================
+const userState = new Map(); // phone -> { currentMenu: 'main', selectedCountry: null }
+
+// Limpar estado após 30 minutos de inatividade (opcional)
+setInterval(() => {
+  const now = Date.now();
+  for (const [phone, data] of userState.entries()) {
+    if (data.lastActivity && (now - data.lastActivity) > 30 * 60 * 1000) {
+      userState.delete(phone);
+    }
+  }
+}, 60 * 1000);
+
 // ==================== ANTI-SPAM REFORÇADO ====================
 function isSpamValue(valor) {
   if (!valor) return true;
   const str = valor.toString().toLowerCase();
   const spamPatterns = [
-    /^[a-z]{10,}$/,           // letras aleatórias
-    /[bcdfghjklmnpqrstvwxyz]{4,}/, // muitas consoantes
-    /^(\d)\1+$/,              // números repetidos
-    /^(teste|spam|fake|bot)+$/i // palavras comuns de spam
+    /^[a-z]{10,}$/,
+    /[bcdfghjklmnpqrstvwxyz]{4,}/,
+    /^(\d)\1+$/,
+    /^(teste|spam|fake|bot)+$/i
   ];
   return spamPatterns.some(pattern => pattern.test(str));
 }
@@ -38,44 +51,31 @@ function isSpamData(dados) {
   const telefone = dados.telefone || dados.whatsapp || dados.telefone_whatsapp || '';
   const email = dados.email || '';
   
-  // 1. Nome com 10+ letras sem espaço (spam)
   if (/^[a-z]{10,}$/i.test(nome)) {
     console.log('🚫 Spam bloqueado: nome aleatório', nome);
     return true;
   }
-  
-  // 2. Nome com 4+ consoantes seguidas
   if (/[bcdfghjklmnpqrstvwxyz]{4,}/i.test(nome)) {
     console.log('🚫 Spam bloqueado: muitas consoantes', nome);
     return true;
   }
-  
-  // 3. Nome muito curto (menos de 3 letras)
   if (nome.length > 0 && nome.length < 3) {
     console.log('🚫 Spam bloqueado: nome muito curto', nome);
     return true;
   }
-  
-  // 4. Telefone com letras
   if (telefone && /[a-zA-Z]/.test(telefone)) {
     console.log('🚫 Spam bloqueado: telefone com letras', telefone);
     return true;
   }
-  
-  // 5. Telefone muito curto (menos de 10 dígitos)
   const telefoneLimpo = telefone?.toString().replace(/\D/g, '') || '';
   if (telefoneLimpo.length > 0 && telefoneLimpo.length < 10) {
     console.log('🚫 Spam bloqueado: telefone curto', telefone);
     return true;
   }
-  
-  // 6. Telefone com padrão repetido (ex: 1111111111)
   if (telefoneLimpo && /^(\d)\1+$/.test(telefoneLimpo)) {
     console.log('🚫 Spam bloqueado: telefone repetido', telefone);
     return true;
   }
-  
-  // 7. Email de domínio temporário
   const dominiosSpam = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway', 'fake', 'spam'];
   for (const dominio of dominiosSpam) {
     if (email.toLowerCase().includes(dominio)) {
@@ -83,22 +83,8 @@ function isSpamData(dados) {
       return true;
     }
   }
-  
-  // 8. Email sem @ ou inválido
   if (email && (!email.includes('@') || email.split('@').length !== 2)) {
     console.log('🚫 Spam bloqueado: email inválido', email);
-    return true;
-  }
-  
-  // 9. Verificar se tem pelo menos um campo válido
-  const camposRelevantes = ['nome', 'nome_cliente', 'full_name', 'telefone', 'whatsapp', 'email', 'telefone_whatsapp'];
-  const temDadoValido = camposRelevantes.some(campo => {
-    const valor = dados[campo];
-    return valor && valor.toString().trim().length > 0 && !isSpamValue(valor);
-  });
-  
-  if (!temDadoValido) {
-    console.log('🚫 Spam bloqueado: nenhum dado válido');
     return true;
   }
   
@@ -137,16 +123,60 @@ async function enviarWhatsApp(telefone, mensagem) {
   }
 }
 
-// ==================== ROTA DE SAÚDE PARA KEEP-ALIVE ====================
+// ==================== ROTAS DE SAÚDE ====================
 app.get('/health', (req, res) => {
   console.log('🏓 Ping recebido em', new Date().toLocaleString('pt-BR'));
   res.status(200).send('OK');
 });
 
-// ==================== ROTA DE PING ====================
 app.get('/ping', (req, res) => {
   res.status(200).send('ok');
 });
+
+// ==================== RESPOSTAS DOS SUBMENUS ====================
+function getRespostaSubmenu(servico, opcao) {
+  const respostas = {
+    preco: {
+      visto_americano: `💰 *INVESTIMENTO - VISTO AMERICANO*\n\n🇺🇸 *Taxa Consular:* ~R$ 950\n📋 *Assessoria:* R$ 350\n\n✅ Inclui: DS-160, agendamento, preparação para entrevista e acompanhamento total.`,
+      visto_canadense: `💰 *INVESTIMENTO - VISTO CANADENSE*\n\n🇨🇦 *Taxa Consular:* ~R$ 750\n📋 *Assessoria:* R$ 400\n\n✅ Inclui: Aplicação online, documentação, preparação para biometria e entrevista.`,
+      visto_australiano: `💰 *INVESTIMENTO - VISTO AUSTRALIANO*\n\n🇦🇺 *Taxa Consular:* ~R$ 850\n📋 *Assessoria:* R$ 450\n\n✅ Inclui: Análise de perfil, aplicação online, documentação específica.`,
+      eta_uk: `💰 *INVESTIMENTO - eTA UK (REINO UNIDO)*\n\n🇬🇧 *Taxa:* ~R$ 120\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Aplicação online, validação de dados, acompanhamento.`,
+      eta_canadense: `💰 *INVESTIMENTO - eTA CANADENSE*\n\n🇨🇦 *Taxa:* ~R$ 50\n📋 *Assessoria:* R$ 100\n\n✅ Inclui: Aplicação online rápida, validação, entrega por e-mail.`,
+      passaporte: `💰 *INVESTIMENTO - PASSAPORTE*\n\n📘 *Taxa PF:* ~R$ 257\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Agendamento, orientação documental, acompanhamento.`
+    },
+    prazo: {
+      visto_americano: `⏰ *PRAZO - VISTO AMERICANO*\n\n📅 *Agendamento:* até 8 semanas\n🔍 *Análise consular:* 7 a 10 dias úteis\n📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n🕒 *Total estimado:* 30 a 40 dias`,
+      visto_canadense: `⏰ *PRAZO - VISTO CANADENSE*\n\n📅 *Processamento:* 4 a 8 semanas\n📬 *Retorno:* 2 a 3 dias úteis\n\n🕒 *Total estimado:* 30 a 60 dias`,
+      visto_australiano: `⏰ *PRAZO - VISTO AUSTRALIANO*\n\n📅 *Processamento:* 2 a 4 semanas\n\n🕒 *Total estimado:* 15 a 30 dias`,
+      eta_uk: `⏰ *PRAZO - eTA UK*\n\n📅 *Processamento:* até 72 horas\n\n🕒 *Total estimado:* 1 a 3 dias`,
+      eta_canadense: `⏰ *PRAZO - eTA CANADENSE*\n\n📅 *Processamento:* até 24 horas\n\n🕒 *Total estimado:* 1 dia`,
+      passaporte: `⏰ *PRAZO - PASSAPORTE*\n\n📅 *Emissão:* 7 a 15 dias úteis\n\n🕒 *Total estimado:* 10 a 20 dias`
+    },
+    documentos: {
+      visto_americano: `📄 *DOCUMENTOS - VISTO AMERICANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante da taxa consular\n• DS-160 preenchido\n\n📌 *RECOMENDADOS:*\n• Comprovante de renda\n• Extratos bancários\n• Comprovante de imóvel/veículo`,
+      visto_canadense: `📄 *DOCUMENTOS - VISTO CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Foto digital\n• Comprovantes financeiros\n\n📌 *RECOMENDADOS:*\n• Carta de intenção\n• Histórico de viagens\n• Vínculos com o Brasil`,
+      visto_australiano: `📄 *DOCUMENTOS - VISTO AUSTRALIANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Comprovantes de recursos\n• Seguro saúde (recomendado)\n\n📌 *RECOMENDADOS:*\n• Roteiro de viagem\n• Reservas de hospedagem`,
+      eta_uk: `📄 *DOCUMENTOS - eTA UK*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• E-mail válido\n• Dados de viagem\n\n📌 *PROCESSO:*\n• Aplicação 100% online`,
+      eta_canadense: `📄 *DOCUMENTOS - eTA CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Cartão de crédito para taxa\n• E-mail válido\n\n📌 *PROCESSO:*\n• Aplicação 100% online`,
+      passaporte: `📄 *DOCUMENTOS - PASSAPORTE*\n\n📌 *OBRIGATÓRIOS:*\n• RG original\n• CPF\n• Título de eleitor (homens 18-70)\n• Certidão de nascimento/casamento\n• Comprovante de quitação militar (homens)`
+    },
+    processo: {
+      visto_americano: `📋 *PROCESSO - VISTO AMERICANO*\n\n1️⃣ Análise de perfil\n2️⃣ Preenchimento do DS-160\n3️⃣ Pagamento da taxa consular\n4️⃣ Agendamento da entrevista\n5️⃣ Coleta biométrica (CASV)\n6️⃣ Entrevista no Consulado\n7️⃣ Retirada do passaporte`,
+      visto_canadense: `📋 *PROCESSO - VISTO CANADENSE*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online GCKey\n3️⃣ Pagamento das taxas\n4️⃣ Agendamento da biometria\n5️⃣ Coleta de dados biométricos\n6️⃣ Entrevista (se solicitado)\n7️⃣ Decisão e envio`,
+      visto_australiano: `📋 *PROCESSO - VISTO AUSTRALIANO*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online ImmiAccount\n3️⃣ Pagamento das taxas\n4️⃣ Envio de documentos\n5️⃣ Acompanhamento\n6️⃣ Decisão por e-mail`,
+      eta_uk: `📋 *PROCESSO - eTA UK*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte`,
+      eta_canadense: `📋 *PROCESSO - eTA CANADENSE*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte`,
+      passaporte: `📋 *PROCESSO - PASSAPORTE*\n\n1️⃣ Agendamento no site da PF\n2️⃣ Separação dos documentos\n3️⃣ Pagamento da GRU\n4️⃣ Comparecimento ao posto\n5️⃣ Coleta de dados biométricos\n6️⃣ Aguardar emissão\n7️⃣ Retirada do passaporte`
+    }
+  };
+  
+  let resposta = respostas[opcao]?.[servico];
+  if (!resposta) {
+    resposta = `ℹ️ *INFORMAÇÕES EM BREVE*\n\nEstamos preparando o conteúdo específico para ${servico.replace('_', ' ').toUpperCase()}.\n\nEntre em contato com um especialista: https://wa.me/5521974601812`;
+  }
+  
+  return resposta;
+}
 
 // ==================== VALIDAÇÃO DS-160 OFICIAL ====================
 function validateDS160(data) {
@@ -330,7 +360,6 @@ function drawSectionTitle(doc, title) {
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
   
-  // ANTI-SPAM
   if (isSpamData(data)) {
     console.log('🚫 SPAM DS-160 - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
@@ -389,7 +418,6 @@ app.post('/api/submit-ds160', async (req, res) => {
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
-
         doc.fillColor('#003366').fontSize(22).text('SOLICITACAO DE VISTO DS-160', { align: 'center' });
         doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentacao Consular', { align: 'center' });
         doc.moveDown(2);
@@ -849,27 +877,23 @@ app.post('/api/submit-ds160', async (req, res) => {
         hasContentInSection = true;
 
         startSection('HISTORICO DE NEGATIVAS NOS EUA');
-        
         renderField('radio-visto-negado', 'Ja teve visto americano NEGADO?');
         if (data['radio-visto-negado'] === 'one') {
           renderField('text-visto-negado-ano', 'Ano da negativa do visto');
           renderField('text-visto-negado-consulado', 'Consulado da negativa');
           renderField('select-visto-negado-tipo', 'Tipo de visto negado');
         }
-        
         renderField('radio-entrada-negada', 'Ja teve entrada NEGADA nos EUA na imigracao?');
         if (data['radio-entrada-negada'] === 'one') {
           renderField('text-entrada-negada-ano', 'Ano da negativa de entrada');
           renderField('text-entrada-negada-local', 'Porto de entrada');
           renderField('textarea-entrada-negada-motivo', 'Motivo da negativa');
         }
-        
         renderField('radio-deportado', 'Ja foi deportado ou removido dos EUA?');
         if (data['radio-deportado'] === 'one') {
           renderField('text-deportado-ano', 'Ano da deportacao');
           renderField('select-deportado-duracao', 'Duracao da deportacao');
         }
-        
         renderField('textarea-detalhes-negativa', 'Detalhes adicionais sobre negativas');
         hasContentInSection = true;
 
@@ -931,7 +955,6 @@ app.post('/api/submit-ds160', async (req, res) => {
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
   
-  // ANTI-SPAM
   if (isSpamData(data)) {
     console.log('🚫 SPAM Avaliação - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
@@ -983,7 +1006,7 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           
           const primeiroNome = nome.split(' ')[0];
           let mensagemWhats = `Olá, ${primeiroNome}! Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\n📌 *Digite MENU para voltar ao início* 🚀`;
+          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
@@ -998,7 +1021,6 @@ app.post('/api/submit-avaliacao', async (req, res) => {
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
   
-  // ANTI-SPAM
   if (isSpamData(data)) {
     console.log('🚫 SPAM Passaporte - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
@@ -1149,7 +1171,6 @@ app.post('/api/submit-passaporte', async (req, res) => {
 app.post('/api/submit-visto-negado', async (req, res) => {
   const data = req.body;
   
-  // ANTI-SPAM
   if (isSpamData(data)) {
     console.log('🚫 SPAM Visto Negado - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
@@ -1186,7 +1207,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         mensagemWhats += `✅ Preparação para entrevista\n\n`;
         mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 380)\n\n`;
         mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
-        mensagemWhats += `📌 *Digite MENU para voltar ao início* 🚀`;
+        mensagemWhats += `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         
         await enviarWhatsApp(telefoneCliente, mensagemWhats);
       }
@@ -1408,230 +1429,243 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
   res.status(204).send();
 });
 
-// ==================== WEBHOOK Z-API CORRIGIDO ====================
+// ==================== WEBHOOK COM MENU HIERÁRQUICO ====================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido:', JSON.stringify(req.body, null, 2));
   
-  // Responde 200 IMEDIATAMENTE
   res.status(200).json({ status: 'ok' });
 
   try {
     const body = req.body;
-    
-    // Ignora mensagens próprias e de status
-    if (body.fromMe === true) {
-      console.log('📤 Mensagem própria, ignorando');
-      return;
-    }
-    
-    if (body.isStatusReply === true || body.waitingMessage === true) {
-      console.log('⏳ Status/waiting, ignorando');
-      return;
-    }
+    if (body.fromMe === true) return;
+    if (body.isStatusReply === true || body.waitingMessage === true) return;
 
     const senderPhone = body.phone || body.from;
-    if (!senderPhone) {
-      console.log('⚠️ Sem telefone remetente');
-      return;
-    }
+    if (!senderPhone) return;
 
-    // Extrai o texto da mensagem
     let messageText = body.text?.message || body.message?.text || body.message || '';
     if (typeof messageText !== 'string') messageText = String(messageText);
     messageText = messageText.trim().toLowerCase();
     
-    if (!messageText) {
-      console.log('📭 Mensagem sem texto');
-      return;
-    }
+    if (!messageText) return;
 
     console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
     
-    // Normaliza telefone
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
     
-    // Função para enviar WhatsApp
     const sendReply = async (phone, mensagem) => {
       const instance = process.env.ZAPI_INSTANCE;
       const token = process.env.ZAPI_TOKEN;
       const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-      
-      if (!instance || !token) {
-        console.log('⚠️ Z-API não configurada');
-        return false;
-      }
-      
-      const phoneFormatted = '55' + phone;
+      if (!instance || !token) return false;
       const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(securityToken && { 'Client-Token': securityToken })
-        },
-        body: JSON.stringify({ phone: phoneFormatted, message: mensagem })
+        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+        body: JSON.stringify({ phone: '55' + phone, message: mensagem })
       });
-      
-      const result = await response.json();
-      console.log('✅ Resposta Z-API:', result);
+      console.log('✅ Resposta Z-API:', await response.json());
       return response.status === 200;
     };
 
+    // Estado do usuário
+    let state = userState.get(cleanPhone) || { currentMenu: 'main', selectedCountry: null, lastActivity: Date.now() };
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+
+    // COMANDO GLOBAL: 0 ou MENU - Volta ao menu principal
+    if (messageText === '0' || messageText === 'menu' || messageText === 'menu principal' || messageText === 'voltar') {
+      state.currentMenu = 'main';
+      state.selectedCountry = null;
+      userState.set(cleanPhone, state);
+      
+      const menuPrincipal = 
+        `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
+        `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
+        `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
+        `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
+        `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+        `5️⃣ 🇨🇦 eTA CANADENSE\n` +
+        `6️⃣ 📘 PASSAPORTE\n` +
+        `7️⃣ 📞 AJUDA / CONTATO\n\n` +
+        `*Digite o número da opção desejada (1 a 7):* 🚀`;
+      await sendReply(cleanPhone, menuPrincipal);
+      return;
+    }
+
+    // SAUDAÇÕES
+    const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
+    if (saudacoes.includes(messageText)) {
+      const boasVindas = 
+        `Olá! 👋 Seja bem-vindo(a) à GetVisa!\n\n` +
+        `🇺🇸 *ESCOLHA O SERVIÇO DESEJADO:*\n\n` +
+        `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
+        `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
+        `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
+        `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+        `5️⃣ 🇨🇦 eTA CANADENSE\n` +
+        `6️⃣ 📘 PASSAPORTE\n` +
+        `7️⃣ 📞 AJUDA / CONTATO\n\n` +
+        `*Digite o número da opção (1 a 7):* 🚀`;
+      await sendReply(cleanPhone, boasVindas);
+      return;
+    }
+
     // ==========================================================
-    // FLUXO: RESPOSTAS POR COMANDO
-    // TODAS incluem opção de voltar ao MENU
+    // MENU PRINCIPAL
     // ==========================================================
-    
-    // COMANDO: 0 ou MENU (voltar ao menu principal)
-    if (messageText === '0' || messageText === 'menu' || messageText === 'voltar' || messageText === 'início' || messageText === 'inicio') {
-      const resposta = 
-        `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
-        `1️⃣ 💰 PREÇO\n` +
-        `2️⃣ ⏰ PRAZO\n` +
-        `3️⃣ 📄 DOCUMENTOS\n` +
-        `4️⃣ 📋 PROCESSO\n` +
-        `5️⃣ ⚠️ VISTO NEGADO\n` +
-        `6️⃣ 📞 AJUDA\n` +
-        `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-        `*Digite o número da opção (1 a 7) ou 0 para MENU:* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ MENU enviado');
+    if (state.currentMenu === 'main') {
+      let menuResposta = '';
+      
+      switch (messageText) {
+        case '1':
+          state.currentMenu = 'visto_americano';
+          menuResposta = 
+            `🇺🇸 *VISTO AMERICANO*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ ⚠️ VISTO NEGADO\n` +
+            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '2':
+          state.currentMenu = 'visto_canadense';
+          menuResposta = 
+            `🇨🇦 *VISTO CANADENSE*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ ⚠️ VISTO NEGADO\n` +
+            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '3':
+          state.currentMenu = 'visto_australiano';
+          menuResposta = 
+            `🇦🇺 *VISTO AUSTRALIANO*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ ⚠️ VISTO NEGADO\n` +
+            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '4':
+          state.currentMenu = 'eta_uk';
+          menuResposta = 
+            `🇬🇧 *eTA UK (REINO UNIDO)*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ ⚠️ VISTO NEGADO\n` +
+            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '5':
+          state.currentMenu = 'eta_canadense';
+          menuResposta = 
+            `🇨🇦 *eTA CANADENSE*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ ⚠️ VISTO NEGADO\n` +
+            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '6':
+          state.currentMenu = 'passaporte';
+          menuResposta = 
+            `📘 *PASSAPORTE*\n\n` +
+            `1️⃣ 💰 PREÇO\n` +
+            `2️⃣ ⏰ PRAZO\n` +
+            `3️⃣ 📄 DOCUMENTOS\n` +
+            `4️⃣ 📋 PROCESSO\n` +
+            `5️⃣ 📍 ONDE FAZER\n` +
+            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+            `*Digite o número da opção desejada:* 🚀`;
+          break;
+        case '7':
+          const ajudaResposta = 
+            `📞 *FALAR COM ESPECIALISTA*\n\n` +
+            `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+            `*Contato direto:*\n` +
+            `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+            `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+            `*Digite 0 para voltar ao MENU principal* 🚀`;
+          await sendReply(cleanPhone, ajudaResposta);
+          return;
+        default:
+          const menuPrincipal = 
+            `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
+            `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
+            `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
+            `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
+            `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+            `5️⃣ 🇨🇦 eTA CANADENSE\n` +
+            `6️⃣ 📘 PASSAPORTE\n` +
+            `7️⃣ 📞 AJUDA / CONTATO\n\n` +
+            `*Digite o número da opção desejada (1 a 7):* 🚀`;
+          await sendReply(cleanPhone, menuPrincipal);
+          return;
+      }
+      
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, menuResposta);
       return;
     }
-    
-    // COMANDO: PREÇO (1)
-    if (messageText === '1' || messageText === 'preço' || messageText === 'preco' || messageText.includes('quanto custa')) {
-      const resposta = 
-        `💰 *INVESTIMENTO*\n\n` +
-        `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-        `📋 *Assessoria GetVisa:* R$ 350\n\n` +
-        `*O que a assessoria inclui:*\n` +
-        `✅ Análise completa do perfil\n` +
-        `✅ Preenchimento do DS-160\n` +
-        `✅ Agendamento da entrevista\n` +
-        `✅ Preparação para entrevista\n` +
-        `✅ Acompanhamento total\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+
+    // ==========================================================
+    // SUBMENUS
+    // ==========================================================
+    if (['1', '2', '3', '4', '5', '6'].includes(messageText)) {
+      let resposta = '';
+      
+      // Opção 5: Visto Negado (igual para todos)
+      if (messageText === '5') {
+        resposta = `⚠️ *VISTO NEGADO - ${state.currentMenu.toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      } 
+      // Opção 6: Avaliação Gratuita
+      else if (messageText === '6') {
+        resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*\n\nDescubra suas chances de aprovação!\n\n🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n⏱️ Menos de 2 minutos!\n\nApós o simulador, seus resultados chegarão aqui! 🚀\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      }
+      // Opção 5 do passaporte: ONDE FAZER
+      else if (state.currentMenu === 'passaporte' && messageText === '5') {
+        resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      }
+      // Demais opções: preço, prazo, documentos, processo
+      else {
+        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
+        const opcao = opcoesMap[messageText];
+        resposta = getRespostaSubmenu(state.currentMenu, opcao);
+        resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      }
+      
       await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de PREÇO enviada');
       return;
     }
+
+    // Mensagem não reconhecida
+    const naoReconhecido = 
+      `😊 *Não entendi o comando*\n\n` +
+      `Para usar o sistema, digite:\n` +
+      `• *0* para ver o MENU principal\n` +
+      `• *MENU* para recomeçar\n\n` +
+      `Caso precise de ajuda, fale com um especialista:\n` +
+      `https://wa.me/5521974601812`;
     
-    // COMANDO: PRAZO (2)
-    if (messageText === '2' || messageText === 'prazo' || messageText.includes('quanto tempo') || messageText.includes('demora')) {
-      const resposta = 
-        `⏰ *PRAZOS ESTIMADOS*\n\n` +
-        `📅 *Agendamento da entrevista:* até 8 semanas\n` +
-        `🔍 *Análise consular:* 7 a 10 dias úteis\n` +
-        `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
-        `🕒 *Total estimado:* 30 a 40 dias\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de PRAZO enviada');
-      return;
-    }
-    
-    // COMANDO: DOCUMENTOS (3)
-    if (messageText === '3' || messageText === 'documentos' || messageText.includes('documento')) {
-      const resposta = 
-        `📄 *DOCUMENTOS NECESSÁRIOS*\n\n` +
-        `📌 *OBRIGATÓRIOS:*\n` +
-        `• Passaporte válido (mínimo 6 meses)\n` +
-        `• Foto 5x7 recente\n` +
-        `• Comprovante da taxa consular\n` +
-        `• DS-160 preenchido\n\n` +
-        `📌 *RECOMENDADOS:*\n` +
-        `• Comprovante de renda\n` +
-        `• Extratos bancários (3 meses)\n` +
-        `• Comprovante de imóvel/veículo\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de DOCUMENTOS enviada');
-      return;
-    }
-    
-    // COMANDO: PROCESSO (4)
-    if (messageText === '4' || messageText === 'processo' || messageText.includes('passo a passo')) {
-      const resposta = 
-        `📋 *PASSO A PASSO*\n\n` +
-        `1️⃣ Análise de perfil\n` +
-        `2️⃣ Preenchimento do DS-160\n` +
-        `3️⃣ Pagamento da taxa consular\n` +
-        `4️⃣ Agendamento da entrevista\n` +
-        `5️⃣ Coleta biométrica (CASV)\n` +
-        `6️⃣ Entrevista no Consulado\n` +
-        `7️⃣ Retirada do passaporte\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de PROCESSO enviada');
-      return;
-    }
-    
-    // COMANDO: VISTO NEGADO (5)
-    if (messageText === '5' || messageText === 'negado' || messageText.includes('visto negado')) {
-      const resposta = 
-        `⚠️ *VISTO NEGADO?*\n\n` +
-        `Não desanime! Muitos casos são revertidos.\n\n` +
-        `📊 *Faça uma análise gratuita do seu caso:*\n` +
-        `🔗 https://getvisa.com.br/visto-americano-negado\n\n` +
-        `*O que fazemos:*\n` +
-        `✅ Análise do motivo da negativa\n` +
-        `✅ Correção do DS-160\n` +
-        `✅ Documentação reforçada\n` +
-        `✅ Preparação intensiva\n\n` +
-        `💰 *Assessoria especializada:* R$ 380\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de VISTO NEGADO enviada');
-      return;
-    }
-    
-    // COMANDO: AJUDA / ESPECIALISTA (6)
-    if (messageText === '6' || messageText === 'ajuda' || messageText === 'especialista' || messageText.includes('falar')) {
-      const resposta = 
-        `📞 *FALAR COM ESPECIALISTA*\n\n` +
-        `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
-        `*Contato direto:*\n` +
-        `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-        `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de AJUDA enviada');
-      return;
-    }
-    
-    // COMANDO: AVALIAÇÃO GRATUITA (7)
-    if (messageText === '7' || messageText === 'avaliação' || messageText === 'avaliacao' || messageText === 'simulador') {
-      const resposta = 
-        `📊 *ANÁLISE GRATUITA DE PERFIL*\n\n` +
-        `Descubra suas chances de aprovação!\n\n` +
-        `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
-        `⏱️ Menos de 2 minutos!\n\n` +
-        `Após o simulador, seus resultados chegarão aqui! 🚀\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ Resposta de AVALIAÇÃO enviada');
-      return;
-    }
-    
-    // FALLBACK: Se nada acima funcionar, mostra o MENU
-    const menuMessage = 
-      `🇺🇸 *GETVISA - Assessoria Consular* 🇺🇸\n\n` +
-      `Olá! 👋 Seja bem-vindo(a)!\n\n` +
-      `📋 *Como podemos ajudar você hoje?*\n\n` +
-      `1️⃣ 💰 PREÇO\n` +
-      `2️⃣ ⏰ PRAZO\n` +
-      `3️⃣ 📄 DOCUMENTOS\n` +
-      `4️⃣ 📋 PROCESSO\n` +
-      `5️⃣ ⚠️ VISTO NEGADO\n` +
-      `6️⃣ 📞 AJUDA\n` +
-      `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-      `*Digite o número da opção (1 a 7) ou 0 para repetir este MENU:* 🚀`;
-    
-    await sendReply(cleanPhone, menuMessage);
-    console.log('✅ MENU (fallback) enviado');
+    await sendReply(cleanPhone, naoReconhecido);
 
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
@@ -1643,7 +1677,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
   
-  // ANTI-SPAM
   if (isSpamData(data)) {
     console.log('🚫 SPAM Simulador - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
@@ -1709,7 +1742,7 @@ app.post('/api/submit-simulador', async (req, res) => {
           
           mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
           mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160.\n\n`;
-          mensagem += `📌 *Digite MENU para voltar ao início* 🚀`;
+          mensagem += `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagem);
         }
@@ -1735,10 +1768,7 @@ async function buscarTelefoneCliente(clienteNome, clienteId) {
       .select('telefone')
       .eq('id', clienteId)
       .single();
-    
-    if (cliente?.telefone) {
-      return cliente.telefone.replace(/\D/g, '');
-    }
+    if (cliente?.telefone) return cliente.telefone.replace(/\D/g, '');
   }
   
   const { data: lead } = await supabase
@@ -1749,11 +1779,7 @@ async function buscarTelefoneCliente(clienteNome, clienteId) {
     .limit(1)
     .single();
   
-  if (lead?.telefone_whatsapp) {
-    return lead.telefone_whatsapp.replace(/\D/g, '');
-  }
-  
-  return null;
+  return lead?.telefone_whatsapp?.replace(/\D/g, '') || null;
 }
 
 async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
@@ -1772,34 +1798,20 @@ async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, dia
   mensagem += `📆 Data: ${dataFormatada}\n`;
   mensagem += `⏰ Horário: ${agendamento.hora}\n`;
   
-  if (agendamento.local) {
-    mensagem += `📍 Local: ${agendamento.local}\n`;
-  }
+  if (agendamento.local) mensagem += `📍 Local: ${agendamento.local}\n`;
   
   if (agendamento.atividade === 'ENTREVISTA') {
-    mensagem += `\n📋 *Dicas importantes:*\n`;
-    mensagem += `• Chegue com 30 minutos de antecedência\n`;
-    mensagem += `• Leve: passaporte, DS-160, foto 5x7\n`;
-    mensagem += `• Documentos comprobatórios (renda, vínculos)\n`;
-    mensagem += `• Esteja bem vestido(a) e confiante!\n`;
+    mensagem += `\n📋 *Dicas importantes:*\n• Chegue com 30 minutos de antecedência\n• Leve: passaporte, DS-160, foto 5x7\n• Documentos comprobatórios\n• Esteja bem vestido(a) e confiante!\n`;
   } else if (agendamento.atividade === 'CASV') {
-    mensagem += `\n📋 *Para a Coleta CASV:*\n`;
-    mensagem += `• Leve o passaporte original\n`;
-    mensagem += `• Confirme o local exato no dia\n`;
-    mensagem += `• Não precisa levar documentos comprobatórios\n`;
+    mensagem += `\n📋 *Para a Coleta CASV:*\n• Leve o passaporte original\n• Confirme o local exato no dia\n• Não precisa levar documentos comprobatórios\n`;
   } else if (agendamento.atividade === 'RETIRADA PASSAPORTE') {
-    mensagem += `\n📋 *Retirada do passaporte:*\n`;
-    mensagem += `• Leve o comprovante de agendamento\n`;
-    mensagem += `• Documento de identificação original\n`;
+    mensagem += `\n📋 *Retirada do passaporte:*\n• Leve o comprovante de agendamento\n• Documento de identificação original\n`;
   }
   
-  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
-  mensagem += `📌 *Digite MENU para voltar ao início* 🚀`;
+  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
   
   let telefoneLimpo = telefone.toString().replace(/\D/g, '');
-  if (telefoneLimpo.startsWith('55')) {
-    telefoneLimpo = telefoneLimpo.substring(2);
-  }
+  if (telefoneLimpo.startsWith('55')) telefoneLimpo = telefoneLimpo.substring(2);
   
   await enviarWhatsApp(telefoneLimpo, mensagem);
   console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade} em ${agendamento.data}`);
@@ -1828,9 +1840,7 @@ async function verificarLembretes() {
     for (const ag of agendamentos) {
       const dataAgenda = new Date(ag.data);
       dataAgenda.setHours(0, 0, 0, 0);
-      
       const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
-      
       const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
       
       if (!telefone) {
@@ -1840,23 +1850,13 @@ async function verificarLembretes() {
       
       if (diffDays === 3 && !ag.lembrete_3d_enviado) {
         await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
-        
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_3d_enviado: true })
-          .eq('id', ag.id);
-          
+        await supabase.from('compromissos').update({ lembrete_3d_enviado: true }).eq('id', ag.id);
         console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
       }
       
       if (diffDays === 1 && !ag.lembrete_1d_enviado) {
         await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
-        
-        await supabase
-          .from('compromissos')
-          .update({ lembrete_1d_enviado: true })
-          .eq('id', ag.id);
-          
+        await supabase.from('compromissos').update({ lembrete_1d_enviado: true }).eq('id', ag.id);
         console.log(`✅ Lembrete 1 dia enviado para ${ag.cliente}`);
       }
     }
