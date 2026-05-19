@@ -1594,7 +1594,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `📞 *FALAR COM ESPECIALISTA*\n\n` +
         `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
         `*Contato direto:*\n` +
-        `🐱‍👤 *WhatsApp:* https://wa.me/5521985234917\n\n` +
+        `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
         `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
         `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
