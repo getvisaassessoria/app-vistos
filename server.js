@@ -20,6 +20,55 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ==================== ANTI-SPAM ====================
+function isSpamData(dados) {
+  const nome = dados.nome || dados.nome_cliente || dados.full_name || '';
+  const telefone = dados.telefone || dados.whatsapp || dados.telefone_whatsapp || '';
+  const email = dados.email || '';
+  
+  // Nome com 10+ letras sem espaço (spam)
+  if (/^[a-z]{10,}$/i.test(nome)) {
+    console.log('🚫 Spam: nome aleatório', nome);
+    return true;
+  }
+  
+  // Nome com 4+ consoantes seguidas
+  if (/[bcdfghjklmnpqrstvwxyz]{4,}/i.test(nome)) {
+    console.log('🚫 Spam: muitas consoantes', nome);
+    return true;
+  }
+  
+  // Nome muito curto
+  if (nome.length > 0 && nome.length < 3) {
+    console.log('🚫 Spam: nome muito curto', nome);
+    return true;
+  }
+  
+  // Telefone com letras
+  if (telefone && /[a-zA-Z]/.test(telefone)) {
+    console.log('🚫 Spam: telefone com letras', telefone);
+    return true;
+  }
+  
+  // Telefone inválido
+  const telefoneLimpo = telefone?.toString().replace(/\D/g, '') || '';
+  if (telefoneLimpo.length > 0 && telefoneLimpo.length < 10) {
+    console.log('🚫 Spam: telefone curto', telefone);
+    return true;
+  }
+  
+  // Email temporário
+  const dominiosSpam = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway'];
+  for (const dominio of dominiosSpam) {
+    if (email.toLowerCase().includes(dominio)) {
+      console.log('🚫 Spam: email temporário', email);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 // ==================== FUNÇÃO AUXILIAR PARA ENVIAR WHATSAPP ====================
 async function enviarWhatsApp(telefone, mensagem) {
   try {
@@ -233,6 +282,12 @@ function drawSectionTitle(doc, title) {
 // ==================== ROTA DS-160 ====================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
+  
+  // ANTI-SPAM
+  if (isSpamData(data)) {
+    console.log('🚫 SPAM DS-160 - Dados rejeitados');
+    return res.status(200).json({ success: true, message: 'Recebido' });
+  }
   
   const validation = validateDS160(data);
   if (!validation.isValid) {
@@ -828,6 +883,13 @@ app.post('/api/submit-ds160', async (req, res) => {
 // ==================== ROTA AVALIAÇÃO NORMAL (SIMULADOR) ====================
 app.post('/api/submit-avaliacao', async (req, res) => {
   const data = req.body;
+  
+  // ANTI-SPAM
+  if (isSpamData(data)) {
+    console.log('🚫 SPAM Avaliação - Dados rejeitados');
+    return res.status(200).json({ success: true, message: 'Recebido' });
+  }
+  
   console.log('📥 Dados da Avaliação Normal recebidos:', JSON.stringify(data, null, 2));
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
@@ -874,7 +936,7 @@ app.post('/api/submit-avaliacao', async (req, res) => {
           
           const primeiroNome = nome.split(' ')[0];
           let mensagemWhats = `Olá, ${primeiroNome}! Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
-          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\nComo posso ajudar? 🚀`;
+          mensagemWhats += `✅ *Podemos dar início ao seu processo?*\n• Digite *SIM* para o link do DS-160\n• Digite *NÃO* para tirar dúvidas\n\n📌 *Digite MENU para voltar ao início* 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagemWhats);
         }
@@ -888,6 +950,13 @@ app.post('/api/submit-avaliacao', async (req, res) => {
 // ==================== ROTA PASSAPORTE ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
+  
+  // ANTI-SPAM
+  if (isSpamData(data)) {
+    console.log('🚫 SPAM Passaporte - Dados rejeitados');
+    return res.status(200).json({ success: true, message: 'Recebido' });
+  }
+  
   console.log('📥 Dados de passaporte recebidos');
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
@@ -1032,6 +1101,13 @@ app.post('/api/submit-passaporte', async (req, res) => {
 // ==================== ROTA VISTO NEGADO ====================
 app.post('/api/submit-visto-negado', async (req, res) => {
   const data = req.body;
+  
+  // ANTI-SPAM
+  if (isSpamData(data)) {
+    console.log('🚫 SPAM Visto Negado - Dados rejeitados');
+    return res.status(200).json({ success: true, message: 'Recebido' });
+  }
+  
   console.log('📥 Dados de Visto Negado recebidos:', data);
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
@@ -1063,7 +1139,7 @@ app.post('/api/submit-visto-negado', async (req, res) => {
         mensagemWhats += `✅ Preparação para entrevista\n\n`;
         mensagemWhats += `💰 *Investimento:* Taxa Consular (~R$ 950) + Assessoria Especializada (R$ 380)\n\n`;
         mensagemWhats += `Podemos iniciar o processo de reversão hoje? 🚀\n\n`;
-        mensagemWhats += `*Falar com especialista:* https://wa.me/5521974601812`;
+        mensagemWhats += `📌 *Digite MENU para voltar ao início* 🚀`;
         
         await enviarWhatsApp(telefoneCliente, mensagemWhats);
       }
@@ -1362,22 +1438,40 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // ==========================================================
-    // FLUXO: RESPOSTAS POR COMANDO (para qualquer usuário)
+    // FLUXO: RESPOSTAS POR COMANDO
+    // TODAS incluem opção de voltar ao MENU
     // ==========================================================
+    
+    // COMANDO: MENU (sempre disponível)
+    if (messageText === 'menu' || messageText === 'MENU' || messageText === 'voltar' || messageText === 'início' || messageText === 'inicio') {
+      const resposta = 
+        `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
+        `1️⃣ 💰 PREÇO\n` +
+        `2️⃣ ⏰ PRAZO\n` +
+        `3️⃣ 📄 DOCUMENTOS\n` +
+        `4️⃣ 📋 PROCESSO\n` +
+        `5️⃣ ⚠️ VISTO NEGADO\n` +
+        `6️⃣ 📞 AJUDA\n` +
+        `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
+        `*Digite o número da opção (1 a 7):* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      console.log('✅ MENU enviado');
+      return;
+    }
     
     // COMANDO: PREÇO (1)
     if (messageText === '1' || messageText === 'preço' || messageText === 'preco' || messageText.includes('quanto custa')) {
       const resposta = 
         `💰 *INVESTIMENTO*\n\n` +
         `🇺🇸 *Taxa Consular:* ~R$ 950\n` +
-        `📋 *Assessoria GetVisa:* R$ 350 (2x R$ 175)\n\n` +
+        `📋 *Assessoria GetVisa:* R$ 350\n\n` +
         `*O que a assessoria inclui:*\n` +
         `✅ Análise completa do perfil\n` +
         `✅ Preenchimento do DS-160\n` +
         `✅ Agendamento da entrevista\n` +
         `✅ Preparação para entrevista\n` +
         `✅ Acompanhamento total\n\n` +
-        `Digite *2* para PRAZO, *7* para AVALIAÇÃO GRATUITA ou *MENU* para opções 🚀`;
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PREÇO enviada');
       return;
@@ -1391,8 +1485,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `🔍 *Análise consular:* 7 a 10 dias úteis\n` +
         `📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n` +
         `🕒 *Total estimado:* 30 a 40 dias\n\n` +
-        `*Acelere seu processo com nossa assessoria!*\n\n` +
-        `Digite *1* para PREÇO, *7* para AVALIAÇÃO GRATUITA ou *MENU* 🚀`;
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PRAZO enviada');
       return;
@@ -1410,9 +1503,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `📌 *RECOMENDADOS:*\n` +
         `• Comprovante de renda\n` +
         `• Extratos bancários (3 meses)\n` +
-        `• Comprovante de imóvel\n` +
-        `• Carteira de trabalho\n\n` +
-        `Digite *1* para PREÇO, *2* para PRAZO ou *7* para AVALIAÇÃO 🚀`;
+        `• Comprovante de imóvel/veículo\n\n` +
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de DOCUMENTOS enviada');
       return;
@@ -1429,7 +1521,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `5️⃣ Coleta biométrica (CASV)\n` +
         `6️⃣ Entrevista no Consulado\n` +
         `7️⃣ Retirada do passaporte\n\n` +
-        `Digite *1* para PREÇO, *2* para PRAZO ou *7* para AVALIAÇÃO 🚀`;
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de PROCESSO enviada');
       return;
@@ -1446,7 +1538,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `✅ Documentação reforçada\n` +
         `✅ Preparação intensiva\n\n` +
         `💰 *Assessoria especializada:* R$ 380\n\n` +
-        `Digite *6* para falar com especialista ou *7* para avaliação 🚀`;
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de VISTO NEGADO enviada');
       return;
@@ -1459,8 +1551,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
         `*Contato direto:*\n` +
         `🐱‍👤 *WhatsApp:* https://wa.me/5521985234917\n\n` +
-        `*Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-        `Digite *MENU* para voltar 💬`;
+        `📅 *Agende consultoria:* https://calendly.com/getvisa/consultoria\n\n` +
+        `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de AJUDA enviada');
       return;
@@ -1474,26 +1567,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n` +
         `⏱️ Menos de 2 minutos!\n\n` +
         `Após o simulador, seus resultados chegarão aqui! 🚀\n\n` +
-        `Digite *MENU* para voltar`;
+        `📌 *Digite MENU para voltar ao início* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ Resposta de AVALIAÇÃO enviada');
-      return;
-    }
-    
-    // COMANDO: MENU
-    if (messageText === 'menu' || messageText === 'opções' || messageText === 'opcoes') {
-      const resposta = 
-        `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
-        `1️⃣ 💰 PREÇO\n` +
-        `2️⃣ ⏰ PRAZO\n` +
-        `3️⃣ 📄 DOCUMENTOS\n` +
-        `4️⃣ 📋 PROCESSO\n` +
-        `5️⃣ ⚠️ VISTO NEGADO\n` +
-        `6️⃣ 📞 AJUDA\n` +
-        `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-        `*Digite o número da opção (1 a 7):* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      console.log('✅ MENU enviado');
       return;
     }
     
@@ -1523,6 +1599,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
 // ==================== ROTA ESPECÍFICA PARA O SIMULADOR DE 5 ETAPAS ====================
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
+  
+  // ANTI-SPAM
+  if (isSpamData(data)) {
+    console.log('🚫 SPAM Simulador - Dados rejeitados');
+    return res.status(200).json({ success: true, message: 'Recebido' });
+  }
+  
   console.log('📥 Simulador 5 etapas recebido:', data);
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
@@ -1582,7 +1665,8 @@ app.post('/api/submit-simulador', async (req, res) => {
           }
           
           mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
-          mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160. 🚀`;
+          mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160.\n\n`;
+          mensagem += `📌 *Digite MENU para voltar ao início* 🚀`;
           
           await enviarWhatsApp(telefoneCliente, mensagem);
         }
@@ -1667,7 +1751,7 @@ async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, dia
   }
   
   mensagem += `\nBoa sorte! 🍀🇺🇸\n\n`;
-  mensagem += `Digite *MEUS AGENDAMENTOS* para ver todos os seus compromissos.`;
+  mensagem += `📌 *Digite MENU para voltar ao início* 🚀`;
   
   let telefoneLimpo = telefone.toString().replace(/\D/g, '');
   if (telefoneLimpo.startsWith('55')) {
