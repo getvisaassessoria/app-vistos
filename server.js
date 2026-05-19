@@ -1574,6 +1574,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
       const resposta = 
         `⚠️ *VISTO NEGADO?*\n\n` +
         `Não desanime! Muitos casos são revertidos.\n\n` +
+        `📊 *Faça uma análise gratuita do seu caso:*\n` +
+        `🔗 https://getvisa.com.br/visto-americano-negado\n\n` +
         `*O que fazemos:*\n` +
         `✅ Análise do motivo da negativa\n` +
         `✅ Correção do DS-160\n` +
@@ -1593,7 +1595,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
         `*Contato direto:*\n` +
         `🐱‍👤 *WhatsApp:* https://wa.me/5521985234917\n\n` +
-        `📅 *Agende consultoria:* https://calendly.com/getvisa/consultoria\n\n` +
         `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
         `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       await sendReply(cleanPhone, resposta);
