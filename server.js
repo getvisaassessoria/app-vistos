@@ -1656,6 +1656,69 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
+        // ==========================================================
+    // DETECTAR INTENÇÃO DE CONTRATAÇÃO
+    // ==========================================================
+    
+    const intencoesContratacao = [
+      'quero contratar', 'contratar', 'quero fechar', 'fechar', 
+      'quero assinar', 'assinar', 'quero comprar', 'comprar',
+      'contrato', 'quero o serviço', 'vamos fechar', 'quero contratar visto',
+      'quero o visto', 'me inscrever', 'inscrição', 'quero sim'
+    ];
+    
+    const contratarDetectado = intencoesContratacao.some(frase => messageText.includes(frase));
+    
+    if (contratarDetectado) {
+      let linkContratacao = '';
+      
+      // Define o link correto baseado no menu atual
+      switch (state.currentMenu) {
+        case 'visto_americano':
+          linkContratacao = 'https://getvisa.com.br/formulario-ds160';
+          break;
+        case 'visto_canadense':
+          linkContratacao = 'https://getvisa.com.br/formulario-visto-canadense';
+          break;
+        case 'visto_australiano':
+          linkContratacao = 'https://getvisa.com.br/formulario-visto-australiano';
+          break;
+        case 'eta_uk':
+          linkContratacao = 'https://getvisa.com.br/formulario-eta-uk';
+          break;
+        case 'eta_canadense':
+          linkContratacao = 'https://getvisa.com.br/formulario-eta-canadense';
+          break;
+        case 'passaporte':
+          linkContratacao = 'https://getvisa.com.br/formulario-passaporte';
+          break;
+        default:
+          linkContratacao = 'https://getvisa.com.br/formulario-ds160';
+      }
+      
+      let nomeServico = '';
+      switch (state.currentMenu) {
+        case 'visto_americano': nomeServico = 'VISTO AMERICANO'; break;
+        case 'visto_canadense': nomeServico = 'VISTO CANADENSE'; break;
+        case 'visto_australiano': nomeServico = 'VISTO AUSTRALIANO'; break;
+        case 'eta_uk': nomeServico = 'eTA UK'; break;
+        case 'eta_canadense': nomeServico = 'eTA CANADENSE'; break;
+        case 'passaporte': nomeServico = 'PASSAPORTE'; break;
+        default: nomeServico = 'VISTO AMERICANO';
+      }
+      
+      const respostaContratacao = 
+        `🎉 *Ótimo! Vamos começar seu ${nomeServico}* 🎉\n\n` +
+        `📋 *Preencha nosso formulário de pré-cadastro:*\n` +
+        `🔗 ${linkContratacao}\n\n` +
+        `✅ Após o envio, nossa equipe entrará em contato em até 24h.\n\n` +
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      
+      await sendReply(cleanPhone, respostaContratacao);
+      console.log(`✅ Detected intenção de contratar - encaminhando para ${linkContratacao}`);
+      return;
+    }
+
     // Mensagem não reconhecida
     const naoReconhecido = 
       `😊 *Sua pergunta não foi respondida?*\n\n` +
