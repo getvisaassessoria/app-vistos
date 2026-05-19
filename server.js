@@ -1376,23 +1376,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
   try {
     const body = req.body;
     
-    // No início do webhook, adicione esta condição ANTES de todas
-if (messageText === '0' || messageText === 'menu' || messageText === 'voltar') {
-  const resposta = 
-    `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
-    `1️⃣ 💰 PREÇO\n` +
-    `2️⃣ ⏰ PRAZO\n` +
-    `3️⃣ 📄 DOCUMENTOS\n` +
-    `4️⃣ 📋 PROCESSO\n` +
-    `5️⃣ ⚠️ VISTO NEGADO\n` +
-    `6️⃣ 📞 AJUDA\n` +
-    `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-    `*Digite o número da opção (1 a 7) ou 0 para MENU:* 🚀`;
-  await sendReply(cleanPhone, resposta);
-  console.log('✅ MENU enviado via 0');
-  return;
-}
-    
     // Ignora mensagens próprias e de status
     if (body.fromMe === true) {
       console.log('📤 Mensagem própria, ignorando');
@@ -1459,8 +1442,8 @@ if (messageText === '0' || messageText === 'menu' || messageText === 'voltar') {
     // TODAS incluem opção de voltar ao MENU
     // ==========================================================
     
-    // COMANDO: MENU (sempre disponível)
-    if (messageText === 'menu' || messageText === 'MENU' || messageText === 'voltar' || messageText === 'início' || messageText === 'inicio') {
+    // COMANDO: 0 ou MENU (voltar ao menu principal)
+    if (messageText === '0' || messageText === 'menu' || messageText === 'voltar' || messageText === 'início' || messageText === 'inicio') {
       const resposta = 
         `🇺🇸 *GETVISA - MENU PRINCIPAL* 🇺🇸\n\n` +
         `1️⃣ 💰 PREÇO\n` +
@@ -1470,7 +1453,7 @@ if (messageText === '0' || messageText === 'menu' || messageText === 'voltar') {
         `5️⃣ ⚠️ VISTO NEGADO\n` +
         `6️⃣ 📞 AJUDA\n` +
         `7️⃣ 📊 AVALIAÇÃO GRATUITA\n\n` +
-        `*Digite o número da opção (1 a 7):* 🚀`;
+        `*Digite o número da opção (1 a 7) ou 0 para MENU:* 🚀`;
       await sendReply(cleanPhone, resposta);
       console.log('✅ MENU enviado');
       return;
