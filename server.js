@@ -1017,32 +1017,40 @@ app.post('/api/submit-avaliacao', async (req, res) => {
   })();
 });
 
-// ==================== ROTA PASSAPORTE ====================
+// ==================== ROTA PASSAPORTE CORRIGIDA ====================
 app.post('/api/submit-passaporte', async (req, res) => {
   const data = req.body;
+  
+  console.log('📥 Dados de passaporte recebidos:', JSON.stringify(data, null, 2));
+  console.log('🔍 Campos recebidos:', Object.keys(data));
   
   if (isSpamData(data)) {
     console.log('🚫 SPAM Passaporte - Dados rejeitados');
     return res.status(200).json({ success: true, message: 'Recebido' });
   }
   
-  console.log('📥 Dados de passaporte recebidos');
   res.status(200).json({ success: true, message: 'Requisição recebida, processando...' });
 
   (async () => {
     try {
+      // CORREÇÃO: Usar os nomes de campos CORRETOS (sem prefixo passaporte_)
+      const nome = data['nome_completo'] || data['passaporte_nome'] || 'Cliente_Sem_Nome';
+      const emailCliente = data['email'] || data['passaporte_email'] || null;
+      const telefoneCliente = data['celular'] || data['telefone'] || data['passaporte_telefone'] || null;
+      
       let solicitacaoId = null;
       try {
         const { data: cliente, error: clienteError } = await supabase
           .from('clientes')
           .upsert({
-            email: data['passaporte_email'] || null,
-            nome_completo: data['passaporte_nome'] || null,
-            telefone: data['passaporte_telefone'] || null
+            email: emailCliente,
+            nome_completo: nome,
+            telefone: telefoneCliente
           }, { onConflict: 'email' })
           .select()
           .single();
-        if (!clienteError) {
+          
+        if (!clienteError && cliente) {
           const { data: solicitacao, error: solError } = await supabase
             .from('solicitacoes')
             .insert({
@@ -1060,9 +1068,7 @@ app.post('/api/submit-passaporte', async (req, res) => {
         console.error('⚠️ Erro ao salvar passaporte:', supabaseErr.message);
       }
 
-      const nome = data['passaporte_nome'] || 'Cliente_Sem_Nome';
-      const emailCliente = data['passaporte_email'] || null;
-
+      // GERAR PDF COM OS CAMPOS CORRETOS
       const pdfBuffer = await new Promise((resolve, reject) => {
         const doc = new PDFDocument({ margin: 50 });
         const buffers = [];
@@ -1076,63 +1082,90 @@ app.post('/api/submit-passaporte', async (req, res) => {
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
+        // Mapeamento CORRETO dos campos do HTML para o PDF
         const fields = [
-          { label: 'Nome completo', name: 'passaporte_nome' },
-          { label: 'Sexo', name: 'passaporte_sexo' },
-          { label: 'Data de nascimento', name: 'passaporte_data_nasc' },
-          { label: 'Raca/Cor', name: 'passaporte_raca' },
-          { label: 'Estado civil', name: 'passaporte_estado_civil' },
-          { label: 'Pais de nascimento', name: 'passaporte_pais_nasc' },
-          { label: 'UF de nascimento', name: 'passaporte_uf_nasc' },
-          { label: 'Cidade de nascimento', name: 'passaporte_cidade_nasc' },
-          { label: 'Alteracao de nome?', name: 'passaporte_alterou_nome' },
-          { label: 'Nome(s) anterior(es)', name: 'passaporte_nome_anterior' },
-          { label: 'Tipo de documento', name: 'passaporte_tipo_doc' },
-          { label: 'Numero do documento', name: 'passaporte_numero_doc' },
-          { label: 'Data de emissao do documento', name: 'passaporte_data_emissao_doc' },
-          { label: 'Orgao emissor e UF', name: 'passaporte_orgao_emissor' },
-          { label: 'CPF', name: 'passaporte_cpf' },
-          { label: 'Possui certidao?', name: 'passaporte_certidao' },
-          { label: 'Certidao - Numero da matricula', name: 'passaporte_certidao_numero' },
-          { label: 'Certidao - Cartorio', name: 'passaporte_certidao_cartorio' },
-          { label: 'Certidao - Livro', name: 'passaporte_certidao_livro' },
-          { label: 'Certidao - Folha', name: 'passaporte_certidao_folha' },
-          { label: 'Profissao', name: 'passaporte_profissao' },
-          { label: 'E-mail', name: 'passaporte_email' },
-          { label: 'Telefone de contato', name: 'passaporte_telefone' },
-          { label: 'Endereco residencial', name: 'passaporte_endereco' },
-          { label: 'Cidade', name: 'passaporte_cidade' },
-          { label: 'UF', name: 'passaporte_uf' },
-          { label: 'CEP', name: 'passaporte_cep' },
-          { label: 'Possui titulo de eleitor?', name: 'passaporte_titulo_eleitor' },
-          { label: 'Titulo - Numero', name: 'passaporte_titulo_numero' },
-          { label: 'Titulo - Zona', name: 'passaporte_titulo_zona' },
-          { label: 'Titulo - Secao', name: 'passaporte_titulo_secao' },
-          { label: 'Situacao militar', name: 'passaporte_situacao_militar' },
-          { label: 'Certificado de reservista', name: 'passaporte_reservista_numero' },
-          { label: 'Situacao do passaporte anterior', name: 'passaporte_situacao' },
+          { label: 'Nome completo', name: 'nome_completo' },
+          { label: 'Sexo', name: 'sexo' },
+          { label: 'Data de nascimento', name: 'data_nascimento' },
+          { label: 'Estado civil', name: 'estado_civil' },
+          { label: 'Raca/Cor', name: 'raca' },
+          { label: 'Nacionalidade', name: 'nacionalidade' },
+          { label: 'Naturalidade (cidade)', name: 'naturalidade_cidade' },
+          { label: 'UF de nascimento', name: 'naturalidade_uf' },
+          { label: 'Pais de nascimento', name: 'pais_nascimento' },
+          { label: 'Alteracao de nome?', name: 'alterou_nome' },
+          { label: 'Motivo da alteracao', name: 'motivo_alteracao' },
+          { label: 'Nome anterior', name: 'nome_anterior' },
+          { label: 'Nome da mae', name: 'mae_nome' },
+          { label: 'Nacionalidade da mae', name: 'mae_nacionalidade' },
+          { label: 'Nome do pai', name: 'pai_nome' },
+          { label: 'Nacionalidade do pai', name: 'pai_nacionalidade' },
+          { label: 'Tipo de documento', name: 'tipo_documento' },
+          { label: 'Numero do documento', name: 'documento_numero' },
+          { label: 'Data de emissao do documento', name: 'documento_emissao' },
+          { label: 'Orgao emissor', name: 'documento_orgao' },
+          { label: 'UF de expedicao', name: 'documento_uf' },
+          { label: 'CPF', name: 'cpf' },
+          { label: 'Possui certidao?', name: 'tem_certidao' },
+          { label: 'Certidao - Tipo', name: 'certidao_tipo' },
+          { label: 'Certidao - Termo', name: 'certidao_termo' },
+          { label: 'Certidao - Livro', name: 'certidao_livro' },
+          { label: 'Certidao - Folha', name: 'certidao_folha' },
+          { label: 'Certidao - Cartorio', name: 'certidao_cartorio' },
+          { label: 'Certidao - Cidade', name: 'certidao_cidade' },
+          { label: 'Certidao - UF', name: 'certidao_uf' },
+          { label: 'Possui titulo de eleitor?', name: 'tem_titulo' },
+          { label: 'Titulo - Numero', name: 'titulo_numero' },
+          { label: 'Titulo - Zona', name: 'titulo_zona' },
+          { label: 'Titulo - Secao', name: 'titulo_secao' },
+          { label: 'Titulo - UF', name: 'titulo_uf' },
+          { label: 'Profissao', name: 'profissao' },
+          { label: 'E-mail', name: 'email' },
+          { label: 'Telefone celular', name: 'celular' },
+          { label: 'Telefone fixo', name: 'fixo' },
+          { label: 'CEP', name: 'cep' },
+          { label: 'Logradouro', name: 'logradouro' },
+          { label: 'Numero', name: 'numero' },
+          { label: 'Complemento', name: 'complemento' },
+          { label: 'Bairro', name: 'bairro' },
+          { label: 'Cidade', name: 'cidade' },
+          { label: 'UF', name: 'uf' },
+          { label: 'Situacao do passaporte anterior', name: 'situacao_passaporte' },
           { label: 'Numero do passaporte anterior', name: 'passaporte_anterior_numero' },
-          { label: 'Data de expedicao anterior', name: 'passaporte_anterior_data_exp' },
-          { label: 'Data de validade anterior', name: 'passaporte_anterior_validade' }
+          { label: 'Data de expedicao anterior', name: 'passaporte_anterior_expedicao' },
+          { label: 'Data de validade anterior', name: 'passaporte_anterior_validade' },
+          { label: 'Boletim de ocorrencia', name: 'boletim_ocorrencia' },
+          { label: 'Autorizacao para menor', name: 'autorizacao_menor' }
         ];
 
-        let lastGroup = null;
+        let count = 0;
         for (const field of fields) {
           let value = data[field.name];
-          if (value && value !== '') {
-            if (field.name.includes('data') || field.name.includes('nasc')) {
+          if (value && value !== '' && value !== 'nao' && value !== 'não') {
+            // Formatar datas
+            if (field.name.includes('data') || field.name.includes('nascimento') || 
+                field.name.includes('emissao') || field.name.includes('expedicao') ||
+                field.name.includes('validade')) {
               value = formatDateToBrazilian(value);
             }
-            if (lastGroup !== null) {
-              doc.moveDown(0.3);
-              doc.strokeColor('#e0e0e0').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-              doc.moveDown(0.3);
-            }
+            
             doc.font('Helvetica-Bold').fontSize(10).text(`${field.label}: `, { continued: true });
             doc.font('Helvetica').text(value);
-            doc.moveDown(0.6);
-            lastGroup = field.name;
+            doc.moveDown(0.5);
+            count++;
           }
+        }
+        
+        // Se nenhum campo foi preenchido, mostrar mensagem
+        if (count === 0) {
+          doc.font('Helvetica').fontSize(12).fillColor('red')
+            .text('⚠️ NENHUM DADO RECEBIDO', { align: 'center' });
+          doc.moveDown(1);
+          doc.font('Helvetica').fontSize(10).fillColor('black')
+            .text('Os seguintes campos foram recebidos:', { align: 'center' });
+          Object.keys(data).forEach(key => {
+            doc.text(`- ${key}: ${data[key]}`, { align: 'center' });
+          });
         }
 
         doc.moveDown(2);
@@ -1140,27 +1173,50 @@ app.post('/api/submit-passaporte', async (req, res) => {
         doc.end();
       });
 
-      console.log(`📄 PDF gerado para passaporte de ${nome}, tamanho: ${pdfBuffer.length} bytes`);
+      console.log(`📄 PDF gerado para passaporte de ${nome}, tamanho: ${pdfBuffer.length} bytes, campos: ${Object.keys(data).length}`);
 
+      // Enviar email para a equipe
       await resend.emails.send({
         from: 'GetVisa <contato@getvisa.com.br>',
         to: ['getvisa.assessoria@gmail.com'],
         subject: `📘 Passaporte: ${nome}`,
-        html: `<strong>Solicitacao de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ${nome}</p><p>PDF em anexo.</p>`,
-        attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+        html: `<strong>Solicitacao de passaporte recebida.</strong><br>
+               <p><strong>Cliente:</strong> ${nome}</p>
+               <p><strong>Email:</strong> ${emailCliente || 'Nao informado'}</p>
+               <p><strong>Telefone:</strong> ${telefoneCliente || 'Nao informado'}</p>
+               <p><strong>Campos recebidos:</strong> ${Object.keys(data).length}</p>
+               <p>PDF em anexo (${pdfBuffer.length} bytes).</p>`,
+        attachments: [{ 
+          filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, 
+          content: pdfBuffer.toString('base64') 
+        }]
       });
       console.log('✅ E-mail enviado para a equipe (passaporte)');
 
+      // Enviar confirmação para o cliente
       if (emailCliente && emailCliente.trim() !== '') {
         await resend.emails.send({
           from: 'GetVisa <contato@getvisa.com.br>',
           to: [emailCliente],
           subject: `Sua solicitacao de passaporte foi recebida - ${nome}`,
-          html: `<strong>Ola ${nome},</strong><br><p>Recebemos sua solicitacao. Em breve nossa equipe entrara em contato.</p><p>Segue em anexo uma copia.</p>`,
-          attachments: [{ filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, content: pdfBuffer.toString('base64') }]
+          html: `<strong>Olá ${nome},</strong><br>
+                 <p>Recebemos sua solicitação de passaporte com sucesso!</p>
+                 <p><strong>Próximos passos:</strong></p>
+                 <ul>
+                   <li>✅ Nossa equipe irá analisar seus documentos</li>
+                   <li>✅ Entraremos em contato em até 24h para agendar o atendimento na Polícia Federal</li>
+                   <li>✅ Você receberá todas as instruções para emissão do passaporte</li>
+                 </ul>
+                 <p>Segue em anexo uma cópia da sua solicitação.</p>
+                 <p>Atenciosamente,<br>Equipe GetVisa</p>`,
+          attachments: [{ 
+            filename: `Passaporte_${nome.replace(/[^a-z0-9]/gi, '_')}.pdf`, 
+            content: pdfBuffer.toString('base64') 
+          }]
         });
         console.log(`✅ E-mail enviado para o cliente (passaporte): ${emailCliente}`);
       }
+      
     } catch (err) {
       console.error('❌ Erro no processamento do passaporte (background):', err);
     }
@@ -1656,7 +1712,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-        // ==========================================================
+     // ==========================================================
     // DETECTAR INTENÇÃO DE CONTRATAÇÃO
     // ==========================================================
     
@@ -1664,47 +1720,45 @@ app.post('/api/webhook/zapi', async (req, res) => {
       'quero contratar', 'contratar', 'quero fechar', 'fechar', 
       'quero assinar', 'assinar', 'quero comprar', 'comprar',
       'contrato', 'quero o serviço', 'vamos fechar', 'quero contratar visto',
-      'quero o visto', 'me inscrever', 'inscrição', 'quero sim'
+      'quero o visto', 'me inscrever', 'inscrição', 'quero sim',
+      'quero fazer', 'fazer o visto', 'iniciar processo'
     ];
     
     const contratarDetectado = intencoesContratacao.some(frase => messageText.includes(frase));
     
     if (contratarDetectado) {
       let linkContratacao = '';
+      let nomeServico = '';
       
       // Define o link correto baseado no menu atual
       switch (state.currentMenu) {
         case 'visto_americano':
           linkContratacao = 'https://getvisa.com.br/formulario-ds160';
+          nomeServico = 'VISTO AMERICANO';
           break;
         case 'visto_canadense':
-          linkContratacao = 'https://getvisa.com.br/formulario-visto-canadense';
+          linkContratacao = 'https://getvisa.com.br/simulador-visto-canadense/';
+          nomeServico = 'VISTO CANADENSE';
           break;
         case 'visto_australiano':
-          linkContratacao = 'https://getvisa.com.br/formulario-visto-australiano';
+          linkContratacao = 'https://getvisa.com.br/simulador-visto-australiano/';
+          nomeServico = 'VISTO AUSTRALIANO';
           break;
         case 'eta_uk':
-          linkContratacao = 'https://getvisa.com.br/formulario-eta-uk';
+          linkContratacao = 'https://getvisa.com.br/simulador-eta-uk';
+          nomeServico = 'eTA UK (REINO UNIDO)';
           break;
         case 'eta_canadense':
-          linkContratacao = 'https://getvisa.com.br/formulario-eta-canadense';
+          linkContratacao = 'https://getvisa.com.br/simulador-eta-canadense';
+          nomeServico = 'eTA CANADENSE';
           break;
         case 'passaporte':
-          linkContratacao = 'https://getvisa.com.br/formulario-passaporte';
+          linkContratacao = 'https://getvisa.com.br/formulario-passaporte/';
+          nomeServico = 'PASSAPORTE';
           break;
         default:
           linkContratacao = 'https://getvisa.com.br/formulario-ds160';
-      }
-      
-      let nomeServico = '';
-      switch (state.currentMenu) {
-        case 'visto_americano': nomeServico = 'VISTO AMERICANO'; break;
-        case 'visto_canadense': nomeServico = 'VISTO CANADENSE'; break;
-        case 'visto_australiano': nomeServico = 'VISTO AUSTRALIANO'; break;
-        case 'eta_uk': nomeServico = 'eTA UK'; break;
-        case 'eta_canadense': nomeServico = 'eTA CANADENSE'; break;
-        case 'passaporte': nomeServico = 'PASSAPORTE'; break;
-        default: nomeServico = 'VISTO AMERICANO';
+          nomeServico = 'VISTO AMERICANO';
       }
       
       const respostaContratacao = 
@@ -1715,7 +1769,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       
       await sendReply(cleanPhone, respostaContratacao);
-      console.log(`✅ Detected intenção de contratar - encaminhando para ${linkContratacao}`);
+      console.log(`✅ Intenção de contratar detectada - ${nomeServico}: ${linkContratacao}`);
       return;
     }
 
