@@ -1569,6 +1569,31 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ==========================================================
+// DETECTAR PERGUNTAS SOBRE VISTO AMERICANO (SEM NÚMEROS)
+// ==========================================================
+if (messageText.includes('visto americano') || 
+    messageText.includes('visto eua') ||
+    messageText.includes('visto para eua') ||
+    messageText.includes('visto estados unidos')) {
+  state.currentMenu = 'visto_americano';
+  userState.set(cleanPhone, state);
+  
+  const resposta = 
+    `🇺🇸 *VISTO AMERICANO*\n\n` +
+    `1️⃣ 💰 PREÇO\n` +
+    `2️⃣ ⏰ PRAZO\n` +
+    `3️⃣ 📄 DOCUMENTOS\n` +
+    `4️⃣ 📋 PROCESSO\n` +
+    `5️⃣ ⚠️ VISTO NEGADO\n` +
+    `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+    `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+    `*Digite o número da opção desejada:* 🚀`;
+  
+  await sendReply(cleanPhone, resposta);
+  return;
+}
+
+    // ==========================================================
     // MENU PRINCIPAL
     // ==========================================================
     if (state.currentMenu === 'main') {
