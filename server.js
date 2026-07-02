@@ -1394,7 +1394,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         default:
           // Se não for um comando reconhecido, mostrar menu principal
           const menuPrincipal =
-            `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
+            `🇺🇸 *GETVISA - COMO PODEMOS AJUDAR?* 🇺🇸\n\n` +
             `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
             `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
             `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
