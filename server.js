@@ -1719,7 +1719,7 @@ if (messageText.includes('visto americano') ||
       } 
       // Opção 6: Avaliação Gratuita
       else if (messageText === '6') {
-        resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*\n\nDescubra suas chances de aprovação!\n\n🔗 https://getvisa.com.br/simulador-visto-americano-4917\n\n⏱️ Menos de 2 minutos!\n\nApós o simulador, seus resultados chegarão aqui! 🚀\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*\n\nDescubra suas chances de aprovação!\n\n🔗 https://getvisa.com.br/simulador-visto-americano\n\n⏱️ Menos de 2 minutos!\n\nApós o simulador, seus resultados chegarão aqui! 🚀\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       }
       // Opção 5 do passaporte: ONDE FAZER
       else if (state.currentMenu === 'passaporte' && messageText === '5') {
