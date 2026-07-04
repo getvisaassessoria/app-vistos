@@ -1552,7 +1552,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - COM SUBMENU PRIORITÁRIO
+//  WEBHOOK Z-API - SOLUÇÃO DEFINITIVA
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1561,9 +1561,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
   try {
     const body = req.body;
     
-    // ============================================================
-    //  🚨 IGNORAR MENSAGENS DE GRUPO
-    // ============================================================
+    // IGNORAR MENSAGENS DE GRUPO
     if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
       console.log('👥 Mensagem de grupo ignorada');
       return;
@@ -1580,19 +1578,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     const senderPhone = body.phone || body.from;
-    if (!senderPhone) {
-      console.log('⚠️ Telefone do remetente não encontrado');
-      return;
-    }
+    if (!senderPhone) return;
 
     let messageText = body.text?.message || body.message?.text || body.message || '';
     if (typeof messageText !== 'string') messageText = String(messageText);
     messageText = messageText.trim().toLowerCase();
 
-    if (!messageText) {
-      console.log('⚠️ Mensagem vazia');
-      return;
-    }
+    if (!messageText) return;
 
     console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
@@ -1619,42 +1611,47 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return response.status === 200;
     };
 
-    // Estado do usuário
+    // ============================================================
+    //  ESTADO DO USUÁRIO - COM NÍVEIS SEPARADOS
+    // ============================================================
     let state = userState.get(cleanPhone) || { 
-      currentMenu: 'main', 
-      currentService: null,
+      nivel: 'principal',  // 'principal' ou 'submenu'
+      service: null,       // serviço selecionado
+      aguardandoFeedback: false,
       lastActivity: Date.now() 
     };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
 
     // ============================================================
-    //  🥇 COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
+    //  COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
     // ============================================================
     if (messageText === '0') {
-      state.currentMenu = 'main';
-      state.currentService = null;
+      state.nivel = 'principal';
+      state.service = null;
+      state.aguardandoFeedback = false;
       userState.set(cleanPhone, state);
 
       const menuPrincipal = await getMenuPrincipal();
       const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-      state.currentMenu = 'fechamento';
+      state.aguardandoFeedback = true;
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, menuComFechamento);
       return;
     }
 
     // ============================================================
-    //  🥈 RESPOSTA AO FECHAMENTO (8 = SIM, 9 = NÃO)
+    //  RESPOSTA AO FECHAMENTO (8 = SIM, 9 = NÃO)
     // ============================================================
-    if (state.currentMenu === 'fechamento') {
+    if (state.aguardandoFeedback === true) {
       if (messageText === '8') {
         const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
           `Estamos aqui para você sempre que precisar.\n\n` +
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
-        state.currentMenu = 'main';
-        state.currentService = null;
+        state.aguardandoFeedback = false;
+        state.nivel = 'principal';
+        state.service = null;
         userState.set(cleanPhone, state);
         return;
       }
@@ -1669,35 +1666,38 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `https://wa.me/5521974601812\n\n` +
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
-        state.currentMenu = 'main';
-        state.currentService = null;
+        state.aguardandoFeedback = false;
+        state.nivel = 'principal';
+        state.service = null;
         userState.set(cleanPhone, state);
         return;
       }
       
-      // Se não for 8 ou 9, sai do fechamento
-      state.currentMenu = 'main';
+      // Se não for 8 ou 9, sai do feedback
+      state.aguardandoFeedback = false;
       userState.set(cleanPhone, state);
     }
 
     // ============================================================
-    //  🥉 SAUDAÇÕES
+    //  SAUDAÇÕES
     // ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     if (saudacoes.includes(messageText)) {
       const menuPrincipal = await getMenuPrincipal();
       const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-      state.currentMenu = 'fechamento';
+      state.nivel = 'principal';
+      state.service = null;
+      state.aguardandoFeedback = true;
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, menuComFechamento);
       return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 1: SUBMENU (se estiver no submenu)
+    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE MÁXIMA
     // ============================================================
-    if (state.currentMenu === 'submenu') {
-      const service = state.currentService;
+    if (state.nivel === 'submenu') {
+      const service = state.service;
       
       // Opção 7: Falar com especialista
       if (messageText === '7') {
@@ -1709,7 +1709,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-        state.currentMenu = 'fechamento';
+        state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, ajudaComFechamento);
         return;
@@ -1746,7 +1746,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         
         const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.currentMenu = 'fechamento';
+        state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, respostaComFechamento);
         return;
@@ -1761,7 +1761,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
           resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         }
         const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.currentMenu = 'fechamento';
+        state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, respostaComFechamento);
         return;
@@ -1775,7 +1775,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         
         const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.currentMenu = 'fechamento';
+        state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, respostaComFechamento);
         return;
@@ -1784,16 +1784,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
       // Se não for 1-7, mostra o submenu novamente
       const submenu = await getSubmenu(service);
       const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
-      state.currentMenu = 'fechamento';
+      state.aguardandoFeedback = true;
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, submenuComFechamento);
       return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 2: MENU PRINCIPAL
+    //  🟢 MENU PRINCIPAL
     // ============================================================
-    if (state.currentMenu === 'main') {
+    if (state.nivel === 'principal') {
       let serviceKey = null;
       
       switch (messageText) {
@@ -1812,27 +1812,28 @@ app.post('/api/webhook/zapi', async (req, res) => {
             `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
             `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
           const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-          state.currentMenu = 'fechamento';
+          state.aguardandoFeedback = true;
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, ajudaComFechamento);
           return;
         default:
           const menuPrincipal = await getMenuPrincipal();
           const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-          state.currentMenu = 'fechamento';
+          state.aguardandoFeedback = true;
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, menuComFechamento);
           return;
       }
       
       if (serviceKey) {
-        state.currentMenu = 'submenu';
-        state.currentService = serviceKey;
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        state.aguardandoFeedback = false;
         userState.set(cleanPhone, state);
         
         const submenu = await getSubmenu(serviceKey);
         const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
-        state.currentMenu = 'fechamento';
+        state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, submenuComFechamento);
         return;
@@ -1840,11 +1841,13 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🔴 MENSAGEM NÃO RECONHECIDA
+    //  MENSAGEM NÃO RECONHECIDA
     // ============================================================
     const menuPrincipal = await getMenuPrincipal();
     const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-    state.currentMenu = 'fechamento';
+    state.nivel = 'principal';
+    state.service = null;
+    state.aguardandoFeedback = true;
     userState.set(cleanPhone, state);
     await sendReply(cleanPhone, menuComFechamento);
 
