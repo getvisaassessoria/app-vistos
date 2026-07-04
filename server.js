@@ -1,7 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  Versão Refatorada - Código Limpo e Otimizado
-//  CORRIGIDO: Problema da opção 6 no submenu
+//  CORRIGIDO: Clientes em processo não perdem o contexto
 // ============================================================
 
 const express = require('express');
@@ -1553,7 +1552,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - SOLUÇÃO DEFINITIVA CORRIGIDA
+//  WEBHOOK Z-API - COM CONTEXTO PARA CLIENTES EM PROCESSO
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1613,16 +1612,49 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // ============================================================
-    //  ESTADO DO USUÁRIO - COM NÍVEIS SEPARADOS
+    //  ESTADO DO USUÁRIO - COM CONTROLE DE PROCESSO
     // ============================================================
     let state = userState.get(cleanPhone) || { 
-      nivel: 'principal',  // 'principal' ou 'submenu'
+      nivel: 'principal',  // 'principal', 'submenu', 'processo'
       service: null,       // serviço selecionado
       aguardandoFeedback: false,
+      emProcesso: false,   // NOVO: indica se o cliente já iniciou o processo
       lastActivity: Date.now() 
     };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
+
+    // ============================================================
+    //  VERIFICA SE O CLIENTE ESTÁ EM PROCESSO NO SUPABASE
+    // ============================================================
+    async function verificarClienteEmProcesso(phone) {
+      try {
+        const { data, error } = await supabase
+          .from('solicitacoes')
+          .select('id, status, tipo')
+          .eq('telefone', phone)
+          .in('status', ['pendente', 'em_andamento', 'agendado'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (error) throw error;
+        return data && data.length > 0;
+      } catch (err) {
+        console.error('❌ Erro ao verificar cliente em processo:', err);
+        return false;
+      }
+    }
+
+    // Se ainda não marcamos como em processo, verifica no banco
+    if (!state.emProcesso) {
+      const emProcesso = await verificarClienteEmProcesso(cleanPhone);
+      if (emProcesso) {
+        state.emProcesso = true;
+        state.nivel = 'processo';
+        userState.set(cleanPhone, state);
+        console.log(`🟢 Cliente ${cleanPhone} está em processo ativo`);
+      }
+    }
 
     // ============================================================
     //  COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
@@ -1631,6 +1663,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       state.nivel = 'principal';
       state.service = null;
       state.aguardandoFeedback = false;
+      // Mantém emProcesso para não perder o contexto
       userState.set(cleanPhone, state);
 
       const menuPrincipal = await getMenuPrincipal();
@@ -1651,8 +1684,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
         state.aguardandoFeedback = false;
-        state.nivel = 'principal';
-        state.service = null;
+        // Se estava em processo, mantém
+        if (!state.emProcesso) {
+          state.nivel = 'principal';
+          state.service = null;
+        }
         userState.set(cleanPhone, state);
         return;
       }
@@ -1668,8 +1704,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
         state.aguardandoFeedback = false;
-        state.nivel = 'principal';
-        state.service = null;
+        if (!state.emProcesso) {
+          state.nivel = 'principal';
+          state.service = null;
+        }
         userState.set(cleanPhone, state);
         return;
       }
@@ -1677,6 +1715,50 @@ app.post('/api/webhook/zapi', async (req, res) => {
       // Se não for 8 ou 9, sai do feedback
       state.aguardandoFeedback = false;
       userState.set(cleanPhone, state);
+    }
+
+    // ============================================================
+    //  🟢 SE ESTIVER EM PROCESSO - RESPOSTA ESPECIAL
+    // ============================================================
+    if (state.emProcesso === true || state.nivel === 'processo') {
+      // Mapeia respostas comuns para clientes em processo
+      const respostasProcesso = {
+        'sim': `✅ *Ótimo!*\n\nVamos dar continuidade ao seu processo.\n\n📋 *Próximos passos:*\n• Revisaremos sua documentação\n• Entraremos em contato em breve\n• Fique atento ao WhatsApp\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'não': `😊 *Sem problemas!*\n\nEstamos aqui para tirar todas as suas dúvidas.\n\n📞 *Fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'nao': `😊 *Sem problemas!*\n\nEstamos aqui para tirar todas as suas dúvidas.\n\n📞 *Fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'ok': `👍 *OK!*\n\nSeu processo continua.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'obrigado': `🙏 *Por nada!*\n\nEstamos à disposição.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'obrigada': `🙏 *Por nada!*\n\nEstamos à disposição.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'ajuda': `🆘 *Como posso ajudar?*\n\n• Digite *0* para o MENU principal\n• Digite *7* para falar com um especialista\n• Ou me envie sua dúvida\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
+        'duvida': `💡 *Tire sua dúvida:*\n\nFique à vontade para enviar sua pergunta que responderei o mais rápido possível.\n\n📞 *Ou fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`
+      };
+
+      // Verifica se a mensagem é uma resposta conhecida
+      if (respostasProcesso[messageText]) {
+        const resposta = respostasProcesso[messageText];
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+
+      // Para qualquer outra mensagem durante o processo, dá uma resposta contextual
+      const respostaContextual = 
+        `👋 *Olá!*\n\n` +
+        `Recebi sua mensagem: *"${messageText}"*\n\n` +
+        `📋 *Seu processo está em andamento.*\n\n` +
+        `🔄 *Como posso ajudar?*\n` +
+        `• Digite *0* para voltar ao MENU principal\n` +
+        `• Digite *7* para falar com um especialista\n` +
+        `• Ou me envie sua dúvida específica\n\n` +
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      
+      const respostaComFechamento = await fecharConversa(cleanPhone, respostaContextual);
+      state.aguardandoFeedback = true;
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, respostaComFechamento);
+      return;
     }
 
     // ============================================================
@@ -1716,7 +1798,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
       
-      // ⭐ OPÇÃO 6: AVALIAÇÃO GRATUITA - CORRIGIDA
+      // OPÇÃO 6: AVALIAÇÃO GRATUITA
       if (messageText === '6') {
         const links = {
           'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
