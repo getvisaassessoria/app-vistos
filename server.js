@@ -1625,7 +1625,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - CONVERSA NATURAL E INTELIGENTE
+//  WEBHOOK Z-API - CORRIGIDO: SUBMENUS FUNCIONANDO CORRETAMENTE
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1689,7 +1689,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // ============================================================
     let state = userState.get(cleanPhone) || { 
       nivel: 'principal',      // 'principal', 'submenu'
-      service: null,
+      service: null,           // serviço selecionado: visto_americano, etc
       mensagensTrocadas: 0,
       lastActivity: Date.now(),
       conversaAtiva: false
@@ -1741,19 +1741,65 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const intent = detectIntent(messageText);
 
     // ============================================================
-    //  SE ESTIVER NO SUBMENU
+    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE ABSOLUTA
     // ============================================================
     if (state.nivel === 'submenu' && state.service) {
       const service = state.service;
+      console.log(`🔹 Processando no submenu de: ${service}`);
 
-      // Opção 7: Falar com especialista
-      if (messageText === '7') {
-        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n*Contato direto:*\n🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n💬 *Precisa de mais alguma informação?*`;
+      // ============================================================
+      //  OPÇÃO 1: PREÇO
+      // ============================================================
+      if (messageText === '1') {
+        const resposta = getRespostaSubmenu(service, 'preco');
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // Opção 6: Avaliação Gratuita
+      // ============================================================
+      //  OPÇÃO 2: PRAZO
+      // ============================================================
+      if (messageText === '2') {
+        const resposta = getRespostaSubmenu(service, 'prazo');
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+
+      // ============================================================
+      //  OPÇÃO 3: DOCUMENTOS
+      // ============================================================
+      if (messageText === '3') {
+        const resposta = getRespostaSubmenu(service, 'documentos');
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+
+      // ============================================================
+      //  OPÇÃO 4: PROCESSO
+      // ============================================================
+      if (messageText === '4') {
+        const resposta = getRespostaSubmenu(service, 'processo');
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+
+      // ============================================================
+      //  OPÇÃO 5: VISTO NEGADO (para vistos) / ONDE FAZER (para passaporte)
+      // ============================================================
+      if (messageText === '5') {
+        let resposta = '';
+        if (service === 'passaporte') {
+          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n💬 *Já agendou ou precisa de ajuda?*`;
+        } else {
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n💬 *Quer saber mais sobre como podemos ajudar?*`;
+        }
+        await sendReply(cleanPhone, resposta);
+        return;
+      }
+
+      // ============================================================
+      //  OPÇÃO 6: AVALIAÇÃO GRATUITA
+      // ============================================================
       if (messageText === '6') {
         const links = {
           'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
@@ -1781,35 +1827,27 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
 
-      // Opção 5: Visto Negado / Onde Fazer
-      if (messageText === '5') {
-        let resposta = '';
-        if (service === 'passaporte') {
-          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n💬 *Já agendou ou precisa de ajuda?*`;
-        } else {
-          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n💬 *Quer saber mais sobre como podemos ajudar?*`;
-        }
+      // ============================================================
+      //  OPÇÃO 7: FALAR COM ESPECIALISTA
+      // ============================================================
+      if (messageText === '7') {
+        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n*Contato direto:*\n🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n💬 *Precisa de mais alguma informação?*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // Opções 1-4: Preço, Prazo, Documentos, Processo
-      if (['1', '2', '3', '4'].includes(messageText)) {
-        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
-        const opcao = opcoesMap[messageText];
-        const resposta = getRespostaSubmenu(service, opcao) + `\n\n💬 *Precisa de mais informações sobre ${getServiceName(service)}?*`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-
-      // Se detectou intenção enquanto está no submenu
+      // ============================================================
+      //  SE DETECTOU INTENÇÃO ENQUANTO ESTÁ NO SUBMENU
+      // ============================================================
       if (intent) {
         const resposta = getRespostaIntencao(intent, service);
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // Mensagem não reconhecida no submenu - Resposta contextual
+      // ============================================================
+      //  MENSAGEM NÃO RECONHECIDA NO SUBMENU - RESPOSTA CONTEXTUAL
+      // ============================================================
       const respostaContextual = 
         `💬 *Entendi! Você disse:* "${messageText}"\n\n` +
         `📋 *Estamos falando sobre ${getServiceName(service)}*\n\n` +
@@ -1829,26 +1867,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  MENU PRINCIPAL - DETECTAR INTENÇÃO
+    //  🟢 MENU PRINCIPAL - DETECTAR INTENÇÃO
     // ============================================================
     if (intent) {
       console.log(`🎯 Intenção detectada: ${intent}`);
       
-      // Se for iniciar processo, mostra opções
       if (intent === 'iniciar_processo') {
         const resposta = getRespostaIntencao(intent);
         await sendReply(cleanPhone, resposta);
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
         return;
       }
 
-      // Para outras intenções, mostra informação e oferece opção de escolher
       const resposta = getRespostaIntencao(intent);
       await sendReply(cleanPhone, resposta);
       
-      // Se detectou um serviço específico, entra no submenu
       const servicos = ['visto_americano', 'visto_canadense', 'visto_australiano', 'eta_uk', 'passaporte'];
       if (servicos.includes(intent)) {
         state.nivel = 'submenu';
@@ -1859,7 +1891,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  MENU PRINCIPAL - PROCESSAMENTO NUMÉRICO
+    //  🟢 MENU PRINCIPAL - PROCESSAMENTO NUMÉRICO
     // ============================================================
     let serviceKey = null;
     switch (messageText) {
@@ -1874,7 +1906,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
         await sendReply(cleanPhone, ajudaResposta);
         return;
       default:
-        // Mensagem não reconhecida
         const naoReconhecida = 
           `💬 *Desculpe, não entendi:* "${messageText}"\n\n` +
           `📋 *Opções disponíveis:*\n\n` +
