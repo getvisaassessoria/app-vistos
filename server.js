@@ -1,7 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  VERSÃO DEFINITIVA - CONVERSA NATURAL E INTELIGENTE
-//  SEM REPETIÇÃO DE MENU DESNECESSÁRIA
+//  VERSÃO DEFINITIVA - COM LINKS AMIGÁVEIS E OPÇÕES CLARAS
 // ============================================================
 
 const express = require('express');
@@ -115,7 +114,7 @@ const INTENT_KEYWORDS = {
 };
 
 // ============================================================
-//  RESPOSTAS PARA INTENÇÕES
+//  RESPOSTAS PARA INTENÇÕES (COM LINKS AMIGÁVEIS)
 // ============================================================
 function getRespostaIntencao(intent, service = null) {
   const respostas = {
@@ -135,16 +134,16 @@ function getRespostaIntencao(intent, service = null) {
       default: `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:* Taxa PF ~R$ 257 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     },
     'preco': {
-      default: `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 Visto Canadense: Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 Visto Australiano: Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 eTA UK: ~R$ 120 + Assessoria R$ 150\n🇨🇦 eTA Canadense: ~R$ 50 + Assessoria R$ 100\n📘 Passaporte: Taxa ~R$ 257 + Assessoria R$ 150\n\n💬 *Qual serviço te interessa?*\nDigite *1* a *6* para detalhes!`
+      default: `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 Visto Canadense: Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 Visto Australiano: Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 eTA UK: ~R$ 120 + Assessoria R$ 150\n🇨🇦 eTA Canadense: ~R$ 50 + Assessoria R$ 100\n📘 Passaporte: Taxa ~R$ 257 + Assessoria R$ 150\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
     },
     'prazo': {
-      default: `⏰ *PRAZOS DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: 30-40 dias\n🇨🇦 Visto Canadense: 30-60 dias\n🇦🇺 Visto Australiano: 15-30 dias\n🇬🇧 eTA UK: 1-3 dias\n🇨🇦 eTA Canadense: 1 dia\n📘 Passaporte: 10-20 dias\n\n💬 *Qual serviço te interessa?*\nDigite *1* a *6* para detalhes!`
+      default: `⏰ *PRAZOS DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: 30-40 dias\n🇨🇦 Visto Canadense: 30-60 dias\n🇦🇺 Visto Australiano: 15-30 dias\n🇬🇧 eTA UK: 1-3 dias\n🇨🇦 eTA Canadense: 1 dia\n📘 Passaporte: 10-20 dias\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
     },
     'documentos': {
-      default: `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• EUA: DS-160 preenchido\n• Canadá: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n💬 *Para qual serviço você quer a lista completa?*`
+      default: `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• EUA: DS-160 preenchido\n• Canadá: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n📋 *Para qual serviço você quer a lista completa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_negado': {
-      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n💬 *Quer saber mais sobre o processo?*`
+      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre o processo?*\n• Digite *4* para ver o PROCESSO\n• Digite *7* para falar com ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'iniciar_processo': {
       default: `✅ *Ótimo! Vamos iniciar seu processo!*\n\n📋 *Escolha o serviço:*\n\n1️⃣ 🇺🇸 Visto Americano\n2️⃣ 🇨🇦 Visto Canadense\n3️⃣ 🇦🇺 Visto Australiano\n4️⃣ 🇬🇧 eTA UK\n5️⃣ 🇨🇦 eTA Canadense\n6️⃣ 📘 Passaporte\n\n💬 *Digite o número ou me pergunte algo!*`
@@ -404,42 +403,42 @@ app.get('/ping', (req, res) => {
 function getRespostaSubmenu(servico, opcao) {
   const respostas = {
     preco: {
-      visto_americano: `💰 *INVESTIMENTO - VISTO AMERICANO*\n\n🇺🇸 *Taxa Consular:* ~R$ 950\n📋 *Assessoria:* R$ 350\n\n✅ Inclui: DS-160, agendamento, preparação para entrevista e acompanhamento total.\n\n💬 *Quer saber mais sobre o processo?*`,
-      visto_canadense: `💰 *INVESTIMENTO - VISTO CANADENSE*\n\n🇨🇦 *Taxa Consular:* ~R$ 750\n📋 *Assessoria:* R$ 400\n\n✅ Inclui: Aplicação online, documentação, preparação para biometria e entrevista.\n\n💬 *Quer saber mais sobre o processo?*`,
-      visto_australiano: `💰 *INVESTIMENTO - VISTO AUSTRALIANO*\n\n🇦🇺 *Taxa Consular:* ~R$ 850\n📋 *Assessoria:* R$ 450\n\n✅ Inclui: Análise de perfil, aplicação online, documentação específica.\n\n💬 *Quer saber mais sobre o processo?*`,
-      eta_uk: `💰 *INVESTIMENTO - eTA UK (REINO UNIDO)*\n\n🇬🇧 *Taxa:* ~R$ 120\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Aplicação online, validação de dados, acompanhamento.\n\n💬 *Quer saber mais sobre o processo?*`,
-      eta_canadense: `💰 *INVESTIMENTO - eTA CANADENSE*\n\n🇨🇦 *Taxa:* ~R$ 50\n📋 *Assessoria:* R$ 100\n\n✅ Inclui: Aplicação online rápida, validação, entrega por e-mail.\n\n💬 *Quer saber mais sobre o processo?*`,
-      passaporte: `💰 *INVESTIMENTO - PASSAPORTE*\n\n📘 *Taxa PF:* ~R$ 257\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Agendamento, orientação documental, acompanhamento.\n\n💬 *Quer saber mais sobre o processo?*`
+      visto_americano: `💰 *INVESTIMENTO - VISTO AMERICANO*\n\n🇺🇸 *Taxa Consular:* ~R$ 950\n📋 *Assessoria:* R$ 350\n\n✅ Inclui: DS-160, agendamento, preparação para entrevista e acompanhamento total.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_canadense: `💰 *INVESTIMENTO - VISTO CANADENSE*\n\n🇨🇦 *Taxa Consular:* ~R$ 750\n📋 *Assessoria:* R$ 400\n\n✅ Inclui: Aplicação online, documentação, preparação para biometria e entrevista.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_australiano: `💰 *INVESTIMENTO - VISTO AUSTRALIANO*\n\n🇦🇺 *Taxa Consular:* ~R$ 850\n📋 *Assessoria:* R$ 450\n\n✅ Inclui: Análise de perfil, aplicação online, documentação específica.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_uk: `💰 *INVESTIMENTO - eTA UK (REINO UNIDO)*\n\n🇬🇧 *Taxa:* ~R$ 120\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Aplicação online, validação de dados, acompanhamento.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_canadense: `💰 *INVESTIMENTO - eTA CANADENSE*\n\n🇨🇦 *Taxa:* ~R$ 50\n📋 *Assessoria:* R$ 100\n\n✅ Inclui: Aplicação online rápida, validação, entrega por e-mail.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      passaporte: `💰 *INVESTIMENTO - PASSAPORTE*\n\n📘 *Taxa PF:* ~R$ 257\n📋 *Assessoria:* R$ 150\n\n✅ Inclui: Agendamento, orientação documental, acompanhamento.\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     },
     prazo: {
-      visto_americano: `⏰ *PRAZO - VISTO AMERICANO*\n\n📅 *Agendamento:* até 8 semanas\n🔍 *Análise consular:* 7 a 10 dias úteis\n📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n🕒 *Total estimado:* 30 a 40 dias\n\n💬 *Precisa de mais informações?*`,
-      visto_canadense: `⏰ *PRAZO - VISTO CANADENSE*\n\n📅 *Processamento:* 4 a 8 semanas\n📬 *Retorno:* 2 a 3 dias úteis\n\n🕒 *Total estimado:* 30 a 60 dias\n\n💬 *Precisa de mais informações?*`,
-      visto_australiano: `⏰ *PRAZO - VISTO AUSTRALIANO*\n\n📅 *Processamento:* 2 a 4 semanas\n\n🕒 *Total estimado:* 15 a 30 dias\n\n💬 *Precisa de mais informações?*`,
-      eta_uk: `⏰ *PRAZO - eTA UK*\n\n📅 *Processamento:* até 72 horas\n\n🕒 *Total estimado:* 1 a 3 dias\n\n💬 *Precisa de mais informações?*`,
-      eta_canadense: `⏰ *PRAZO - eTA CANADENSE*\n\n📅 *Processamento:* até 24 horas\n\n🕒 *Total estimado:* 1 dia\n\n💬 *Precisa de mais informações?*`,
-      passaporte: `⏰ *PRAZO - PASSAPORTE*\n\n📅 *Emissão:* 7 a 15 dias úteis\n\n🕒 *Total estimado:* 10 a 20 dias\n\n💬 *Precisa de mais informações?*`
+      visto_americano: `⏰ *PRAZO - VISTO AMERICANO*\n\n📅 *Agendamento:* até 8 semanas\n🔍 *Análise consular:* 7 a 10 dias úteis\n📬 *Retorno do passaporte:* 5 a 7 dias úteis\n\n🕒 *Total estimado:* 30 a 40 dias\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_canadense: `⏰ *PRAZO - VISTO CANADENSE*\n\n📅 *Processamento:* 4 a 8 semanas\n📬 *Retorno:* 2 a 3 dias úteis\n\n🕒 *Total estimado:* 30 a 60 dias\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_australiano: `⏰ *PRAZO - VISTO AUSTRALIANO*\n\n📅 *Processamento:* 2 a 4 semanas\n\n🕒 *Total estimado:* 15 a 30 dias\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_uk: `⏰ *PRAZO - eTA UK*\n\n📅 *Processamento:* até 72 horas\n\n🕒 *Total estimado:* 1 a 3 dias\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_canadense: `⏰ *PRAZO - eTA CANADENSE*\n\n📅 *Processamento:* até 24 horas\n\n🕒 *Total estimado:* 1 dia\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      passaporte: `⏰ *PRAZO - PASSAPORTE*\n\n📅 *Emissão:* 7 a 15 dias úteis\n\n🕒 *Total estimado:* 10 a 20 dias\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     },
     documentos: {
-      visto_americano: `📄 *DOCUMENTOS - VISTO AMERICANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante da taxa consular\n• DS-160 preenchido\n\n📌 *RECOMENDADOS:*\n• Comprovante de renda\n• Extratos bancários\n• Comprovante de imóvel/veículo\n\n💬 *Precisa de ajuda com algum documento?*`,
-      visto_canadense: `📄 *DOCUMENTOS - VISTO CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Foto digital\n• Comprovantes financeiros\n\n📌 *RECOMENDADOS:*\n• Carta de intenção\n• Histórico de viagens\n• Vínculos com o Brasil\n\n💬 *Precisa de ajuda com algum documento?*`,
-      visto_australiano: `📄 *DOCUMENTOS - VISTO AUSTRALIANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Comprovantes de recursos\n• Seguro saúde (recomendado)\n\n📌 *RECOMENDADOS:*\n• Roteiro de viagem\n• Reservas de hospedagem\n\n💬 *Precisa de ajuda com algum documento?*`,
-      eta_uk: `📄 *DOCUMENTOS - eTA UK*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• E-mail válido\n• Dados de viagem\n\n📌 *PROCESSO:*\n• Aplicação 100% online\n\n💬 *Precisa de ajuda com a aplicação?*`,
-      eta_canadense: `📄 *DOCUMENTOS - eTA CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Cartão de crédito para taxa\n• E-mail válido\n\n📌 *PROCESSO:*\n• Aplicação 100% online\n\n💬 *Precisa de ajuda com a aplicação?*`,
-      passaporte: `📄 *DOCUMENTOS - PASSAPORTE*\n\n📌 *OBRIGATÓRIOS:*\n• RG original\n• CPF\n• Título de eleitor (homens 18-70)\n• Certidão de nascimento/casamento\n• Comprovante de quitação militar (homens)\n\n💬 *Precisa de ajuda com algum documento?*`
+      visto_americano: `📄 *DOCUMENTOS - VISTO AMERICANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante da taxa consular\n• DS-160 preenchido\n\n📌 *RECOMENDADOS:*\n• Comprovante de renda\n• Extratos bancários\n• Comprovante de imóvel/veículo\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_canadense: `📄 *DOCUMENTOS - VISTO CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Foto digital\n• Comprovantes financeiros\n\n📌 *RECOMENDADOS:*\n• Carta de intenção\n• Histórico de viagens\n• Vínculos com o Brasil\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_australiano: `📄 *DOCUMENTOS - VISTO AUSTRALIANO*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Comprovantes de recursos\n• Seguro saúde (recomendado)\n\n📌 *RECOMENDADOS:*\n• Roteiro de viagem\n• Reservas de hospedagem\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_uk: `📄 *DOCUMENTOS - eTA UK*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• E-mail válido\n• Dados de viagem\n\n📌 *PROCESSO:*\n• Aplicação 100% online\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_canadense: `📄 *DOCUMENTOS - eTA CANADENSE*\n\n📌 *OBRIGATÓRIOS:*\n• Passaporte válido\n• Cartão de crédito para taxa\n• E-mail válido\n\n📌 *PROCESSO:*\n• Aplicação 100% online\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      passaporte: `📄 *DOCUMENTOS - PASSAPORTE*\n\n📌 *OBRIGATÓRIOS:*\n• RG original\n• CPF\n• Título de eleitor (homens 18-70)\n• Certidão de nascimento/casamento\n• Comprovante de quitação militar (homens)\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     },
     processo: {
-      visto_americano: `📋 *PROCESSO - VISTO AMERICANO*\n\n1️⃣ Análise de perfil\n2️⃣ Preenchimento do DS-160\n3️⃣ Pagamento da taxa consular\n4️⃣ Agendamento da entrevista\n5️⃣ Coleta biométrica (CASV)\n6️⃣ Entrevista no Consulado\n7️⃣ Retirada do passaporte\n\n💬 *Qual etapa você quer saber mais?*`,
-      visto_canadense: `📋 *PROCESSO - VISTO CANADENSE*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online GCKey\n3️⃣ Pagamento das taxas\n4️⃣ Agendamento da biometria\n5️⃣ Coleta de dados biométricos\n6️⃣ Entrevista (se solicitado)\n7️⃣ Decisão e envio\n\n💬 *Qual etapa você quer saber mais?*`,
-      visto_australiano: `📋 *PROCESSO - VISTO AUSTRALIANO*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online ImmiAccount\n3️⃣ Pagamento das taxas\n4️⃣ Envio de documentos\n5️⃣ Acompanhamento\n6️⃣ Decisão por e-mail\n\n💬 *Qual etapa você quer saber mais?*`,
-      eta_uk: `📋 *PROCESSO - eTA UK*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n💬 *Qual etapa você quer saber mais?*`,
-      eta_canadense: `📋 *PROCESSO - eTA CANADENSE*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n💬 *Qual etapa você quer saber mais?*`,
-      passaporte: `📋 *PROCESSO - PASSAPORTE*\n\n1️⃣ Agendamento no site da PF\n2️⃣ Separação dos documentos\n3️⃣ Pagamento da GRU\n4️⃣ Comparecimento ao posto\n5️⃣ Coleta de dados biométricos\n6️⃣ Aguardar emissão\n7️⃣ Retirada do passaporte\n\n💬 *Qual etapa você quer saber mais?*`
+      visto_americano: `📋 *PROCESSO - VISTO AMERICANO*\n\n1️⃣ Análise de perfil\n2️⃣ Preenchimento do DS-160\n3️⃣ Pagamento da taxa consular\n4️⃣ Agendamento da entrevista\n5️⃣ Coleta biométrica (CASV)\n6️⃣ Entrevista no Consulado\n7️⃣ Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_canadense: `📋 *PROCESSO - VISTO CANADENSE*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online GCKey\n3️⃣ Pagamento das taxas\n4️⃣ Agendamento da biometria\n5️⃣ Coleta de dados biométricos\n6️⃣ Entrevista (se solicitado)\n7️⃣ Decisão e envio\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      visto_australiano: `📋 *PROCESSO - VISTO AUSTRALIANO*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online ImmiAccount\n3️⃣ Pagamento das taxas\n4️⃣ Envio de documentos\n5️⃣ Acompanhamento\n6️⃣ Decisão por e-mail\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_uk: `📋 *PROCESSO - eTA UK*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      eta_canadense: `📋 *PROCESSO - eTA CANADENSE*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
+      passaporte: `📋 *PROCESSO - PASSAPORTE*\n\n1️⃣ Agendamento no site da PF\n2️⃣ Separação dos documentos\n3️⃣ Pagamento da GRU\n4️⃣ Comparecimento ao posto\n5️⃣ Coleta de dados biométricos\n6️⃣ Aguardar emissão\n7️⃣ Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     }
   };
   
   let resposta = respostas[opcao]?.[servico];
   if (!resposta) {
-    resposta = `ℹ️ *INFORMAÇÕES EM BREVE*\n\nEstamos preparando o conteúdo específico para ${servico.replace('_', ' ').toUpperCase()}.\n\n💬 *Quer falar com um especialista?*\nhttps://wa.me/5521974601812`;
+    resposta = `ℹ️ *INFORMAÇÕES EM BREVE*\n\nEstamos preparando o conteúdo específico para ${servico.replace('_', ' ').toUpperCase()}.\n\n📋 *Quer falar com um especialista?*\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
   }
   
   return resposta;
@@ -1625,7 +1624,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - CORRIGIDO: SUBMENUS FUNCIONANDO CORRETAMENTE
+//  WEBHOOK Z-API - VERSÃO FINAL COM LINKS AMIGÁVEIS
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1789,9 +1788,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
       if (messageText === '5') {
         let resposta = '';
         if (service === 'passaporte') {
-          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n💬 *Já agendou ou precisa de ajuda?*`;
+          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Já agendou ou precisa de ajuda?*`;
         } else {
-          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n💬 *Quer saber mais sobre como podemos ajudar?*`;
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre como podemos ajudar?*\n• Digite *4* para PROCESSO\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
         }
         await sendReply(cleanPhone, resposta);
         return;
@@ -1822,16 +1821,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
         const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
         const nomeServico = nomes[service] || 'SERVIÇO';
         
-        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n${link}\n\n⏱️ Leva menos de 2 minutos!\n\n💬 *Depois de fazer, me avise para continuarmos!*`;
+        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📋 *Depois de fazer, me avise para continuarmos!*\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
 
       // ============================================================
-      //  OPÇÃO 7: FALAR COM ESPECIALISTA
+      //  OPÇÃO 7: FALAR COM ESPECIALISTA (COM LINK AMIGÁVEL)
       // ============================================================
       if (messageText === '7') {
-        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n*Contato direto:*\n🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n💬 *Precisa de mais alguma informação?*`;
+        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
@@ -1902,7 +1901,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       case '5': serviceKey = 'eta_canadense'; break;
       case '6': serviceKey = 'passaporte'; break;
       case '7':
-        const ajudaResposta = `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n*Contato direto:*\n🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n💬 *Me pergunte qualquer coisa!*`;
+        const ajudaResposta = `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, ajudaResposta);
         return;
       default:
