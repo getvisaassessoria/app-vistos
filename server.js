@@ -1552,7 +1552,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - CORREÇÃO DEFINITIVA
+//  WEBHOOK Z-API - COM FECHAMENTO USANDO 8 e 9
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1614,23 +1614,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // Estado do usuário
-    let state = userState.get(cleanPhone) || { 
-      currentMenu: 'main', 
-      selectedCountry: null, 
-      lastActivity: Date.now(),
-      waitingForFeedback: false  // NOVO: controle específico para fechamento
-    };
+    let state = userState.get(cleanPhone) || { currentMenu: 'main', selectedCountry: null, lastActivity: Date.now() };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
 
     // ============================================================
-    //  🥇 PRIORIDADE 1: COMANDO GLOBAL - 0 ou MENU
-    //  Sempre volta ao menu principal, independente do estado
+    //  COMANDO GLOBAL: 0 ou MENU
     // ============================================================
     if (messageText === '0' || messageText === 'menu' || messageText === 'menu principal' || messageText === 'voltar') {
       state.currentMenu = 'main';
       state.selectedCountry = null;
-      state.waitingForFeedback = false;
       userState.set(cleanPhone, state);
 
       const menuPrincipal =
@@ -1645,64 +1638,48 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `*Digite o número da opção desejada (1 a 7):* 🚀`;
 
       const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-      state.waitingForFeedback = true;
+      state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, menuComFechamento);
       return;
     }
 
     // ============================================================
-    //  🥈 PRIORIDADE 2: RESPOSTA AO FECHAMENTO (1 ou 2)
-    //  Só processa se o usuário estiver aguardando feedback
+    //  RESPOSTA AO FECHAMENTO - SIM (8)
     // ============================================================
-    if (state.waitingForFeedback === true && (messageText === '1' || messageText === '2')) {
-      
-      // RESPOSTA SIM
-      if (messageText === '1') {
-        const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
-          `Estamos aqui para você sempre que precisar.\n\n` +
-          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        state.currentMenu = 'main';
-        state.waitingForFeedback = false;
-        userState.set(cleanPhone, state);
-        return;
-      }
-      
-      // RESPOSTA NÃO
-      if (messageText === '2') {
-        const resposta =
-          `😊 *Sua pergunta não foi respondida?*\n\n` +
-          `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
-          `📋 *Para contratar nossos serviços:*\n` +
-          `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
-          `🎯 *Para navegar no sistema:*\n` +
-          `• Digite *0* para ver o MENU principal\n` +
-          `• Digite *MENU* para recomeçar\n\n` +
-          `📞 *Fale com um especialista:*\n` +
-          `https://wa.me/5521974601812\n\n` +
-          `*Aguardamos seu contato!* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        state.currentMenu = 'main';
-        state.waitingForFeedback = false;
-        userState.set(cleanPhone, state);
-        return;
-      }
-    }
-
-    // ============================================================
-    //  🥉 PRIORIDADE 3: Se estava esperando feedback e digitou outra coisa
-    //  Sai do modo feedback e continua
-    // ============================================================
-    if (state.waitingForFeedback === true) {
-      // Se não é 1 nem 2, sai do modo feedback
-      state.waitingForFeedback = false;
+    if (messageText === '8' && state.currentMenu === 'fechamento') {
+      const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
+        `Estamos aqui para você sempre que precisar.\n\n` +
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      state.currentMenu = 'main';
       userState.set(cleanPhone, state);
-      // Continua para processar a mensagem como comando normal
+      return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 4: SAUDAÇÕES
+    //  RESPOSTA AO FECHAMENTO - NÃO (9)
+    // ============================================================
+    if (messageText === '9' && state.currentMenu === 'fechamento') {
+      const resposta =
+        `😊 *Sua pergunta não foi respondida?*\n\n` +
+        `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
+        `📋 *Para contratar nossos serviços:*\n` +
+        `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
+        `🎯 *Para navegar no sistema:*\n` +
+        `• Digite *0* para ver o MENU principal\n` +
+        `• Digite *MENU* para recomeçar\n\n` +
+        `📞 *Fale com um especialista:*\n` +
+        `https://wa.me/5521974601812\n\n` +
+        `*Aguardamos seu contato!* 🚀`;
+      await sendReply(cleanPhone, resposta);
+      state.currentMenu = 'main';
+      userState.set(cleanPhone, state);
+      return;
+    }
+
+    // ============================================================
+    //  SAUDAÇÕES
     // ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     if (saudacoes.includes(messageText)) {
@@ -1719,22 +1696,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `*Digite o número da opção (1 a 7):* 🚀`;
 
       const boasVindasComFechamento = await fecharConversa(cleanPhone, boasVindas);
-      state.currentMenu = 'main';
-      state.waitingForFeedback = true;
+      state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, boasVindasComFechamento);
       return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 5: DETECTAR PERGUNTAS SOBRE VISTO AMERICANO
+    //  DETECTAR PERGUNTAS SOBRE VISTO AMERICANO
     // ============================================================
     if (messageText.includes('visto americano') ||
       messageText.includes('visto eua') ||
       messageText.includes('visto para eua') ||
       messageText.includes('visto estados unidos')) {
       state.currentMenu = 'visto_americano';
-      state.waitingForFeedback = false;
       userState.set(cleanPhone, state);
 
       const resposta =
@@ -1749,15 +1724,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `*Digite o número da opção desejada:* 🚀`;
 
       const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-      state.waitingForFeedback = true;
+      state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, respostaComFechamento);
       return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 6: MENU PRINCIPAL - OPÇÕES 1 a 7
-    //  Só chega aqui se NÃO estiver em waitingForFeedback
+    //  MENU PRINCIPAL
     // ============================================================
     if (state.currentMenu === 'main' || state.currentMenu === 'fechamento') {
       let menuResposta = '';
@@ -1856,12 +1830,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
             `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
             `*Digite 0 para voltar ao MENU principal* 🚀`;
           const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-          state.waitingForFeedback = true;
+          state.currentMenu = 'fechamento';
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, ajudaComFechamento);
           return;
         default:
-          // Se não for um comando reconhecido, mostra o menu principal
           const menuPrincipal =
             `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
             `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
@@ -1873,17 +1846,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
             `7️⃣ 📞 AJUDA / CONTATO\n\n` +
             `*Digite o número da opção desejada (1 a 7):* 🚀`;
           const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-          state.waitingForFeedback = true;
+          state.currentMenu = 'fechamento';
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, menuComFechamento);
           return;
       }
 
       if (servicoSelecionado) {
-        state.waitingForFeedback = false;
         userState.set(cleanPhone, state);
         const respostaComFechamento = await fecharConversa(cleanPhone, menuResposta);
-        state.waitingForFeedback = true;
+        state.currentMenu = 'fechamento';
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, respostaComFechamento);
         return;
@@ -1891,10 +1863,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 7: SUBMENUS (1-6)
-    //  Quando o usuário está em um serviço específico
+    //  SUBMENUS (1-6)
     // ============================================================
-    if (['1', '2', '3', '4', '5', '6'].includes(messageText) && state.waitingForFeedback === false) {
+    if (['1', '2', '3', '4', '5', '6'].includes(messageText) && state.currentMenu !== 'fechamento') {
       let resposta = '';
 
       if (messageText === '5') {
@@ -1911,14 +1882,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
       }
 
       const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-      state.waitingForFeedback = true;
+      state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, respostaComFechamento);
       return;
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 8: INTENÇÃO DE CONTRATAÇÃO
+    //  DETECTAR INTENÇÃO DE CONTRATAÇÃO
     // ============================================================
     const intencoesContratacao = [
       'quero contratar', 'contratar', 'quero fechar', 'fechar',
@@ -1972,7 +1943,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
 
       const contratacaoComFechamento = await fecharConversa(cleanPhone, respostaContratacao);
-      state.waitingForFeedback = true;
+      state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, contratacaoComFechamento);
       console.log(`✅ Intenção de contratar detectada - ${nomeServico}`);
@@ -1980,7 +1951,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🟢 PRIORIDADE 9: MENSAGEM NÃO RECONHECIDA
+    //  MENSAGEM NÃO RECONHECIDA
     // ============================================================
     const naoReconhecido =
       `😊 *Sua pergunta não foi respondida?*\n\n` +
@@ -1995,7 +1966,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       `*Aguardamos seu contato!* 🚀`;
 
     const naoReconhecidoComFechamento = await fecharConversa(cleanPhone, naoReconhecido);
-    state.waitingForFeedback = true;
+    state.currentMenu = 'fechamento';
     userState.set(cleanPhone, state);
     await sendReply(cleanPhone, naoReconhecidoComFechamento);
 
