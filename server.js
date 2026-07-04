@@ -1552,7 +1552,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - COM FECHAMENTO USANDO 8 e 9
+//  WEBHOOK Z-API - MENU HIERÁRQUICO SIMPLIFICADO
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1614,29 +1614,72 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // Estado do usuário
-    let state = userState.get(cleanPhone) || { currentMenu: 'main', selectedCountry: null, lastActivity: Date.now() };
+    let state = userState.get(cleanPhone) || { 
+      currentMenu: 'main', 
+      currentService: null,
+      lastActivity: Date.now() 
+    };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
 
     // ============================================================
-    //  COMANDO GLOBAL: 0 ou MENU
+    //  🥇 COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
     // ============================================================
-    if (messageText === '0' || messageText === 'menu' || messageText === 'menu principal' || messageText === 'voltar') {
+    if (messageText === '0') {
       state.currentMenu = 'main';
-      state.selectedCountry = null;
+      state.currentService = null;
       userState.set(cleanPhone, state);
 
-      const menuPrincipal =
-        `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
-        `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
-        `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
-        `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-        `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
-        `5️⃣ 🇨🇦 eTA CANADENSE\n` +
-        `6️⃣ 📘 PASSAPORTE\n` +
-        `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-        `*Digite o número da opção desejada (1 a 7):* 🚀`;
+      const menuPrincipal = await getMenuPrincipal();
+      const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
+      state.currentMenu = 'main';
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, menuComFechamento);
+      return;
+    }
 
+    // ============================================================
+    //  🥈 RESPOSTA AO FECHAMENTO (8 = SIM, 9 = NÃO)
+    // ============================================================
+    if (state.currentMenu === 'fechamento') {
+      if (messageText === '8') {
+        const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
+          `Estamos aqui para você sempre que precisar.\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        await sendReply(cleanPhone, resposta);
+        state.currentMenu = 'main';
+        state.currentService = null;
+        userState.set(cleanPhone, state);
+        return;
+      }
+      
+      if (messageText === '9') {
+        const resposta =
+          `😊 *Sua pergunta não foi respondida?*\n\n` +
+          `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
+          `📋 *Para contratar nossos serviços:*\n` +
+          `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
+          `📞 *Fale com um especialista:*\n` +
+          `https://wa.me/5521974601812\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        await sendReply(cleanPhone, resposta);
+        state.currentMenu = 'main';
+        state.currentService = null;
+        userState.set(cleanPhone, state);
+        return;
+      }
+      
+      // Se não for 8 ou 9, sai do fechamento
+      state.currentMenu = 'main';
+      userState.set(cleanPhone, state);
+    }
+
+    // ============================================================
+    //  🥉 SAUDAÇÕES
+    // ============================================================
+    const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
+    if (saudacoes.includes(messageText)) {
+      const menuPrincipal = await getMenuPrincipal();
       const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
       state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
@@ -1645,182 +1688,18 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  RESPOSTA AO FECHAMENTO - SIM (8)
+    //  🟢 MENU PRINCIPAL
     // ============================================================
-    if (messageText === '8' && state.currentMenu === 'fechamento') {
-      const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
-        `Estamos aqui para você sempre que precisar.\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      state.currentMenu = 'main';
-      userState.set(cleanPhone, state);
-      return;
-    }
-
-    // ============================================================
-    //  RESPOSTA AO FECHAMENTO - NÃO (9)
-    // ============================================================
-    if (messageText === '9' && state.currentMenu === 'fechamento') {
-      const resposta =
-        `😊 *Sua pergunta não foi respondida?*\n\n` +
-        `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
-        `📋 *Para contratar nossos serviços:*\n` +
-        `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
-        `🎯 *Para navegar no sistema:*\n` +
-        `• Digite *0* para ver o MENU principal\n` +
-        `• Digite *MENU* para recomeçar\n\n` +
-        `📞 *Fale com um especialista:*\n` +
-        `https://wa.me/5521974601812\n\n` +
-        `*Aguardamos seu contato!* 🚀`;
-      await sendReply(cleanPhone, resposta);
-      state.currentMenu = 'main';
-      userState.set(cleanPhone, state);
-      return;
-    }
-
-    // ============================================================
-    //  SAUDAÇÕES
-    // ============================================================
-    const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
-    if (saudacoes.includes(messageText)) {
-      const boasVindas =
-        `Olá! 👋 Seja bem-vindo(a) à GetVisa!\n\n` +
-        `🇺🇸 *ESCOLHA O SERVIÇO DESEJADO:*\n\n` +
-        `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
-        `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
-        `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-        `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
-        `5️⃣ 🇨🇦 eTA CANADENSE\n` +
-        `6️⃣ 📘 PASSAPORTE\n` +
-        `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-        `*Digite o número da opção (1 a 7):* 🚀`;
-
-      const boasVindasComFechamento = await fecharConversa(cleanPhone, boasVindas);
-      state.currentMenu = 'fechamento';
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, boasVindasComFechamento);
-      return;
-    }
-
-    // ============================================================
-    //  DETECTAR PERGUNTAS SOBRE VISTO AMERICANO
-    // ============================================================
-    if (messageText.includes('visto americano') ||
-      messageText.includes('visto eua') ||
-      messageText.includes('visto para eua') ||
-      messageText.includes('visto estados unidos')) {
-      state.currentMenu = 'visto_americano';
-      userState.set(cleanPhone, state);
-
-      const resposta =
-        `🇺🇸 *VISTO AMERICANO*\n\n` +
-        `1️⃣ 💰 PREÇO\n` +
-        `2️⃣ ⏰ PRAZO\n` +
-        `3️⃣ 📄 DOCUMENTOS\n` +
-        `4️⃣ 📋 PROCESSO\n` +
-        `5️⃣ ⚠️ VISTO NEGADO\n` +
-        `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-        `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-        `*Digite o número da opção desejada:* 🚀`;
-
-      const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-      state.currentMenu = 'fechamento';
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, respostaComFechamento);
-      return;
-    }
-
-    // ============================================================
-    //  MENU PRINCIPAL
-    // ============================================================
-    if (state.currentMenu === 'main' || state.currentMenu === 'fechamento') {
-      let menuResposta = '';
-      let servicoSelecionado = false;
-
+    if (state.currentMenu === 'main') {
+      let serviceKey = null;
+      
       switch (messageText) {
-        case '1':
-          state.currentMenu = 'visto_americano';
-          servicoSelecionado = true;
-          menuResposta =
-            `🇺🇸 *VISTO AMERICANO*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ ⚠️ VISTO NEGADO\n` +
-            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
-        case '2':
-          state.currentMenu = 'visto_canadense';
-          servicoSelecionado = true;
-          menuResposta =
-            `🇨🇦 *VISTO CANADENSE*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ ⚠️ VISTO NEGADO\n` +
-            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
-        case '3':
-          state.currentMenu = 'visto_australiano';
-          servicoSelecionado = true;
-          menuResposta =
-            `🇦🇺 *VISTO AUSTRALIANO*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ ⚠️ VISTO NEGADO\n` +
-            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
-        case '4':
-          state.currentMenu = 'eta_uk';
-          servicoSelecionado = true;
-          menuResposta =
-            `🇬🇧 *eTA UK (REINO UNIDO)*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ ⚠️ VISTO NEGADO\n` +
-            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
-        case '5':
-          state.currentMenu = 'eta_canadense';
-          servicoSelecionado = true;
-          menuResposta =
-            `🇨🇦 *eTA CANADENSE*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ ⚠️ VISTO NEGADO\n` +
-            `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
-        case '6':
-          state.currentMenu = 'passaporte';
-          servicoSelecionado = true;
-          menuResposta =
-            `📘 *PASSAPORTE*\n\n` +
-            `1️⃣ 💰 PREÇO\n` +
-            `2️⃣ ⏰ PRAZO\n` +
-            `3️⃣ 📄 DOCUMENTOS\n` +
-            `4️⃣ 📋 PROCESSO\n` +
-            `5️⃣ 📍 ONDE FAZER\n` +
-            `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-            `*Digite o número da opção desejada:* 🚀`;
-          break;
+        case '1': serviceKey = 'visto_americano'; break;
+        case '2': serviceKey = 'visto_canadense'; break;
+        case '3': serviceKey = 'visto_australiano'; break;
+        case '4': serviceKey = 'eta_uk'; break;
+        case '5': serviceKey = 'eta_canadense'; break;
+        case '6': serviceKey = 'passaporte'; break;
         case '7':
           const ajudaResposta =
             `📞 *FALAR COM ESPECIALISTA*\n\n` +
@@ -1828,153 +1707,168 @@ app.post('/api/webhook/zapi', async (req, res) => {
             `*Contato direto:*\n` +
             `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
             `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-            `*Digite 0 para voltar ao MENU principal* 🚀`;
+            `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
           const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
           state.currentMenu = 'fechamento';
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, ajudaComFechamento);
           return;
         default:
-          const menuPrincipal =
-            `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
-            `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
-            `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
-            `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-            `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
-            `5️⃣ 🇨🇦 eTA CANADENSE\n` +
-            `6️⃣ 📘 PASSAPORTE\n` +
-            `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-            `*Digite o número da opção desejada (1 a 7):* 🚀`;
+          const menuPrincipal = await getMenuPrincipal();
           const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
           state.currentMenu = 'fechamento';
           userState.set(cleanPhone, state);
           await sendReply(cleanPhone, menuComFechamento);
           return;
       }
-
-      if (servicoSelecionado) {
+      
+      if (serviceKey) {
+        state.currentMenu = 'submenu';
+        state.currentService = serviceKey;
         userState.set(cleanPhone, state);
-        const respostaComFechamento = await fecharConversa(cleanPhone, menuResposta);
+        
+        const submenu = await getSubmenu(serviceKey);
+        const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
         state.currentMenu = 'fechamento';
         userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, respostaComFechamento);
+        await sendReply(cleanPhone, submenuComFechamento);
         return;
       }
     }
 
     // ============================================================
-    //  SUBMENUS (1-6)
+    //  🟢 SUBMENU - OPÇÕES 1 a 6
     // ============================================================
-    if (['1', '2', '3', '4', '5', '6'].includes(messageText) && state.currentMenu !== 'fechamento') {
-      let resposta = '';
-
-      if (messageText === '5') {
-        resposta = `⚠️ *VISTO NEGADO - ${state.currentMenu.toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      } else if (messageText === '6') {
-        resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*\n\nDescubra suas chances de aprovação!\n\n🔗 https://getvisa.com.br/simulador-visto-americano\n\n⏱️ Menos de 2 minutos!\n\nApós o simulador, seus resultados chegarão aqui! 🚀\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      } else if (state.currentMenu === 'passaporte' && messageText === '5') {
-        resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-      } else {
-        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
-        const opcao = opcoesMap[messageText];
-        resposta = getRespostaSubmenu(state.currentMenu, opcao);
-        resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+    if (state.currentMenu === 'submenu' || state.currentMenu === 'fechamento') {
+      const service = state.currentService;
+      
+      // Opção 7: Falar com especialista (disponível em todos os submenus)
+      if (messageText === '7') {
+        const ajudaResposta =
+          `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\n` +
+          `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+          `*Contato direto:*\n` +
+          `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+          `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, ajudaComFechamento);
+        return;
       }
-
-      const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+      
+      // Opções 1 a 6
+      if (['1', '2', '3', '4', '5', '6'].includes(messageText)) {
+        let resposta = '';
+        
+        // Opção 5: Visto Negado (especial para todos)
+        if (messageText === '5') {
+          if (service === 'passaporte') {
+            resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+          } else {
+            resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+          }
+        } 
+        // Opção 6: Avaliação Gratuita
+        else if (messageText === '6') {
+          resposta = `📊 *ANÁLISE GRATUITA DE PERFIL*\n\nDescubra suas chances de aprovação!\n\n🔗 https://getvisa.com.br/simulador-visto-americano\n\n⏱️ Menos de 2 minutos!\n\nApós o simulador, seus resultados chegarão aqui! 🚀\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        } 
+        // Opções 1-4: Preço, Prazo, Documentos, Processo
+        else {
+          const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
+          const opcao = opcoesMap[messageText];
+          resposta = getRespostaSubmenu(service, opcao);
+          resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        }
+        
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // Se não for 1-7, volta para o submenu
+      const submenu = await getSubmenu(service);
+      const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
       state.currentMenu = 'fechamento';
       userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, respostaComFechamento);
+      await sendReply(cleanPhone, submenuComFechamento);
       return;
     }
 
     // ============================================================
-    //  DETECTAR INTENÇÃO DE CONTRATAÇÃO
+    //  🔴 MENSAGEM NÃO RECONHECIDA
     // ============================================================
-    const intencoesContratacao = [
-      'quero contratar', 'contratar', 'quero fechar', 'fechar',
-      'quero assinar', 'assinar', 'quero comprar', 'comprar',
-      'contrato', 'quero o serviço', 'vamos fechar', 'quero contratar visto',
-      'quero o visto', 'me inscrever', 'inscrição', 'quero sim',
-      'quero fazer', 'fazer o visto', 'iniciar processo'
-    ];
-
-    const contratarDetectado = intencoesContratacao.some(frase => messageText.includes(frase));
-
-    if (contratarDetectado) {
-      let linkContratacao = '';
-      let nomeServico = '';
-
-      switch (state.currentMenu) {
-        case 'visto_americano':
-          linkContratacao = 'https://getvisa.com.br/formulario-ds160';
-          nomeServico = 'VISTO AMERICANO';
-          break;
-        case 'visto_canadense':
-          linkContratacao = 'https://getvisa.com.br/simulador-visto-canadense/';
-          nomeServico = 'VISTO CANADENSE';
-          break;
-        case 'visto_australiano':
-          linkContratacao = 'https://getvisa.com.br/simulador-visto-australiano/';
-          nomeServico = 'VISTO AUSTRALIANO';
-          break;
-        case 'eta_uk':
-          linkContratacao = 'https://getvisa.com.br/simulador-eta-uk';
-          nomeServico = 'eTA UK (REINO UNIDO)';
-          break;
-        case 'eta_canadense':
-          linkContratacao = 'https://getvisa.com.br/simulador-eta-canadense';
-          nomeServico = 'eTA CANADENSE';
-          break;
-        case 'passaporte':
-          linkContratacao = 'https://getvisa.com.br/formulario-passaporte/';
-          nomeServico = 'PASSAPORTE';
-          break;
-        default:
-          linkContratacao = 'https://getvisa.com.br/formulario-ds160';
-          nomeServico = 'VISTO AMERICANO';
-      }
-
-      const respostaContratacao =
-        `🎉 *Ótimo! Vamos começar seu ${nomeServico}* 🎉\n\n` +
-        `📋 *Preencha nosso formulário de pré-cadastro:*\n` +
-        `🔗 ${linkContratacao}\n\n` +
-        `✅ Após o envio, nossa equipe entrará em contato em até 24h.\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-
-      const contratacaoComFechamento = await fecharConversa(cleanPhone, respostaContratacao);
-      state.currentMenu = 'fechamento';
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, contratacaoComFechamento);
-      console.log(`✅ Intenção de contratar detectada - ${nomeServico}`);
-      return;
-    }
-
-    // ============================================================
-    //  MENSAGEM NÃO RECONHECIDA
-    // ============================================================
-    const naoReconhecido =
-      `😊 *Sua pergunta não foi respondida?*\n\n` +
-      `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
-      `📋 *Para contratar nossos serviços:*\n` +
-      `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
-      `🎯 *Para navegar no sistema:*\n` +
-      `• Digite *0* para ver o MENU principal\n` +
-      `• Digite *MENU* para recomeçar\n\n` +
-      `📞 *Fale com um especialista:*\n` +
-      `https://wa.me/5521974601812\n\n` +
-      `*Aguardamos seu contato!* 🚀`;
-
-    const naoReconhecidoComFechamento = await fecharConversa(cleanPhone, naoReconhecido);
+    const menuPrincipal = await getMenuPrincipal();
+    const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
     state.currentMenu = 'fechamento';
     userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, naoReconhecidoComFechamento);
+    await sendReply(cleanPhone, menuComFechamento);
 
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
     console.error('❌ Stack:', error.stack);
   }
 });
+
+// ============================================================
+//  FUNÇÕES AUXILIARES PARA MENUS
+// ============================================================
+
+async function getMenuPrincipal() {
+  return (
+    `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
+    `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
+    `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
+    `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
+    `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+    `5️⃣ 🇨🇦 eTA CANADENSE\n` +
+    `6️⃣ 📘 PASSAPORTE\n` +
+    `7️⃣ 📞 AJUDA / CONTATO\n\n` +
+    `*Digite o número da opção desejada (1 a 7):* 🚀`
+  );
+}
+
+async function getSubmenu(service) {
+  const names = {
+    'visto_americano': '🇺🇸 VISTO AMERICANO',
+    'visto_canadense': '🇨🇦 VISTO CANADENSE',
+    'visto_australiano': '🇦🇺 VISTO AUSTRALIANO',
+    'eta_uk': '🇬🇧 eTA UK',
+    'eta_canadense': '🇨🇦 eTA CANADENSE',
+    'passaporte': '📘 PASSAPORTE'
+  };
+  
+  const isPassaporte = service === 'passaporte';
+  
+  return (
+    `${names[service] || 'SERVIÇO'}\n\n` +
+    `1️⃣ 💰 PREÇO\n` +
+    `2️⃣ ⏰ PRAZO\n` +
+    `3️⃣ 📄 DOCUMENTOS\n` +
+    `4️⃣ 📋 PROCESSO\n` +
+    `5️⃣ ${isPassaporte ? '📍 ONDE FAZER' : '⚠️ VISTO NEGADO'}\n` +
+    `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+    `7️⃣ 📞 FALAR COM ESPECIALISTA\n` +
+    `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+    `*Digite o número da opção desejada:* 🚀`
+  );
+}
+
+function getServiceName(service) {
+  const names = {
+    'visto_americano': 'Visto Americano',
+    'visto_canadense': 'Visto Canadense',
+    'visto_australiano': 'Visto Australiano',
+    'eta_uk': 'eTA UK',
+    'eta_canadense': 'eTA Canadense',
+    'passaporte': 'Passaporte'
+  };
+  return names[service] || 'Serviço';
+}
+
 // ============================================================
 //  SISTEMA DE LEMBRETES AUTOMÁTICOS
 // ============================================================
