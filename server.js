@@ -1,6 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  CORRIGIDO: Clientes em processo não perdem o contexto
+//  COM RECONHECIMENTO DE INTENÇÕES AVANÇADO
 // ============================================================
 
 const express = require('express');
@@ -96,6 +96,128 @@ const DATE_FIELDS = [
 ];
 
 const SPAM_DOMAINS = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway', 'fake', 'spam'];
+
+// ============================================================
+//  NOVO: SISTEMA DE RECONHECIMENTO DE INTENÇÕES
+// ============================================================
+const INTENT_PATTERNS = {
+  // Intenções para Visto Americano
+  'visto_americano': {
+    keywords: ['visto americano', 'eua', 'estados unidos', 'us visa', 'b1', 'b2', 'visto de turismo', 'visto de negócio', 'entrevista eua'],
+    responses: {
+      'default': `🇺🇸 *VISTO AMERICANO*\n\n✅ *Processo completo:*\n• Preenchimento DS-160\n• Agendamento da entrevista\n• Preparação para entrevista\n• Acompanhamento total\n\n💰 *Investimento:*\n• Taxa Consular: ~R$ 950\n• Assessoria: R$ 350\n\n📋 *Quer iniciar?*\nDigite *1* para mais detalhes\nDigite *SIM* para começar agora\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Visto Canadense
+  'visto_canadense': {
+    keywords: ['visto canadense', 'canadá', 'canada visa', 'visto canada', 'eTA canadá', 'eTA canadense'],
+    responses: {
+      'default': `🇨🇦 *VISTO CANADENSE*\n\n✅ *Processo completo:*\n• Aplicação online GCKey\n• Biometria\n• Preparação de documentos\n• Acompanhamento total\n\n💰 *Investimento:*\n• Taxa Consular: ~R$ 750\n• Assessoria: R$ 400\n\n📋 *Quer iniciar?*\nDigite *2* para mais detalhes\nDigite *SIM* para começar agora\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Passaporte
+  'passaporte': {
+    keywords: ['passaporte', 'pf', 'polícia federal', 'documento viagem', 'passaporte novo', 'renovar passaporte'],
+    responses: {
+      'default': `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:*\n• Taxa PF: ~R$ 257\n• Assessoria: R$ 150\n\n📋 *Quer iniciar?*\nDigite *6* para mais detalhes\nDigite *SIM* para começar agora\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Preço
+  'preco': {
+    keywords: ['preço', 'valor', 'quanto custa', 'taxa', 'investimento', 'preço', 'valores', 'custo'],
+    responses: {
+      'default': `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 *Visto Americano:* Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 *Visto Canadense:* Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 *Visto Australiano:* Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 *eTA UK:* ~R$ 120 + Assessoria R$ 150\n🇨🇦 *eTA Canadense:* ~R$ 50 + Assessoria R$ 100\n📘 *Passaporte:* Taxa ~R$ 257 + Assessoria R$ 150\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Prazo
+  'prazo': {
+    keywords: ['prazo', 'tempo', 'dias', 'semanas', 'demora', 'quanto tempo', 'agendamento', 'processamento'],
+    responses: {
+      'default': `⏰ *PRAZOS DOS SERVIÇOS*\n\n🇺🇸 *Visto Americano:* 30-40 dias\n🇨🇦 *Visto Canadense:* 30-60 dias\n🇦🇺 *Visto Australiano:* 15-30 dias\n🇬🇧 *eTA UK:* 1-3 dias\n🇨🇦 *eTA Canadense:* 1 dia\n📘 *Passaporte:* 10-20 dias\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Documentos
+  'documentos': {
+    keywords: ['documentos', 'documentação', 'precisa de', 'requisitos', 'necessário', 'obrigatório', 'papéis'],
+    responses: {
+      'default': `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• Visto Americano: DS-160 preenchido\n• Visto Canadense: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Contato/Ajuda
+  'ajuda': {
+    keywords: ['ajuda', 'duvida', 'contato', 'falar', 'especialista', 'atendente', 'moisés', 'consultor'],
+    responses: {
+      'default': `📞 *FALE CONOSCO*\n\nMeu nome é *Moisés* e estou aqui para ajudar!\n\n*Contato direto:*\n🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  },
+  
+  // Intenções para Visto Negado
+  'visto_negado': {
+    keywords: ['negado', 'negativa', 'recusado', 'negativa de visto', 'visto recusado', 'perdi visto', 'deportado'],
+    responses: {
+      'default': `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para MENU principal* 🚀`
+    }
+  }
+};
+
+// ============================================================
+//  FUNÇÃO PARA DETECTAR INTENÇÃO
+// ============================================================
+function detectIntent(message) {
+  const lowerMessage = message.toLowerCase();
+  
+  // Limpa a mensagem de caracteres especiais
+  const cleanMessage = lowerMessage.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  
+  // Verifica cada padrão
+  for (const [intent, data] of Object.entries(INTENT_PATTERNS)) {
+    for (const keyword of data.keywords) {
+      const cleanKeyword = keyword.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (cleanMessage.includes(cleanKeyword)) {
+        return {
+          intent: intent,
+          confidence: 1.0,
+          response: data.responses.default
+        };
+      }
+    }
+  }
+  
+  // Verifica intenções específicas com mais precisão
+  if (cleanMessage.includes('quero fazer o visto') || 
+      cleanMessage.includes('quero visto') || 
+      cleanMessage.includes('iniciar processo') ||
+      cleanMessage.includes('começar')) {
+    return {
+      intent: 'iniciar_processo',
+      confidence: 0.9,
+      response: `✅ *Ótimo! Vamos iniciar seu processo!*\n\n📋 *Escolha o serviço desejado:*\n\n` +
+                `1️⃣ 🇺🇸 Visto Americano\n` +
+                `2️⃣ 🇨🇦 Visto Canadense\n` +
+                `3️⃣ 🇦🇺 Visto Australiano\n` +
+                `4️⃣ 🇬🇧 eTA UK\n` +
+                `5️⃣ 🇨🇦 eTA Canadense\n` +
+                `6️⃣ 📘 Passaporte\n\n` +
+                `📌 *Digite o número da opção ou 0 para MENU principal* 🚀`
+    };
+  }
+  
+  if (cleanMessage.includes('eua') || cleanMessage.includes('estados unidos')) {
+    return {
+      intent: 'visto_americano',
+      confidence: 0.8,
+      response: INTENT_PATTERNS.visto_americano.responses.default
+    };
+  }
+  
+  return null;
+}
 
 // ============================================================
 //  UTILITÁRIOS
@@ -1552,7 +1674,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - COM CONTEXTO PARA CLIENTES EM PROCESSO
+//  WEBHOOK Z-API - COM RECONHECIMENTO DE INTENÇÕES
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1612,49 +1734,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // ============================================================
-    //  ESTADO DO USUÁRIO - COM CONTROLE DE PROCESSO
+    //  ESTADO DO USUÁRIO
     // ============================================================
     let state = userState.get(cleanPhone) || { 
-      nivel: 'principal',  // 'principal', 'submenu', 'processo'
-      service: null,       // serviço selecionado
+      nivel: 'principal',
+      service: null,
       aguardandoFeedback: false,
-      emProcesso: false,   // NOVO: indica se o cliente já iniciou o processo
       lastActivity: Date.now() 
     };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
-
-    // ============================================================
-    //  VERIFICA SE O CLIENTE ESTÁ EM PROCESSO NO SUPABASE
-    // ============================================================
-    async function verificarClienteEmProcesso(phone) {
-      try {
-        const { data, error } = await supabase
-          .from('solicitacoes')
-          .select('id, status, tipo')
-          .eq('telefone', phone)
-          .in('status', ['pendente', 'em_andamento', 'agendado'])
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (error) throw error;
-        return data && data.length > 0;
-      } catch (err) {
-        console.error('❌ Erro ao verificar cliente em processo:', err);
-        return false;
-      }
-    }
-
-    // Se ainda não marcamos como em processo, verifica no banco
-    if (!state.emProcesso) {
-      const emProcesso = await verificarClienteEmProcesso(cleanPhone);
-      if (emProcesso) {
-        state.emProcesso = true;
-        state.nivel = 'processo';
-        userState.set(cleanPhone, state);
-        console.log(`🟢 Cliente ${cleanPhone} está em processo ativo`);
-      }
-    }
 
     // ============================================================
     //  COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
@@ -1663,7 +1752,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       state.nivel = 'principal';
       state.service = null;
       state.aguardandoFeedback = false;
-      // Mantém emProcesso para não perder o contexto
       userState.set(cleanPhone, state);
 
       const menuPrincipal = await getMenuPrincipal();
@@ -1684,11 +1772,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
         state.aguardandoFeedback = false;
-        // Se estava em processo, mantém
-        if (!state.emProcesso) {
-          state.nivel = 'principal';
-          state.service = null;
-        }
+        state.nivel = 'principal';
+        state.service = null;
         userState.set(cleanPhone, state);
         return;
       }
@@ -1704,57 +1789,36 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         await sendReply(cleanPhone, resposta);
         state.aguardandoFeedback = false;
-        if (!state.emProcesso) {
-          state.nivel = 'principal';
-          state.service = null;
-        }
+        state.nivel = 'principal';
+        state.service = null;
         userState.set(cleanPhone, state);
         return;
       }
       
-      // Se não for 8 ou 9, sai do feedback
       state.aguardandoFeedback = false;
       userState.set(cleanPhone, state);
     }
 
     // ============================================================
-    //  🟢 SE ESTIVER EM PROCESSO - RESPOSTA ESPECIAL
+    //  🟢 RECONHECIMENTO DE INTENÇÕES (ANTES DO SUBMENU)
     // ============================================================
-    if (state.emProcesso === true || state.nivel === 'processo') {
-      // Mapeia respostas comuns para clientes em processo
-      const respostasProcesso = {
-        'sim': `✅ *Ótimo!*\n\nVamos dar continuidade ao seu processo.\n\n📋 *Próximos passos:*\n• Revisaremos sua documentação\n• Entraremos em contato em breve\n• Fique atento ao WhatsApp\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'não': `😊 *Sem problemas!*\n\nEstamos aqui para tirar todas as suas dúvidas.\n\n📞 *Fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'nao': `😊 *Sem problemas!*\n\nEstamos aqui para tirar todas as suas dúvidas.\n\n📞 *Fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'ok': `👍 *OK!*\n\nSeu processo continua.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'obrigado': `🙏 *Por nada!*\n\nEstamos à disposição.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'obrigada': `🙏 *Por nada!*\n\nEstamos à disposição.\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'ajuda': `🆘 *Como posso ajudar?*\n\n• Digite *0* para o MENU principal\n• Digite *7* para falar com um especialista\n• Ou me envie sua dúvida\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`,
-        'duvida': `💡 *Tire sua dúvida:*\n\nFique à vontade para enviar sua pergunta que responderei o mais rápido possível.\n\n📞 *Ou fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`
-      };
-
-      // Verifica se a mensagem é uma resposta conhecida
-      if (respostasProcesso[messageText]) {
-        const resposta = respostasProcesso[messageText];
-        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+    // Detecta a intenção da mensagem
+    const intentResult = detectIntent(messageText);
+    
+    if (intentResult && state.nivel === 'principal') {
+      console.log(`🎯 Intenção detectada: ${intentResult.intent} (confiança: ${intentResult.confidence})`);
+      
+      // Se for "iniciar_processo", mostra os serviços disponíveis
+      if (intentResult.intent === 'iniciar_processo') {
+        const respostaComFechamento = await fecharConversa(cleanPhone, intentResult.response);
         state.aguardandoFeedback = true;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, respostaComFechamento);
         return;
       }
-
-      // Para qualquer outra mensagem durante o processo, dá uma resposta contextual
-      const respostaContextual = 
-        `👋 *Olá!*\n\n` +
-        `Recebi sua mensagem: *"${messageText}"*\n\n` +
-        `📋 *Seu processo está em andamento.*\n\n` +
-        `🔄 *Como posso ajudar?*\n` +
-        `• Digite *0* para voltar ao MENU principal\n` +
-        `• Digite *7* para falar com um especialista\n` +
-        `• Ou me envie sua dúvida específica\n\n` +
-        `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
       
-      const respostaComFechamento = await fecharConversa(cleanPhone, respostaContextual);
+      // Para outras intenções, responde diretamente
+      const respostaComFechamento = await fecharConversa(cleanPhone, intentResult.response);
       state.aguardandoFeedback = true;
       userState.set(cleanPhone, state);
       await sendReply(cleanPhone, respostaComFechamento);
@@ -1777,7 +1841,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE MÁXIMA
+    //  🟢 SE ESTIVER NO SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
       const service = state.service;
@@ -1874,7 +1938,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🟢 MENU PRINCIPAL
+    //  🟢 MENU PRINCIPAL - PROCESSAMENTO NUMÉRICO
     // ============================================================
     if (state.nivel === 'principal') {
       let serviceKey = null;
@@ -1900,6 +1964,16 @@ app.post('/api/webhook/zapi', async (req, res) => {
           await sendReply(cleanPhone, ajudaComFechamento);
           return;
         default:
+          // Se não for um número válido, tenta detectar intenção novamente
+          const fallbackIntent = detectIntent(messageText);
+          if (fallbackIntent) {
+            const respostaComFechamento = await fecharConversa(cleanPhone, fallbackIntent.response);
+            state.aguardandoFeedback = true;
+            userState.set(cleanPhone, state);
+            await sendReply(cleanPhone, respostaComFechamento);
+            return;
+          }
+          
           const menuPrincipal = await getMenuPrincipal();
           const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
           state.aguardandoFeedback = true;
