@@ -1552,7 +1552,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - MENU HIERÁRQUICO SIMPLIFICADO
+//  WEBHOOK Z-API - COM SUBMENU PRIORITÁRIO
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1580,13 +1580,19 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     const senderPhone = body.phone || body.from;
-    if (!senderPhone) return;
+    if (!senderPhone) {
+      console.log('⚠️ Telefone do remetente não encontrado');
+      return;
+    }
 
     let messageText = body.text?.message || body.message?.text || body.message || '';
     if (typeof messageText !== 'string') messageText = String(messageText);
     messageText = messageText.trim().toLowerCase();
 
-    if (!messageText) return;
+    if (!messageText) {
+      console.log('⚠️ Mensagem vazia');
+      return;
+    }
 
     console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
@@ -1688,7 +1694,104 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🟢 MENU PRINCIPAL
+    //  🟢 PRIORIDADE 1: SUBMENU (se estiver no submenu)
+    // ============================================================
+    if (state.currentMenu === 'submenu') {
+      const service = state.currentService;
+      
+      // Opção 7: Falar com especialista
+      if (messageText === '7') {
+        const ajudaResposta =
+          `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\n` +
+          `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+          `*Contato direto:*\n` +
+          `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+          `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, ajudaComFechamento);
+        return;
+      }
+      
+      // OPÇÃO 6: AVALIAÇÃO GRATUITA
+      if (messageText === '6') {
+        const links = {
+          'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
+          'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense',
+          'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano',
+          'eta_uk': 'https://getvisa.com.br/simulador-eta-uk',
+          'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
+          'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+        };
+        
+        const nomes = {
+          'visto_americano': 'VISTO AMERICANO',
+          'visto_canadense': 'VISTO CANADENSE',
+          'visto_australiano': 'VISTO AUSTRALIANO',
+          'eta_uk': 'eTA UK',
+          'eta_canadense': 'eTA CANADENSE',
+          'passaporte': 'PASSAPORTE'
+        };
+        
+        const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
+        const nomeServico = nomes[service] || 'SERVIÇO';
+        
+        const resposta = 
+          `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\n` +
+          `Clique no link abaixo para fazer sua avaliação:\n\n` +
+          `${link}\n\n` +
+          `⏱️ Leva menos de 2 minutos!\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // OPÇÃO 5: Visto Negado / Onde Fazer
+      if (messageText === '5') {
+        let resposta = '';
+        if (service === 'passaporte') {
+          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        } else {
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        }
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // OPÇÕES 1-4: Preço, Prazo, Documentos, Processo
+      if (['1', '2', '3', '4'].includes(messageText)) {
+        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
+        const opcao = opcoesMap[messageText];
+        let resposta = getRespostaSubmenu(service, opcao);
+        resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.currentMenu = 'fechamento';
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // Se não for 1-7, mostra o submenu novamente
+      const submenu = await getSubmenu(service);
+      const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
+      state.currentMenu = 'fechamento';
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, submenuComFechamento);
+      return;
+    }
+
+    // ============================================================
+    //  🟢 PRIORIDADE 2: MENU PRINCIPAL
     // ============================================================
     if (state.currentMenu === 'main') {
       let serviceKey = null;
@@ -1735,111 +1838,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
     }
-
-    // ============================================================
-//  🟢 SUBMENU - OPÇÕES 1 a 6 (CORRIGIDO)
-// ============================================================
-if (state.currentMenu === 'submenu') {
-  const service = state.currentService;
-  
-  // Opção 7: Falar com especialista
-  if (messageText === '7') {
-    const ajudaResposta =
-      `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\n` +
-      `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
-      `*Contato direto:*\n` +
-      `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-      `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-      `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-    const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-    state.currentMenu = 'fechamento';
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, ajudaComFechamento);
-    return;
-  }
-  
-  // ============================================================
-  //  OPÇÃO 6: AVALIAÇÃO GRATUITA - Link direto
-  // ============================================================
-  if (messageText === '6') {
-    const links = {
-      'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
-      'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense',
-      'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano',
-      'eta_uk': 'https://getvisa.com.br/simulador-eta-uk',
-      'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
-      'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
-    };
-    
-    const nomes = {
-      'visto_americano': 'VISTO AMERICANO',
-      'visto_canadense': 'VISTO CANADENSE',
-      'visto_australiano': 'VISTO AUSTRALIANO',
-      'eta_uk': 'eTA UK',
-      'eta_canadense': 'eTA CANADENSE',
-      'passaporte': 'PASSAPORTE'
-    };
-    
-    const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
-    const nomeServico = nomes[service] || 'SERVIÇO';
-    
-    const resposta = 
-      `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\n` +
-      `Clique no link abaixo para fazer sua avaliação:\n\n` +
-      `${link}\n\n` +
-      `⏱️ Leva menos de 2 minutos!\n\n` +
-      `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-    
-    const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-    state.currentMenu = 'fechamento';
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, respostaComFechamento);
-    return;
-  }
-  
-  // ============================================================
-  //  OPÇÃO 5: Visto Negado / Onde Fazer
-  // ============================================================
-  if (messageText === '5') {
-    let resposta = '';
-    if (service === 'passaporte') {
-      resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-    } else {
-      resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-    }
-    const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-    state.currentMenu = 'fechamento';
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, respostaComFechamento);
-    return;
-  }
-  
-  // ============================================================
-  //  OPÇÕES 1-4: Preço, Prazo, Documentos, Processo
-  // ============================================================
-  if (['1', '2', '3', '4'].includes(messageText)) {
-    const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
-    const opcao = opcoesMap[messageText];
-    let resposta = getRespostaSubmenu(service, opcao);
-    resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-    
-    const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-    state.currentMenu = 'fechamento';
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, respostaComFechamento);
-    return;
-  }
-  
-  // ============================================================
-  //  Se não for 1-7, mostra o submenu novamente
-  // ============================================================
-  const submenu = await getSubmenu(service);
-  const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
-  state.currentMenu = 'fechamento';
-  userState.set(cleanPhone, state);
-  await sendReply(cleanPhone, submenuComFechamento);
-  return;
-}
 
     // ============================================================
     //  🔴 MENSAGEM NÃO RECONHECIDA
