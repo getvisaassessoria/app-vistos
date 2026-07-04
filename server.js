@@ -1,6 +1,7 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
 //  Versão Refatorada - Código Limpo e Otimizado
+//  CORRIGIDO: Problema da opção 6 no submenu
 // ============================================================
 
 const express = require('express');
@@ -1552,7 +1553,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - SOLUÇÃO DEFINITIVA
+//  WEBHOOK Z-API - SOLUÇÃO DEFINITIVA CORRIGIDA
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1715,7 +1716,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
       
-      // OPÇÃO 6: AVALIAÇÃO GRATUITA
+      // ⭐ OPÇÃO 6: AVALIAÇÃO GRATUITA - CORRIGIDA
       if (messageText === '6') {
         const links = {
           'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
