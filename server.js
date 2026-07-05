@@ -114,24 +114,24 @@ const INTENT_KEYWORDS = {
 };
 
 // ============================================================
-//  RESPOSTAS PARA INTENÇÕES (COM LINKS AMIGÁVEIS)
+//  RESPOSTAS PARA INTENÇÕES - COM OPÇÕES NUMERADAS
 // ============================================================
 function getRespostaIntencao(intent, service = null) {
   const respostas = {
     'visto_americano': {
-      default: `🇺🇸 *VISTO AMERICANO*\n\n✅ *Processo completo:*\n• Preenchimento DS-160\n• Agendamento da entrevista\n• Preparação para entrevista\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 950 + Assessoria R$ 350\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇺🇸 *VISTO AMERICANO*\n\n✅ *Processo completo:*\n• Preenchimento DS-160\n• Agendamento da entrevista\n• Preparação para entrevista\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 950 + Assessoria R$ 350\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_canadense': {
-      default: `🇨🇦 *VISTO CANADENSE*\n\n✅ *Processo completo:*\n• Aplicação online GCKey\n• Biometria\n• Preparação de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 750 + Assessoria R$ 400\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇨🇦 *VISTO CANADENSE*\n\n✅ *Processo completo:*\n• Aplicação online GCKey\n• Biometria\n• Preparação de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 750 + Assessoria R$ 400\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_australiano': {
-      default: `🇦🇺 *VISTO AUSTRALIANO*\n\n✅ *Processo completo:*\n• Análise de perfil\n• Aplicação online ImmiAccount\n• Envio de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 850 + Assessoria R$ 450\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇦🇺 *VISTO AUSTRALIANO*\n\n✅ *Processo completo:*\n• Análise de perfil\n• Aplicação online ImmiAccount\n• Envio de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 850 + Assessoria R$ 450\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'eta_uk': {
-      default: `🇬🇧 *eTA UK (REINO UNIDO)*\n\n✅ *Processo completo:*\n• Aplicação 100% online\n• Validação de dados\n• Acompanhamento\n\n💰 *Investimento:* Taxa ~R$ 120 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇬🇧 *eTA UK (REINO UNIDO)*\n\n✅ *Processo completo:*\n• Aplicação 100% online\n• Validação de dados\n• Acompanhamento\n\n💰 *Investimento:* Taxa ~R$ 120 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'passaporte': {
-      default: `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:* Taxa PF ~R$ 257 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
+      default: `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:* Taxa PF ~R$ 257 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'preco': {
       default: `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 Visto Canadense: Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 Visto Australiano: Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 eTA UK: ~R$ 120 + Assessoria R$ 150\n🇨🇦 eTA Canadense: ~R$ 50 + Assessoria R$ 100\n📘 Passaporte: Taxa ~R$ 257 + Assessoria R$ 150\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
@@ -143,7 +143,7 @@ function getRespostaIntencao(intent, service = null) {
       default: `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• EUA: DS-160 preenchido\n• Canadá: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n📋 *Para qual serviço você quer a lista completa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_negado': {
-      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre o processo?*\n• Digite *4* para ver o PROCESSO\n• Digite *7* para falar com ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre o processo?*\n• Digite *4* para PROCESSO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
     },
     'iniciar_processo': {
       default: `✅ *Ótimo! Vamos iniciar seu processo!*\n\n📋 *Escolha o serviço:*\n\n1️⃣ 🇺🇸 Visto Americano\n2️⃣ 🇨🇦 Visto Canadense\n3️⃣ 🇦🇺 Visto Australiano\n4️⃣ 🇬🇧 eTA UK\n5️⃣ 🇨🇦 eTA Canadense\n6️⃣ 📘 Passaporte\n\n💬 *Digite o número ou me pergunte algo!*`
@@ -398,7 +398,7 @@ app.get('/ping', (req, res) => {
 });
 
 // ============================================================
-//  RESPOSTAS DOS SUBMENUS
+//  RESPOSTAS DOS SUBMENUS - CORRIGIDO: PROCESSO SEM NÚMEROS
 // ============================================================
 function getRespostaSubmenu(servico, opcao) {
   const respostas = {
@@ -427,12 +427,12 @@ function getRespostaSubmenu(servico, opcao) {
       passaporte: `📄 *DOCUMENTOS - PASSAPORTE*\n\n📌 *OBRIGATÓRIOS:*\n• RG original\n• CPF\n• Título de eleitor (homens 18-70)\n• Certidão de nascimento/casamento\n• Comprovante de quitação militar (homens)\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
     },
     processo: {
-      visto_americano: `📋 *PROCESSO - VISTO AMERICANO*\n\n1️⃣ Análise de perfil\n2️⃣ Preenchimento do DS-160\n3️⃣ Pagamento da taxa consular\n4️⃣ Agendamento da entrevista\n5️⃣ Coleta biométrica (CASV)\n6️⃣ Entrevista no Consulado\n7️⃣ Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
-      visto_canadense: `📋 *PROCESSO - VISTO CANADENSE*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online GCKey\n3️⃣ Pagamento das taxas\n4️⃣ Agendamento da biometria\n5️⃣ Coleta de dados biométricos\n6️⃣ Entrevista (se solicitado)\n7️⃣ Decisão e envio\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
-      visto_australiano: `📋 *PROCESSO - VISTO AUSTRALIANO*\n\n1️⃣ Análise de perfil\n2️⃣ Aplicação online ImmiAccount\n3️⃣ Pagamento das taxas\n4️⃣ Envio de documentos\n5️⃣ Acompanhamento\n6️⃣ Decisão por e-mail\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`,
-      eta_uk: `📋 *PROCESSO - eTA UK*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
-      eta_canadense: `📋 *PROCESSO - eTA CANADENSE*\n\n1️⃣ Coleta de dados\n2️⃣ Aplicação online\n3️⃣ Pagamento da taxa\n4️⃣ Análise automatizada\n5️⃣ Recebimento por e-mail\n6️⃣ Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Ou me pergunte algo específico!*`,
-      passaporte: `📋 *PROCESSO - PASSAPORTE*\n\n1️⃣ Agendamento no site da PF\n2️⃣ Separação dos documentos\n3️⃣ Pagamento da GRU\n4️⃣ Comparecimento ao posto\n5️⃣ Coleta de dados biométricos\n6️⃣ Aguardar emissão\n7️⃣ Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n\n💬 *Ou me pergunte algo específico!*`
+      visto_americano: `📋 *PROCESSO - VISTO AMERICANO*\n\n• Análise de perfil\n• Preenchimento do DS-160\n• Pagamento da taxa consular\n• Agendamento da entrevista\n• Coleta biométrica (CASV)\n• Entrevista no Consulado\n• Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`,
+      visto_canadense: `📋 *PROCESSO - VISTO CANADENSE*\n\n• Análise de perfil\n• Aplicação online GCKey\n• Pagamento das taxas\n• Agendamento da biometria\n• Coleta de dados biométricos\n• Entrevista (se solicitado)\n• Decisão e envio\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`,
+      visto_australiano: `📋 *PROCESSO - VISTO AUSTRALIANO*\n\n• Análise de perfil\n• Aplicação online ImmiAccount\n• Pagamento das taxas\n• Envio de documentos\n• Acompanhamento\n• Decisão por e-mail\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`,
+      eta_uk: `📋 *PROCESSO - eTA UK*\n\n• Coleta de dados\n• Aplicação online\n• Pagamento da taxa\n• Análise automatizada\n• Recebimento por e-mail\n• Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`,
+      eta_canadense: `📋 *PROCESSO - eTA CANADENSE*\n\n• Coleta de dados\n• Aplicação online\n• Pagamento da taxa\n• Análise automatizada\n• Recebimento por e-mail\n• Vincular ao passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`,
+      passaporte: `📋 *PROCESSO - PASSAPORTE*\n\n• Agendamento no site da PF\n• Separação dos documentos\n• Pagamento da GRU\n• Comparecimento ao posto\n• Coleta de dados biométricos\n• Aguardar emissão\n• Retirada do passaporte\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Qual etapa você quer saber mais?*`
     }
   };
   
