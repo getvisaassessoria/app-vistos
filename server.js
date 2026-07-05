@@ -1821,7 +1821,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
         const nomeServico = nomes[service] || 'SERVIÇO';
         
-        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📋 *Depois de fazer, me avise para continuarmos!*\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
+        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📋 * Ao terminar a avaliação, clique em QUERO INICIAR MEU PROCESSO para continuarmos!*\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
