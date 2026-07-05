@@ -1830,7 +1830,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       //  OPÇÃO 7: FALAR COM ESPECIALISTA (COM LINK AMIGÁVEL)
       // ============================================================
       if (messageText === '7') {
-        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`;
+        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nNosso time de especialistas está à sua disposição  e estamos aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
