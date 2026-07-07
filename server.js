@@ -1,6 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  VERSÃO DEFINITIVA - COM LINKS AMIGÁVEIS E OPÇÕES CLARAS
+//  VERSÃO DEFINITIVA - CORRIGIDA E OTIMIZADA
 // ============================================================
 
 const express = require('express');
@@ -119,31 +119,31 @@ const INTENT_KEYWORDS = {
 function getRespostaIntencao(intent, service = null) {
   const respostas = {
     'visto_americano': {
-      default: `🇺🇸 *VISTO AMERICANO*\n\n✅ *Processo completo:*\n• Preenchimento DS-160\n• Agendamento da entrevista\n• Preparação para entrevista\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 950 + Assessoria R$ 350\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇺🇸 *VISTO AMERICANO*\n\n✅ *Processo completo:*\n• Preenchimento DS-160\n• Agendamento da entrevista\n• Preparação para entrevista\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 950 + Assessoria R$ 350\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_canadense': {
-      default: `🇨🇦 *VISTO CANADENSE*\n\n✅ *Processo completo:*\n• Aplicação online GCKey\n• Biometria\n• Preparação de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 750 + Assessoria R$ 400\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇨🇦 *VISTO CANADENSE*\n\n✅ *Processo completo:*\n• Aplicação online GCKey\n• Biometria\n• Preparação de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 750 + Assessoria R$ 400\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_australiano': {
-      default: `🇦🇺 *VISTO AUSTRALIANO*\n\n✅ *Processo completo:*\n• Análise de perfil\n• Aplicação online ImmiAccount\n• Envio de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 850 + Assessoria R$ 450\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇦🇺 *VISTO AUSTRALIANO*\n\n✅ *Processo completo:*\n• Análise de perfil\n• Aplicação online ImmiAccount\n• Envio de documentos\n• Acompanhamento total\n\n💰 *Investimento:* Taxa ~R$ 850 + Assessoria R$ 450\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *5* para VISTO NEGADO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'eta_uk': {
-      default: `🇬🇧 *eTA UK (REINO UNIDO)*\n\n✅ *Processo completo:*\n• Aplicação 100% online\n• Validação de dados\n• Acompanhamento\n\n💰 *Investimento:* Taxa ~R$ 120 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `🇬🇧 *eTA UK (REINO UNIDO)*\n\n✅ *Processo completo:*\n• Aplicação 100% online\n• Validação de dados\n• Acompanhamento\n\n💰 *Investimento:* Taxa ~R$ 120 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'passaporte': {
-      default: `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:* Taxa PF ~R$ 257 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `📘 *PASSAPORTE*\n\n✅ *Processo completo:*\n• Agendamento na PF\n• Orientação documental\n• Acompanhamento total\n\n💰 *Investimento:* Taxa PF ~R$ 257 + Assessoria R$ 150\n\n📋 *Quer saber mais?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *5* para ONDE FAZER\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'preco': {
-      default: `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 Visto Canadense: Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 Visto Australiano: Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 eTA UK: ~R$ 120 + Assessoria R$ 150\n🇨🇦 eTA Canadense: ~R$ 50 + Assessoria R$ 150\n📘 Passaporte: Taxa ~R$ 257 + Assessoria R$ 150\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
+      default: `💰 *INVESTIMENTO DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: Taxa ~R$ 950 + Assessoria R$ 350\n🇨🇦 Visto Canadense: Taxa ~R$ 750 + Assessoria R$ 400\n🇦🇺 Visto Australiano: Taxa ~R$ 850 + Assessoria R$ 450\n🇬🇧 eTA UK: ~R$ 120 + Assessoria R$ 150\n🇨🇦 eTA Canadense: ~R$ 50 + Assessoria R$ 150\n📘 Passaporte: Taxa ~R$ 257 + Assessoria R$ 150\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'prazo': {
-      default: `⏰ *PRAZOS DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: 30-40 dias\n🇨🇦 Visto Canadense: 30-60 dias\n🇦🇺 Visto Australiano: 15-30 dias\n🇬🇧 eTA UK: 1-3 dias\n🇨🇦 eTA Canadense: 1 dia\n📘 Passaporte: 10-20 dias\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
+      default: `⏰ *PRAZOS DOS SERVIÇOS*\n\n🇺🇸 Visto Americano: 30-40 dias\n🇨🇦 Visto Canadense: 30-60 dias\n🇦🇺 Visto Australiano: 15-30 dias\n🇬🇧 eTA UK: 1-3 dias\n🇨🇦 eTA Canadense: 1 dia\n📘 Passaporte: 10-20 dias\n\n📋 *Qual serviço te interessa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'documentos': {
-      default: `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• EUA: DS-160 preenchido\n• Canadá: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n📋 *Para qual serviço você quer a lista completa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`
+      default: `📄 *DOCUMENTOS NECESSÁRIOS*\n\n📌 *Gerais:*\n• Passaporte válido (mínimo 6 meses)\n• Foto 5x7 recente\n• Comprovante de renda\n• Extratos bancários\n\n📌 *Específicos:*\n• EUA: DS-160 preenchido\n• Canadá: Carta de intenção\n• Passaporte: RG, CPF, Título de Eleitor\n\n📋 *Para qual serviço você quer a lista completa?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *6* 📘 Passaporte\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'visto_negado': {
-      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre o processo?*\n• Digite *4* para PROCESSO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`
+      default: `⚠️ *VISTO NEGADO - RECUPERAÇÃO*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre o processo?*\n• Digite *4* para PROCESSO\n• Digite *6* para AVALIAÇÃO GRATUITA\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`
     },
     'iniciar_processo': {
       default: `✅ *Ótimo! Vamos iniciar seu processo!*\n\n📋 *Escolha o serviço:*\n\n1️⃣ 🇺🇸 Visto Americano\n2️⃣ 🇨🇦 Visto Canadense\n3️⃣ 🇦🇺 Visto Australiano\n4️⃣ 🇬🇧 eTA UK\n5️⃣ 🇨🇦 eTA Canadense\n6️⃣ 📘 Passaporte\n\n💬 *Digite o número ou me pergunte algo!*`
@@ -1664,7 +1664,7 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  WEBHOOK Z-API - VERSÃO FINAL COM LINKS AMIGÁVEIS
+//  WEBHOOK Z-API - VERSÃO CORRIGIDA E LIMPA
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1672,23 +1672,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
   try {
     const body = req.body;
-    
-    // ============================================================
-//  COMANDO: MENU ou 0 - VOLTA AO MENU PRINCIPAL
-// ============================================================
-if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
-  // Reseta o estado do usuário
-  state.nivel = 'principal';
-  state.service = null;
-  state.mensagensTrocadas = 0;
-  state.conversaAtiva = false;
-  userState.set(cleanPhone, state);
-
-  const menuPrincipal = await getMenuPrincipal();
-  await sendReply(cleanPhone, menuPrincipal);
-  return;
-}
-    
     
     // IGNORAR MENSAGENS DE GRUPO
     if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
@@ -1744,8 +1727,8 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
     //  ESTADO DO USUÁRIO
     // ============================================================
     let state = userState.get(cleanPhone) || { 
-      nivel: 'principal',      // 'principal', 'submenu'
-      service: null,           // serviço selecionado: visto_americano, etc
+      nivel: 'principal',
+      service: null,
       mensagensTrocadas: 0,
       lastActivity: Date.now(),
       conversaAtiva: false
@@ -1803,59 +1786,47 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
       const service = state.service;
       console.log(`🔹 Processando no submenu de: ${service}`);
 
-      // ============================================================
-      //  OPÇÃO 1: PREÇO
-      // ============================================================
+      // OPÇÃO 1: PREÇO
       if (messageText === '1') {
         const resposta = getRespostaSubmenu(service, 'preco');
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 2: PRAZO
-      // ============================================================
+      // OPÇÃO 2: PRAZO
       if (messageText === '2') {
         const resposta = getRespostaSubmenu(service, 'prazo');
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 3: DOCUMENTOS
-      // ============================================================
+      // OPÇÃO 3: DOCUMENTOS
       if (messageText === '3') {
         const resposta = getRespostaSubmenu(service, 'documentos');
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 4: PROCESSO
-      // ============================================================
+      // OPÇÃO 4: PROCESSO
       if (messageText === '4') {
         const resposta = getRespostaSubmenu(service, 'processo');
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 5: VISTO NEGADO (para vistos) / ONDE FAZER (para passaporte)
-      // ============================================================
+      // OPÇÃO 5: VISTO NEGADO (para vistos) / ONDE FAZER (para passaporte)
       if (messageText === '5') {
         let resposta = '';
         if (service === 'passaporte') {
-          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n\n💬 *Já agendou ou precisa de ajuda?*`;
+          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📋 *Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Já agendou ou precisa de ajuda?*`;
         } else {
-          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre como podemos ajudar?*\n• Digite *4* para PROCESSO\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📋 *Quer saber mais sobre como podemos ajudar?*\n• Digite *4* para PROCESSO\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`;
         }
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 6: AVALIAÇÃO GRATUITA
-      // ============================================================
+      // OPÇÃO 6: AVALIAÇÃO GRATUITA
       if (messageText === '6') {
         const links = {
           'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
@@ -1878,32 +1849,26 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
         const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
         const nomeServico = nomes[service] || 'SERVIÇO';
         
-        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📋 * Ao terminar a avaliação, clique em *QUERO INICIAR MEU PROCESSO* para continuarmos!*\n• Digite *7* para FALAR COM ESPECIALISTA\n\n💬 *Ou me pergunte algo específico!*`;
+        const resposta = `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\nClique no link abaixo para fazer sua avaliação:\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📋 *Ao terminar a avaliação, clique em QUERO INICIAR MEU PROCESSO para continuarmos!*\n• Digite *7* para FALAR COM ESPECIALISTA\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  OPÇÃO 7: FALAR COM ESPECIALISTA (COM LINK AMIGÁVEL)
-      // ============================================================
+      // OPÇÃO 7: FALAR COM ESPECIALISTA (COM LINK AMIGÁVEL)
       if (messageText === '7') {
-        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nNosso time de especialistas está à sua disposição e estamos aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, podemos ajudar com mais alguma informação?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n\n💬 *Ou me pergunte algo específico!*`;
+        const resposta = `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nNosso time de especialistas está à sua disposição e estamos aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, podemos ajudar com mais alguma informação?*\n• Digite *1* para PREÇO\n• Digite *2* para PRAZO\n• Digite *3* para DOCUMENTOS\n• Digite *4* para PROCESSO\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  SE DETECTOU INTENÇÃO ENQUANTO ESTÁ NO SUBMENU
-      // ============================================================
+      // SE DETECTOU INTENÇÃO ENQUANTO ESTÁ NO SUBMENU
       if (intent) {
         const resposta = getRespostaIntencao(intent, service);
         await sendReply(cleanPhone, resposta);
         return;
       }
 
-      // ============================================================
-      //  MENSAGEM NÃO RECONHECIDA NO SUBMENU - RESPOSTA CONTEXTUAL
-      // ============================================================
+      // MENSAGEM NÃO RECONHECIDA NO SUBMENU - RESPOSTA CONTEXTUAL
       const respostaContextual = 
         `💬 *Entendi! Você disse:* "${messageText}"\n\n` +
         `📋 *Estamos falando sobre ${getServiceName(service)}*\n\n` +
@@ -1958,7 +1923,7 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
       case '5': serviceKey = 'eta_canadense'; break;
       case '6': serviceKey = 'passaporte'; break;
       case '7':
-        const ajudaResposta = `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n\n💬 *Ou me pergunte algo específico!*`;
+        const ajudaResposta = `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *Clique aqui para nos enviar uma mensagem:* 👇\nhttps://wa.me/5521974601812\n\n🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n📋 *Enquanto isso, posso ajudar com mais alguma informação?*\n• Digite *1* 🇺🇸 Visto Americano\n• Digite *2* 🇨🇦 Visto Canadense\n• Digite *3* 🇦🇺 Visto Australiano\n• Digite *4* 🇬🇧 eTA UK\n• Digite *5* 🇨🇦 eTA Canadense\n• Digite *6* 📘 Passaporte\n• Digite *0* para VOLTAR AO MENU PRINCIPAL\n\n💬 *Ou me pergunte algo específico!*`;
         await sendReply(cleanPhone, ajudaResposta);
         return;
       default:
@@ -1971,7 +1936,8 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
           `4️⃣ 🇬🇧 eTA UK\n` +
           `5️⃣ 🇨🇦 eTA Canadense\n` +
           `6️⃣ 📘 Passaporte\n` +
-          `7️⃣ 📞 Ajuda / Contato\n\n` +
+          `7️⃣ 📞 Ajuda / Contato\n` +
+          `0️⃣ 🔙 Menu Principal\n\n` +
           `💬 *Digite o número ou me pergunte o que quiser!*`;
         await sendReply(cleanPhone, naoReconhecida);
         return;
@@ -1993,8 +1959,8 @@ if (messageText === '0' || cleanMessage === 'menu' || cleanMessage === 'menu') {
   }
 });
 
-/// ============================================================
-//  FUNÇÕES AUXILIARES PARA MENUS - COM OPÇÃO 0
+// ============================================================
+//  FUNÇÕES AUXILIARES PARA MENUS
 // ============================================================
 
 async function getMenuPrincipal() {
@@ -2148,6 +2114,109 @@ async function verificarLembretes() {
 
 setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
 verificarLembretes();
+
+// ============================================================
+//  ROTAS DE DIAGNÓSTICO Z-API
+// ============================================================
+
+app.get('/api/zapi/check-phone', async (req, res) => {
+  try {
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    
+    if (!instance || !token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Z-API não configurada',
+        config: { instance: !!instance, token: !!token }
+      });
+    }
+    
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/status`;
+    const response = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const data = await response.json();
+    const phoneNumber = data.phone || data.phoneNumber || data.whatsapp || data.connectedPhone || null;
+    
+    res.json({
+      success: response.status === 200,
+      statusCode: response.status,
+      phoneNumber: phoneNumber,
+      fullResponse: data,
+      expectedNumber: '5521974601812',
+      isCorrectNumber: phoneNumber === '5521974601812' || 
+                       String(phoneNumber).includes('21974601812') ||
+                       String(phoneNumber).includes('974601812'),
+      config: { instance: instance, token: token ? 'Configurado' : 'NÃO CONFIGURADO' }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/zapi/qrcode', async (req, res) => {
+  try {
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    
+    if (!instance || !token) {
+      return res.status(400).json({ success: false, message: 'Z-API não configurada' });
+    }
+    
+    const logoutUrl = `https://api.z-api.io/instances/${instance}/token/${token}/logout`;
+    await fetch(logoutUrl, { method: 'POST' });
+    
+    const qrUrl = `https://api.z-api.io/instances/${instance}/token/${token}/qrcode`;
+    const response = await fetch(qrUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const data = await response.json();
+    
+    res.json({
+      success: response.status === 200,
+      qrcode: data.qrcode || data,
+      instructions: 'Escaneie o QR Code com o WhatsApp do número +55 21 97460-1812',
+      expectedNumber: '5521974601812'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/zapi/send-test', async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    
+    if (!instance || !token) {
+      return res.status(400).json({ success: false, message: 'Z-API não configurada' });
+    }
+    
+    let targetPhone = phone || '5521974601812';
+    let cleanPhone = targetPhone.toString().replace(/\D/g, '');
+    if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+    
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    const testMessage = message || '🧪 Mensagem de teste do servidor!\n\n✅ Z-API configurada corretamente!\n📱 Número: ' + cleanPhone;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+      body: JSON.stringify({ phone: cleanPhone, message: testMessage })
+    });
+    
+    const data = await response.json();
+    
+    res.json({
+      success: response.status === 200,
+      statusCode: response.status,
+      phone: cleanPhone,
+      message: testMessage,
+      response: data
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // ============================================================
 //  INICIALIZAÇÃO
