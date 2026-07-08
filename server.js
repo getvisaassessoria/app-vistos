@@ -1747,72 +1747,68 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // ============================================================
-    //  🛡️ COMANDO !p - DEVE SER O PRIMEIRO A SER VERIFICADO
-    //  ============================================================
-    // Define sendReply ANTES de usar
-    const sendReply = async (phone, mensagem) => {
-      const instance = process.env.ZAPI_INSTANCE;
-      const token = process.env.ZAPI_TOKEN;
-      const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-      if (!instance || !token) return false;
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-        body: JSON.stringify({ phone: '55' + phone, message: mensagem })
-      });
-      console.log('✅ Resposta Z-API:', await response.json());
-      return response.status === 200;
-    };
+        let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+    
+    if (cleanPhone.length < 10) {
+      console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
+      return;
+    }
 
-    // Agora o comando !p pode ser verificado
-    const lowerMsg = messageText.toLowerCase().trim();
-    if (lowerMsg === '!p' || lowerMsg === '!processo' || lowerMsg === '!marcar') {
-      const numerosAdmin = ['21974601812']; // ADICIONE SEU NÚMERO AQUI
+    // ============================================================
+    //  🛡️ COMANDO !p - PRIMEIRO A SER EXECUTADO
+    //  ============================================================
+    // Verifica se a mensagem é !p
+    if (messageText.trim() === '!p' || messageText.trim() === '!P') {
+      console.log(`🔍 Comando !p detectado de: ${cleanPhone}`);
+      
+      // Verifica se é o número autorizado
+      const numerosAdmin = ['21974601812']; // SEU NÚMERO AQUI
       
       if (numerosAdmin.includes(cleanPhone)) {
         try {
-          console.log(`🔍 Comando !p recebido para o cliente: ${senderPhone}`);
+          // Marca o cliente que enviou a mensagem (senderPhone)
+          console.log(`📝 Marcando cliente ${senderPhone} como em_processo...`);
           
-          const { data: clienteExistente } = await supabase
+          const { error } = await supabase
             .from('clientes')
-            .select('id, status')
-            .eq('telefone', senderPhone)
-            .limit(1);
+            .update({ status: 'em_processo' })
+            .eq('telefone', senderPhone);
           
-          if (clienteExistente && clienteExistente.length > 0) {
-            await supabase
-              .from('clientes')
-              .update({ status: 'em_processo' })
-              .eq('telefone', senderPhone);
-            console.log(`✅ Cliente ${senderPhone} atualizado para em_processo`);
-          } else {
-            await supabase
-              .from('clientes')
-              .insert({
-                telefone: senderPhone,
-                status: 'em_processo',
-                email: `cliente_${senderPhone}@whatsapp.com`
+          if (!error) {
+            // Atualiza o estado em memória
+            const state = userState.get(cleanPhone) || {};
+            state.emProcesso = true;
+            state.tipoSolicitacao = 'processo_manual';
+            state.statusSolicitacao = 'em_andamento';
+            userState.set(cleanPhone, state);
+            
+            // Envia confirmação
+            const instance = process.env.ZAPI_INSTANCE;
+            const token = process.env.ZAPI_TOKEN;
+            const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+            if (instance && token) {
+              const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+              await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+                body: JSON.stringify({ 
+                  phone: '55' + cleanPhone, 
+                  message: `✅ *Cliente (${senderPhone}) marcado como "Em Processo"!*\n\n📋 Agora ele não verá mais o menu repetidamente.` 
+                })
               });
-            console.log(`✅ Cliente ${senderPhone} criado com status em_processo`);
+            }
+            console.log(`✅ Cliente ${senderPhone} marcado como em_processo com sucesso!`);
+          } else {
+            console.error('❌ Erro ao marcar cliente:', error);
           }
-          
-          // Atualiza o estado local
-          state.emProcesso = true;
-          state.tipoSolicitacao = 'processo_manual';
-          state.statusSolicitacao = 'em_andamento';
-          userState.set(cleanPhone, state);
-          
-          await sendReply(cleanPhone, 
-            `✅ *Cliente (${senderPhone}) marcado como "Em Processo"!*\n\n📋 Agora ele não verá mais o menu repetidamente.`
-          );
         } catch (error) {
           console.error('❌ Erro no !p:', error);
-          await sendReply(cleanPhone, '❌ *Erro ao marcar cliente.*');
         }
-        return;
+      } else {
+        console.log(`⛔ Número ${cleanPhone} não autorizado para !p`);
       }
+      return; // <-- IMPEDE O RESTANTE DO CÓDIGO DE EXECUTAR
     }
 
     // ============================================================
