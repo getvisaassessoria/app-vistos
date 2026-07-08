@@ -144,6 +144,56 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
+    // ============================================================
+//  FUNÇÃO PARA CADASTRAR CLIENTE AUTOMATICAMENTE
+//  (Coloque esta função ANTES do app.post('/api/webhook/zapi'))
+// ============================================================
+async function cadastrarClienteAutomatico(telefone) {
+  try {
+    // Verifica se o cliente já existe
+    const { data: clienteExistente, error: buscaError } = await supabase
+      .from('clientes')
+      .select('id, status')
+      .eq('telefone', telefone)
+      .limit(1);
+    
+    if (buscaError) {
+      console.error('❌ Erro ao buscar cliente:', buscaError);
+      return null;
+    }
+    
+    // Se já existe, retorna o cliente
+    if (clienteExistente && clienteExistente.length > 0) {
+      console.log(`📋 Cliente ${telefone} já existe (status: ${clienteExistente[0].status})`);
+      return clienteExistente[0];
+    }
+    
+    // Se NÃO existe, CADASTRA o cliente
+    console.log(`📝 Cadastrando novo cliente: ${telefone}`);
+    const { data: novoCliente, error: insertError } = await supabase
+      .from('clientes')
+      .insert({
+        telefone: telefone,
+        status: 'novo',  // Começa como 'novo'
+        created_at: new Date(),
+        updated_at: new Date()
+      })
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('❌ Erro ao cadastrar cliente:', insertError);
+      return null;
+    }
+    
+    console.log(`✅ Cliente ${telefone} CADASTRADO com sucesso! (status: novo)`);
+    return novoCliente;
+  } catch (error) {
+    console.error('❌ Erro ao cadastrar cliente automaticamente:', error);
+    return null;
+  }
+}
+
     const sendReply = async (phone, mensagem) => {
       const instance = process.env.ZAPI_INSTANCE;
       const token = process.env.ZAPI_TOKEN;
