@@ -180,54 +180,73 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const lowerMessage = messageText.toLowerCase();
     const cleanMessage = lowerMessage.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // ============================================================
-    //  🛡️ COMANDO SECRETO PARA ADMIN (digite "!p" no chat)
-    //  ============================================================
-    const numerosAdmin = ['21974601812']; // Adicione seu número aqui
+   // ============================================================
+//  🛡️ COMANDO SECRETO PARA ADMIN (digite "!p" no chat)
+//  ============================================================
+const numerosAdmin = ['21974601812']; // Adicione seu número aqui
 
-    if (messageText === '!p' || messageText === '!processo' || messageText === '!marcar') {
-      if (numerosAdmin.includes(cleanPhone)) {
-        try {
-          const { data: clienteExistente } = await supabase
-            .from('clientes')
-            .select('id')
-            .eq('telefone', senderPhone)
-            .limit(1);
-          
-          let resultado;
-          if (clienteExistente && clienteExistente.length > 0) {
-            resultado = await supabase
-              .from('clientes')
-              .update({ status: 'em_processo' })
-              .eq('telefone', senderPhone);
-          } else {
-            resultado = await supabase
-              .from('clientes')
-              .insert({
-                telefone: senderPhone,
-                status: 'em_processo',
-                nome_completo: 'Cliente em Processo'
-              });
-          }
-          
-          if (!resultado.error) {
-            state.emProcesso = true;
-            state.tipoSolicitacao = 'processo_manual';
-            userState.set(cleanPhone, state);
-            await sendReply(cleanPhone, 
-              `✅ *Cliente marcado como "Em Processo"!*\n\n📋 Agora o sistema vai responder sem mostrar o menu repetidamente.\n\n💬 *O que você precisa saber sobre o processo?*`
-            );
-          } else {
-            await sendReply(cleanPhone, '❌ *Erro ao marcar cliente. Tente novamente.*');
-          }
-        } catch (error) {
-          console.error('Erro no comando !p:', error);
-          await sendReply(cleanPhone, '❌ *Erro ao processar comando.*');
-        }
-        return;
+if (messageText === '!p' || messageText === '!processo' || messageText === '!marcar') {
+  // Verifica se é um número autorizado (você)
+  if (numerosAdmin.includes(cleanPhone)) {
+    try {
+      // O telefone do cliente é o senderPhone (quem enviou a mensagem)
+      // Mas cuidado: se você digitou !p no seu próprio chat, senderPhone é você
+      // Precisamos verificar se é uma conversa com um cliente
+      
+      let telefoneCliente = senderPhone; // O número que enviou a mensagem
+      
+      // Se você está falando com um cliente, o senderPhone é o cliente
+      // Se você está no seu próprio chat, o senderPhone é você
+      
+      // Busca o cliente pelo telefone
+      const { data: clienteExistente, error: buscaError } = await supabase
+        .from('clientes')
+        .select('id, status')
+        .eq('telefone', telefoneCliente)
+        .limit(1);
+      
+      let resultado;
+      
+      if (clienteExistente && clienteExistente.length > 0) {
+        // Atualiza cliente existente
+        resultado = await supabase
+          .from('clientes')
+          .update({ status: 'em_processo' })
+          .eq('telefone', telefoneCliente);
+        console.log(`✅ Cliente ${telefoneCliente} atualizado para em_processo`);
+      } else {
+        // Cria novo cliente com status em_processo
+        resultado = await supabase
+          .from('clientes')
+          .insert({
+            telefone: telefoneCliente,
+            status: 'em_processo',
+            nome_completo: 'Cliente em Processo'
+          });
+        console.log(`✅ Cliente ${telefoneCliente} criado com status em_processo`);
       }
+      
+      if (!resultado.error) {
+        // Atualiza o estado local
+        state.emProcesso = true;
+        state.tipoSolicitacao = 'processo_manual';
+        state.statusSolicitacao = 'em_andamento';
+        userState.set(cleanPhone, state);
+        
+        await sendReply(cleanPhone, 
+          `✅ *Cliente (${telefoneCliente}) marcado como "Em Processo"!*\n\n📋 Agora o sistema vai responder sem mostrar o menu repetidamente.\n\n💬 *Envie uma mensagem de teste para confirmar.*`
+        );
+      } else {
+        await sendReply(cleanPhone, '❌ *Erro ao marcar cliente. Tente novamente.*');
+        console.error('❌ Erro ao marcar cliente:', resultado.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro no comando !p:', error);
+      await sendReply(cleanPhone, '❌ *Erro ao processar comando.*');
     }
-
+    return;
+  }
+}
     // ============================================================
     //  VERIFICAR SE CLIENTE ESTÁ EM PROCESSO
     // ============================================================
