@@ -1,6 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  VERSÃO DEFINITIVA - COM CADASTRO AUTOMÁTICO DE CLIENTES
+//  VERSÃO CORRIGIDA - CLIENTES EM PROCESSO NÃO RECEBEM MENU
 // ============================================================
 
 const express = require('express');
@@ -1624,29 +1624,73 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
-//  FUNÇÃO PARA VERIFICAR SE CLIENTE ESTÁ EM PROCESSO
-// ============================================================
+//  ✅ FUNÇÃO CORRIGIDA: VERIFICAR SE CLIENTE ESTÁ EM PROCESSO
+//  ============================================================
 async function verificarClienteEmProcesso(telefone) {
   try {
+    // 1. Verifica o status do cliente na tabela clientes
     const { data: clientes, error: clienteError } = await supabase
       .from('clientes')
       .select('id, status')
       .eq('telefone', telefone)
       .limit(1);
+    
     if (!clienteError && clientes && clientes.length > 0) {
-      if (clientes[0].status === 'em_processo') {
-        return { emProcesso: true, motivo: 'status_marcado' };
+      // Cliente existe - verifica status
+      const status = clientes[0].status;
+      // Qualquer um desses status significa que o cliente está em processo
+      if (status === 'em_processo' || status === 'ativo' || status === 'andamento') {
+        console.log(`🟢 Cliente ${telefone} está em processo (status: ${status})`);
+        return { emProcesso: true, motivo: 'status_cliente', status: status };
       }
     }
+
+    // 2. Verifica solicitações ativas na tabela solicitacoes
     const { data: solicitacoes, error: solError } = await supabase
       .from('solicitacoes')
       .select('id, tipo, status, cliente_id')
-      .in('status', ['pendente', 'em_andamento', 'agendado', 'analise'])
+      .in('status', ['pendente', 'em_andamento', 'agendado', 'analise', 'processando', 'em_analise'])
       .order('created_at', { ascending: false })
       .limit(1);
+
     if (!solError && solicitacoes && solicitacoes.length > 0) {
-      return { emProcesso: true, solicitacao: solicitacoes[0], motivo: 'solicitacao_ativa' };
+      // Verifica se a solicitação pertence a este cliente
+      const { data: clienteVerificacao } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('telefone', telefone)
+        .limit(1);
+
+      if (clienteVerificacao && clienteVerificacao.length > 0) {
+        const clienteId = clienteVerificacao[0].id;
+        // Busca solicitações deste cliente específico
+        const { data: solCliente } = await supabase
+          .from('solicitacoes')
+          .select('id, tipo, status')
+          .eq('cliente_id', clienteId)
+          .in('status', ['pendente', 'em_andamento', 'agendado', 'analise', 'processando', 'em_analise'])
+          .limit(1);
+
+        if (solCliente && solCliente.length > 0) {
+          console.log(`🟢 Cliente ${telefone} tem solicitação ativa (${solCliente[0].tipo} - ${solCliente[0].status})`);
+          return { emProcesso: true, motivo: 'solicitacao_ativa', solicitacao: solCliente[0] };
+        }
+      }
     }
+
+    // 3. Verifica leads do simulador com status específico
+    const { data: leads, error: leadError } = await supabase
+      .from('leads_simulador')
+      .select('id, status_lead')
+      .eq('telefone_whatsapp', telefone)
+      .in('status_lead', ['em_andamento', 'qualificado', 'atendido', 'contato_iniciado'])
+      .limit(1);
+
+    if (!leadError && leads && leads.length > 0) {
+      console.log(`🟢 Cliente ${telefone} tem lead ativo (${leads[0].status_lead})`);
+      return { emProcesso: true, motivo: 'lead_ativo', status: leads[0].status_lead };
+    }
+
     return { emProcesso: false };
   } catch (error) {
     console.error('❌ Erro ao verificar cliente:', error);
@@ -1656,13 +1700,13 @@ async function verificarClienteEmProcesso(telefone) {
 
 // ============================================================
 //  FUNÇÃO PARA CADASTRAR CLIENTE AUTOMATICAMENTE
-//  (CORRETO - FORA DO WEBHOOK)
-// ============================================================
-async function cadastrarClienteAutomatico(telefone) {
+//  ============================================================
+async function cadastrarClienteAutomatico(telefone, nome = null) {
   try {
+    // Busca cliente existente
     const { data: clienteExistente, error: buscaError } = await supabase
       .from('clientes')
-      .select('id, status')
+      .select('id, status, nome_completo')
       .eq('telefone', telefone)
       .limit(1);
     
@@ -1677,17 +1721,29 @@ async function cadastrarClienteAutomatico(telefone) {
     }
     
     console.log(`📝 Cadastrando novo cliente: ${telefone}`);
+    
+    // Prepara dados para inserção
+    const dadosCliente = {
+      telefone: telefone,
+      status: 'novo',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (nome && nome.trim()) {
+      dadosCliente.nome_completo = nome.trim();
+    }
+
+    // Se tiver email padrão, pode adicionar
+    if (!dadosCliente.email) {
+      dadosCliente.email = `cliente_${telefone}@temp.com`;
+    }
+    
     const { data: novoCliente, error: insertError } = await supabase
-  .from('clientes')
-  .insert({
-    telefone: telefone,
-    email: `cliente_${telefone}@whatsapp.com`, // Email padrão
-    status: 'novo',
-    created_at: new Date(),
-    updated_at: new Date()
-  })
-  .select()
-  .single();
+      .from('clientes')
+      .insert(dadosCliente)
+      .select()
+      .single();
     
     if (insertError) {
       console.error('❌ Erro ao cadastrar cliente:', insertError);
@@ -1703,8 +1759,42 @@ async function cadastrarClienteAutomatico(telefone) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - VERSÃO CORRIGIDA E LIMPA
+//  FUNÇÃO PARA ENVIAR RESPOSTA
+//  ============================================================
+async function sendReply(phone, message) {
+  try {
+    const instance = process.env.ZAPI_INSTANCE;
+    const token = process.env.ZAPI_TOKEN;
+    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+    
+    if (!instance || !token) {
+      console.log('⚠️ Z-API não configurada');
+      return false;
+    }
+    
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Client-Token': securityToken || ''
+      },
+      body: JSON.stringify({ phone: cleanPhone, message: message })
+    });
+    
+    console.log(`📱 Resposta enviada para ${cleanPhone}: ${response.status}`);
+    return response.status === 200;
+  } catch (error) {
+    console.error('❌ Erro ao enviar resposta:', error.message);
+    return false;
+  }
+}
+
 // ============================================================
+//  WEBHOOK Z-API - VERSÃO CORRIGIDA
+//  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
   res.status(200).json({ status: 'ok' });
@@ -1739,15 +1829,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
-        let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
-    
-    if (cleanPhone.length < 10) {
-      console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
-      return;
-    }
-
-        let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
     
     if (cleanPhone.length < 10) {
@@ -1756,51 +1838,89 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  🛡️ COMANDO !p - PRIMEIRO A SER EXECUTADO
+    //  🛡️ COMANDO !p - MARCAR CLIENTE COMO EM PROCESSO
     //  ============================================================
-    // Verifica se a mensagem é !p
     if (messageText.trim() === '!p' || messageText.trim() === '!P') {
       console.log(`🔍 Comando !p detectado de: ${cleanPhone}`);
       
-      // Verifica se é o número autorizado
-      const numerosAdmin = ['21974601812']; // SEU NÚMERO AQUI
+      const numerosAdmin = ['21974601812'];
       
       if (numerosAdmin.includes(cleanPhone)) {
         try {
-          // Marca o cliente que enviou a mensagem (senderPhone)
           console.log(`📝 Marcando cliente ${senderPhone} como em_processo...`);
           
-          const { error } = await supabase
+          // Busca o cliente para atualizar
+          const { data: cliente, error: buscaError } = await supabase
             .from('clientes')
-            .update({ status: 'em_processo' })
-            .eq('telefone', senderPhone);
-          
-          if (!error) {
-            // Atualiza o estado em memória
-            const state = userState.get(cleanPhone) || {};
-            state.emProcesso = true;
-            state.tipoSolicitacao = 'processo_manual';
-            state.statusSolicitacao = 'em_andamento';
-            userState.set(cleanPhone, state);
-            
-            // Envia confirmação
-            const instance = process.env.ZAPI_INSTANCE;
-            const token = process.env.ZAPI_TOKEN;
-            const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-            if (instance && token) {
-              const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-              await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-                body: JSON.stringify({ 
-                  phone: '55' + cleanPhone, 
-                  message: `✅ *Cliente (${senderPhone}) marcado como "Em Processo"!*\n\n📋 Agora ele não verá mais o menu repetidamente.` 
-                })
-              });
+            .select('id, status')
+            .eq('telefone', senderPhone)
+            .limit(1);
+
+          if (buscaError || !cliente || cliente.length === 0) {
+            // Cliente não existe, cria um novo
+            console.log(`📝 Cliente não encontrado, cadastrando...`);
+            const { data: novoCliente, error: insertError } = await supabase
+              .from('clientes')
+              .insert({
+                telefone: senderPhone,
+                email: `cliente_${senderPhone}@whatsapp.com`,
+                status: 'em_processo',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (insertError) {
+              console.error('❌ Erro ao criar cliente:', insertError);
+            } else {
+              console.log(`✅ Cliente ${senderPhone} criado como em_processo!`);
+              // Atualiza estado em memória
+              const state = userState.get(cleanPhone) || {};
+              state.emProcesso = true;
+              state.tipoSolicitacao = 'processo_manual';
+              state.statusSolicitacao = 'em_andamento';
+              state.verificadoBD = true;
+              userState.set(cleanPhone, state);
             }
-            console.log(`✅ Cliente ${senderPhone} marcado como em_processo com sucesso!`);
           } else {
-            console.error('❌ Erro ao marcar cliente:', error);
+            // Atualiza cliente existente
+            const { error } = await supabase
+              .from('clientes')
+              .update({ 
+                status: 'em_processo',
+                updated_at: new Date().toISOString()
+              })
+              .eq('telefone', senderPhone);
+
+            if (!error) {
+              console.log(`✅ Cliente ${senderPhone} atualizado para em_processo!`);
+              // Atualiza estado em memória
+              const state = userState.get(cleanPhone) || {};
+              state.emProcesso = true;
+              state.tipoSolicitacao = 'processo_manual';
+              state.statusSolicitacao = 'em_andamento';
+              state.verificadoBD = true;
+              userState.set(cleanPhone, state);
+            } else {
+              console.error('❌ Erro ao marcar cliente:', error);
+            }
+          }
+          
+          // Envia confirmação
+          const instance = process.env.ZAPI_INSTANCE;
+          const token = process.env.ZAPI_TOKEN;
+          const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+          if (instance && token) {
+            const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+            await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+              body: JSON.stringify({ 
+                phone: '55' + cleanPhone, 
+                message: `✅ *Cliente (${senderPhone}) marcado como "Em Processo"!*\n\n📋 Agora ele não verá mais o menu repetidamente.` 
+              })
+            });
           }
         } catch (error) {
           console.error('❌ Erro no !p:', error);
@@ -1808,7 +1928,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       } else {
         console.log(`⛔ Número ${cleanPhone} não autorizado para !p`);
       }
-      return; // <-- IMPEDE O RESTANTE DO CÓDIGO DE EXECUTAR
+      return;
     }
 
     // ============================================================
@@ -1826,9 +1946,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
       mensagensTrocadas: 0,
       lastActivity: Date.now(),
       conversaAtiva: false,
-      emProcesso: false
+      emProcesso: false,
+      verificadoBD: false
     };
-    // ... resto do código
     state.lastActivity = Date.now();
     state.mensagensTrocadas = (state.mensagensTrocadas || 0) + 1;
     if (state.mensagensTrocadas > 1) {
@@ -1840,22 +1960,28 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const cleanMessage = lowerMessage.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     // ============================================================
-    //  VERIFICAR SE CLIENTE ESTÁ EM PROCESSO
-    // ============================================================
-    if (!state.emProcesso) {
+    //  ✅ VERIFICAÇÃO CORRIGIDA: CLIENTE EM PROCESSO
+    //  ============================================================
+    if (!state.verificadoBD) {
+      console.log(`🔍 Verificando status do cliente ${cleanPhone} no banco...`);
       const clienteInfo = await verificarClienteEmProcesso(cleanPhone);
       if (clienteInfo && clienteInfo.emProcesso) {
         state.emProcesso = true;
         state.tipoSolicitacao = clienteInfo.solicitacao?.tipo || 'processo';
-        state.statusSolicitacao = clienteInfo.solicitacao?.status || 'em_andamento';
+        state.statusSolicitacao = clienteInfo.solicitacao?.status || clienteInfo.status || 'em_andamento';
+        state.verificadoBD = true;
         userState.set(cleanPhone, state);
-        console.log(`🟢 Cliente ${cleanPhone} está em processo`);
+        console.log(`🟢 Cliente ${cleanPhone} está em processo (${state.tipoSolicitacao})`);
+      } else {
+        state.verificadoBD = true;
+        userState.set(cleanPhone, state);
+        console.log(`🔴 Cliente ${cleanPhone} NÃO está em processo`);
       }
     }
 
     // ============================================================
     //  COMANDO: MENU ou 0 - VOLTA AO MENU PRINCIPAL
-    // ============================================================
+    //  ============================================================
     if (messageText === '0' || cleanMessage === 'menu') {
       state.nivel = 'principal';
       state.service = null;
@@ -1870,7 +1996,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  🟢 CLIENTE EM PROCESSO - RESPOSTA CONTEXTUAL (SEM MENU)
-    // ============================================================
+    //  ============================================================
     if (state.emProcesso === true) {
       const respostasProcesso = {
         'sim': `✅ *Ótimo!*\n\nVamos dar continuidade ao seu processo.\n\n📋 *Status atual:* ${state.tipoSolicitacao || 'Processo em andamento'}\n\n💬 *Em breve nossa equipe entrará em contato.*\n\n📌 *Digite 0 para o MENU principal* 🚀`,
@@ -1905,7 +2031,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  SAUDAÇÕES
-    // ============================================================
+    //  ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     if (saudacoes.includes(cleanMessage)) {
       if (state.conversaAtiva && state.service) {
@@ -1921,12 +2047,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  DETECTAR INTENÇÃO
-    // ============================================================
+    //  ============================================================
     const intent = detectIntent(messageText);
 
     // ============================================================
     //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE ABSOLUTA
-    // ============================================================
+    //  ============================================================
     if (state.nivel === 'submenu' && state.service) {
       const service = state.service;
       console.log(`🔹 Processando no submenu de: ${service}`);
@@ -2000,7 +2126,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  🟢 MENU PRINCIPAL
-    // ============================================================
+    //  ============================================================
     if (intent) {
       console.log(`🎯 Intenção detectada: ${intent}`);
       if (intent === 'iniciar_processo') {
@@ -2049,7 +2175,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
 // ============================================================
 //  FUNÇÕES AUXILIARES PARA MENUS
-// ============================================================
+//  ============================================================
 
 async function getMenuPrincipal() {
   return (
@@ -2092,7 +2218,7 @@ async function getSubmenu(service) {
 
 // ============================================================
 //  SISTEMA DE LEMBRETES AUTOMÁTICOS
-// ============================================================
+//  ============================================================
 async function buscarTelefoneCliente(clienteNome, clienteId) {
   if (clienteId) {
     const { data: cliente } = await supabase
@@ -2180,7 +2306,7 @@ verificarLembretes();
 
 // ============================================================
 //  ROTAS DE DIAGNÓSTICO Z-API
-// ============================================================
+//  ============================================================
 
 app.get('/api/zapi/check-phone', async (req, res) => {
   try {
@@ -2263,5 +2389,5 @@ app.post('/api/zapi/send-test', async (req, res) => {
 
 // ============================================================
 //  INICIALIZAÇÃO
-// ============================================================
+//  ============================================================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
