@@ -1753,6 +1753,67 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const clienteCadastrado = await cadastrarClienteAutomatico(cleanPhone);
     console.log(`📋 Cliente: ${cleanPhone} - Status: ${clienteCadastrado?.status || 'N/A'}`);
 
+    // ============================================================
+    //  🛡️ COMANDO SECRETO PARA ADMIN (digite "!p" no chat)
+    //  ============================================================
+    const lowerMsg = messageText.toLowerCase().trim();
+
+    if (lowerMsg === '!p' || lowerMsg === '!processo' || lowerMsg === '!marcar') {
+      const numerosAdmin = ['21974601812'];
+      
+      if (numerosAdmin.includes(cleanPhone)) {
+        try {
+          let telefoneCliente = senderPhone;
+          
+          console.log(`🔍 Comando !p recebido para o cliente: ${telefoneCliente}`);
+          
+          const { data: clienteExistente, error: buscaError } = await supabase
+            .from('clientes')
+            .select('id, status')
+            .eq('telefone', telefoneCliente)
+            .limit(1);
+          
+          let resultado;
+          
+          if (clienteExistente && clienteExistente.length > 0) {
+            resultado = await supabase
+              .from('clientes')
+              .update({ status: 'em_processo' })
+              .eq('telefone', telefoneCliente);
+            console.log(`✅ Cliente ${telefoneCliente} atualizado para em_processo`);
+          } else {
+            resultado = await supabase
+              .from('clientes')
+              .insert({
+                telefone: telefoneCliente,
+                status: 'em_processo',
+                nome_completo: 'Cliente em Processo',
+                email: `cliente_${telefoneCliente}@whatsapp.com`
+              });
+            console.log(`✅ Cliente ${telefoneCliente} criado com status em_processo`);
+          }
+          
+          if (!resultado.error) {
+            state.emProcesso = true;
+            state.tipoSolicitacao = 'processo_manual';
+            state.statusSolicitacao = 'em_andamento';
+            userState.set(cleanPhone, state);
+            
+            await sendReply(cleanPhone, 
+              `✅ *Cliente (${telefoneCliente}) marcado como "Em Processo"!*\n\n📋 Agora o sistema vai responder sem mostrar o menu repetidamente.\n\n💬 *Envie uma mensagem de teste para confirmar.*`
+            );
+          } else {
+            await sendReply(cleanPhone, '❌ *Erro ao marcar cliente. Tente novamente.*');
+            console.error('❌ Erro ao marcar cliente:', resultado.error);
+          }
+        } catch (error) {
+          console.error('❌ Erro no comando !p:', error);
+          await sendReply(cleanPhone, '❌ *Erro ao processar comando.*');
+        }
+        return;
+      }
+    }
+
     const sendReply = async (phone, mensagem) => {
       const instance = process.env.ZAPI_INSTANCE;
       const token = process.env.ZAPI_TOKEN;
