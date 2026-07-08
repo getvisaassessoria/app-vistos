@@ -1793,7 +1793,7 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - CORRIGIDO (CADASTRA CLIENTE)
+//  WEBHOOK Z-API - CORRIGIDO (RECONHECE marcar, !p, ip, lp)
 //  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1801,9 +1801,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
   try {
     const body = req.body;
-    
-    // LOG COMPLETO
-    console.log('📦 Body:', JSON.stringify(body));
+    console.log('📦 Body:', JSON.stringify(body).substring(0, 500));
     
     // ============================================================
     //  EXTRAÇÃO DA MENSAGEM
@@ -1811,7 +1809,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     let messageText = '';
     let senderPhone = '';
     
-    // Extrai texto
     if (body.text) {
       if (typeof body.text === 'string') messageText = body.text;
       else if (body.text.message) messageText = body.text.message;
@@ -1823,18 +1820,15 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (!messageText && body.content) messageText = body.content;
     if (!messageText && body.body) messageText = body.body;
     
-    // Extrai telefone
     if (body.phone) senderPhone = body.phone;
     else if (body.from) senderPhone = body.from;
     else if (body.sender) senderPhone = body.sender;
     
-    // VALIDAÇÕES
     if (!senderPhone) {
       console.log('⚠️ Sem telefone');
       return;
     }
     
-    // Se for DeliveryCallback, ignora
     if (body.type === 'DeliveryCallback') {
       console.log('⏭️ DeliveryCallback ignorado');
       return;
@@ -1849,114 +1843,70 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📩 Mensagem: "${messageText}" de ${senderPhone}`);
     
     // ============================================================
-    //  LIMPEZA DO TELEFONE - CORRIGIDA
+    //  LIMPEZA DO TELEFONE
     //  ============================================================
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    console.log(`📱 Telefone bruto: ${cleanPhone}`);
-    
-    // Remove o 55 se estiver no início
-    if (cleanPhone.startsWith('55')) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-    
-    // Se ainda tiver mais de 11 dígitos, pega os últimos 11
-    if (cleanPhone.length > 11) {
-      cleanPhone = cleanPhone.substring(cleanPhone.length - 11);
-    }
-    
-    // Se tiver 11 dígitos e começar com 9, mantém
-    // Se tiver 10 dígitos, mantém
+    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
     if (cleanPhone.length < 10) {
       console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
       return;
     }
-    
-    console.log(`📱 Telefone limpo FINAL: ${cleanPhone}`);
-    
-    // ============================================================
-    //  🔥 CADASTRA O CLIENTE - PRIORIDADE ABSOLUTA
-    //  ============================================================
-    console.log(`🔍 Verificando se cliente ${cleanPhone} existe...`);
-    
-    const { data: clienteExistente, error: buscaError } = await supabase
-      .from('clientes')
-      .select('id, status, telefone')
-      .eq('telefone', cleanPhone)
-      .limit(1);
-    
-    if (buscaError) {
-      console.error('❌ Erro ao buscar cliente:', buscaError);
-    }
-    
-    let clienteId = null;
-    let clienteStatus = 'novo';
-    
-    if (clienteExistente && clienteExistente.length > 0) {
-      clienteId = clienteExistente[0].id;
-      clienteStatus = clienteExistente[0].status;
-      console.log(`✅ Cliente ${cleanPhone} já existe (ID: ${clienteId}, Status: ${clienteStatus})`);
-    } else {
-      // CRIA O CLIENTE AGORA!
-      console.log(`📝 Criando novo cliente ${cleanPhone}...`);
-      
-      const { data: novoCliente, error: insertError } = await supabase
-        .from('clientes')
-        .insert({
-          telefone: cleanPhone,
-          email: `cliente_${cleanPhone}@whatsapp.com`,
-          status: 'novo',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (insertError) {
-        console.error('❌ ERRO AO CRIAR CLIENTE:', insertError);
-        console.error('❌ Detalhes:', JSON.stringify(insertError));
-      } else {
-        clienteId = novoCliente.id;
-        clienteStatus = novoCliente.status;
-        console.log(`✅ CLIENTE ${cleanPhone} CRIADO COM SUCESSO! ID: ${clienteId}`);
-        console.log(`📊 Dados:`, JSON.stringify(novoCliente));
-      }
-    }
+    console.log(`📱 Telefone limpo: ${cleanPhone}`);
     
     // ============================================================
-    //  ADMIN - VERIFICA SE É ADMIN
+    //  🔥 LISTA DE ADMINISTRADORES - ATUALIZE AQUI!
     //  ============================================================
-    const numerosAdmin = ['21985234917', '21998021008', '21967476182', '21991868954'];
+    const numerosAdmin = ['21991868954', '21974601812', '21985234917', '21998021008'];
     const isAdmin = numerosAdmin.includes(cleanPhone);
-    console.log(`🔑 Admin: ${isAdmin}`);
+    console.log(`🔑 Admin: ${isAdmin} (${cleanPhone})`);
     
     // ============================================================
-    //  COMANDO PARA MARCAR - SE FOR ADMIN E TIVER NÚMERO NA MENSAGEM
+    //  🎯 DETECTA COMANDO "MARCAR" - VERSÃO MELHORADA
     //  ============================================================
-    const numerosNaMensagem = messageText.match(/\d{10,13}/g);
+    const mensagemLower = messageText.toLowerCase().trim();
+    console.log(`🔍 Mensagem lower: "${mensagemLower}"`);
+    
+    // Verifica se começa com marcar, !p, ip, lp, iniciar
+    const comandosMarcar = ['marcar', '!p', 'ip', 'lp', '1p', 'iniciar'];
+    const isComandoMarcar = comandosMarcar.some(cmd => 
+      mensagemLower === cmd || mensagemLower.startsWith(cmd + ' ')
+    );
+    
+    console.log(`🔍 É comando marcar? ${isComandoMarcar}`);
+    
+    // EXTRAI TELEFONE DA MENSAGEM
     let telefoneEncontrado = null;
+    const numerosNaMensagem = messageText.match(/\d{10,13}/g);
     if (numerosNaMensagem && numerosNaMensagem.length > 0) {
       telefoneEncontrado = numerosNaMensagem[0].replace(/\D/g, '');
       if (telefoneEncontrado.startsWith('55')) telefoneEncontrado = telefoneEncontrado.substring(2);
-      console.log(`📱 Telefone encontrado na mensagem: ${telefoneEncontrado}`);
+      console.log(`📱 Telefone encontrado: ${telefoneEncontrado}`);
     }
     
-    if (isAdmin && telefoneEncontrado && telefoneEncontrado.length >= 10) {
+    // ============================================================
+    //  ✅ SE FOR ADMIN E TIVER COMANDO + TELEFONE - MARCA!
+    //  ============================================================
+    if (isAdmin && isComandoMarcar && telefoneEncontrado && telefoneEncontrado.length >= 10) {
       console.log(`🎯 ADMIN marcando ${telefoneEncontrado}...`);
       
       try {
         // Verifica se o cliente existe
-        const { data: clienteAlvo, error: buscaAlvo } = await supabase
+        const { data: clienteExistente, error: buscaError } = await supabase
           .from('clientes')
-          .select('id, status')
+          .select('id, status, telefone')
           .eq('telefone', telefoneEncontrado)
           .limit(1);
         
-        if (buscaAlvo) {
-          console.error('❌ Erro ao buscar alvo:', buscaAlvo);
+        if (buscaError) {
+          console.error('❌ Erro ao buscar:', buscaError);
+          await sendReply(cleanPhone, `❌ Erro: ${buscaError.message}`);
+          return;
         }
         
-        if (clienteAlvo && clienteAlvo.length > 0) {
-          // Atualiza cliente existente
+        let resultado = null;
+        
+        if (clienteExistente && clienteExistente.length > 0) {
+          // Atualiza
           const { error: updateError } = await supabase
             .from('clientes')
             .update({ 
@@ -1967,12 +1917,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
           
           if (updateError) {
             console.error('❌ Erro ao atualizar:', updateError);
-          } else {
-            console.log(`✅ Cliente ${telefoneEncontrado} atualizado para em_processo`);
+            await sendReply(cleanPhone, `❌ Erro: ${updateError.message}`);
+            return;
           }
+          resultado = clienteExistente[0];
+          console.log(`✅ Cliente ${telefoneEncontrado} ATUALIZADO!`);
         } else {
-          // Cria novo cliente
-          const { error: insertError } = await supabase
+          // Cria
+          const { data: novoCliente, error: insertError } = await supabase
             .from('clientes')
             .insert({
               telefone: telefoneEncontrado,
@@ -1980,13 +1932,17 @@ app.post('/api/webhook/zapi', async (req, res) => {
               status: 'em_processo',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
-            });
+            })
+            .select()
+            .single();
           
           if (insertError) {
-            console.error('❌ Erro ao criar alvo:', insertError);
-          } else {
-            console.log(`✅ Cliente ${telefoneEncontrado} criado como em_processo`);
+            console.error('❌ Erro ao criar:', insertError);
+            await sendReply(cleanPhone, `❌ Erro: ${insertError.message}`);
+            return;
           }
+          resultado = novoCliente;
+          console.log(`✅ Cliente ${telefoneEncontrado} CRIADO!`);
         }
         
         // Atualiza estado em memória
@@ -1997,37 +1953,65 @@ app.post('/api/webhook/zapi', async (req, res) => {
         
         // Confirma para o admin
         await sendReply(cleanPhone, 
-          `✅ *CLIENTE MARCADO!*\n\n📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n🔒 O menu não será mais exibido.`
+          `✅ *CLIENTE MARCADO!*\n\n` +
+          `📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n` +
+          `🔒 O menu não será mais exibido para ele.`
         );
         
         console.log(`🎉 Cliente ${telefoneEncontrado} marcado com sucesso!`);
         return;
         
       } catch (error) {
-        console.error('❌ Erro ao marcar:', error);
+        console.error('❌ Erro:', error);
         await sendReply(cleanPhone, `❌ Erro: ${error.message}`);
         return;
       }
     }
     
     // ============================================================
-    //  VERIFICA SE ESTÁ EM PROCESSO
+    //  SE FOR ADMIN E NÃO TIVER TELEFONE NA MENSAGEM
     //  ============================================================
-    // Busca o cliente novamente (pode ter sido criado agora)
-    const { data: clienteFinal } = await supabase
+    if (isAdmin && isComandoMarcar && !telefoneEncontrado) {
+      await sendReply(cleanPhone, 
+        `⚠️ *Telefone não encontrado!*\n\n` +
+        `Use: *marcar 219XXXXXXXX*\n\n` +
+        `(substitua pelo telefone do cliente)`
+      );
+      return;
+    }
+    
+    // ============================================================
+    //  CADASTRA O CLIENTE (SE NÃO EXISTIR)
+    //  ============================================================
+    const { data: clienteExistente } = await supabase
       .from('clientes')
       .select('id, status')
       .eq('telefone', cleanPhone)
       .limit(1);
     
-    const statusFinal = clienteFinal?.[0]?.status || 'novo';
-    const emProcesso = statusFinal === 'em_processo' || statusFinal === 'ativo';
+    let clienteStatus = 'novo';
+    if (!clienteExistente || clienteExistente.length === 0) {
+      await supabase
+        .from('clientes')
+        .insert({
+          telefone: cleanPhone,
+          email: `cliente_${cleanPhone}@whatsapp.com`,
+          status: 'novo',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      console.log(`📝 Cliente ${cleanPhone} cadastrado como novo`);
+    } else {
+      clienteStatus = clienteExistente[0].status;
+    }
     
-    console.log(`📊 Status final: ${statusFinal} - Em processo: ${emProcesso}`);
+    console.log(`📊 Status do cliente: ${clienteStatus}`);
     
     // ============================================================
-    //  RESPOSTA
+    //  🟢 VERIFICA SE ESTÁ EM PROCESSO
     //  ============================================================
+    const emProcesso = clienteStatus === 'em_processo' || clienteStatus === 'ativo';
+    
     if (emProcesso) {
       console.log(`🟢 Cliente EM PROCESSO - SEM MENU`);
       
@@ -2038,7 +2022,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  MENU PRINCIPAL
+    //  🟡 CLIENTE NOVO - MOSTRA MENU
     //  ============================================================
     console.log(`🟡 Cliente NOVO - MOSTRANDO MENU`);
     
