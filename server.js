@@ -1925,7 +1925,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // ============================================================
     //  ADMIN - VERIFICA SE É ADMIN
     //  ============================================================
-    const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182'];
+    const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182', '21991868954'];
     const isAdmin = numerosAdmin.includes(cleanPhone);
     console.log(`🔑 Admin: ${isAdmin}`);
     
