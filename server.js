@@ -1793,12 +1793,10 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - VERSÃO COMPLETAMENTE REFEITA
+//  WEBHOOK Z-API - VERSÃO CORRIGIDA (FILTRA EVENTOS)
 //  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
-  console.log('📦 HEADERS:', JSON.stringify(req.headers, null, 2));
-  console.log('📦 BODY:', JSON.stringify(req.body, null, 2));
   
   // SEMPRE RESPONDE 200 PARA O Z-API
   res.status(200).json({ status: 'ok' });
@@ -1807,7 +1805,30 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const body = req.body;
     
     // ============================================================
-    //  EXTRAÇÃO DA MENSAGEM - MÚLTIPLAS FONTES
+    //  🔍 LOG COMPLETO PARA DEBUG
+    //  ============================================================
+    console.log('📦 BODY:', JSON.stringify(body, null, 2));
+    
+    // ============================================================
+    //  🚨 FILTRA APENAS MENSAGENS DE TEXTO
+    //  ============================================================
+    const tipoEvento = body.type || body.eventType || body.event || '';
+    console.log(`📌 Tipo de evento: "${tipoEvento}"`);
+    
+    // Ignora eventos que não são mensagens de texto
+    if (tipoEvento === 'DeliveryCallback' || 
+        tipoEvento === 'delivery' || 
+        tipoEvento === 'read' || 
+        tipoEvento === 'readreceipt' ||
+        tipoEvento === 'typing' ||
+        tipoEvento === 'presence' ||
+        tipoEvento === 'status') {
+      console.log(`⏭️ Evento ${tipoEvento} ignorado (não é mensagem de texto)`);
+      return;
+    }
+    
+    // ============================================================
+    //  EXTRAÇÃO DA MENSAGEM - PRIORIZA MENSAGENS DE TEXTO
     //  ============================================================
     let messageText = '';
     let senderPhone = '';
@@ -1883,9 +1904,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`   📱 Telefone: ${senderPhone}`);
     console.log(`   👤 Nome: ${senderName || 'N/A'}`);
     console.log(`   📝 Texto: "${messageText}"`);
+    console.log(`   📏 Tamanho: ${messageText.length} caracteres`);
     console.log(`   👥 Grupo: ${isGroup}`);
     console.log(`   🤖 FromMe: ${isFromMe}`);
-    console.log(`   📏 Tamanho: ${messageText.length} caracteres`);
+    console.log(`   📌 Tipo: ${tipoEvento}`);
     
     // ============================================================
     //  VALIDAÇÕES INICIAIS
@@ -1921,16 +1943,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
       cleanPhone = cleanPhone.substring(2);
     }
     
-    // Remove o 9 extra se for DDD com 9 dígitos (ex: 21 98523-4917 -> 21985234917)
-    // O telefone já está sem formatação, então só verificamos o tamanho
-    if (cleanPhone.length === 11 && cleanPhone.startsWith('9')) {
-      // Já está no formato correto (DDD + 9 + 8 dígitos)
-      console.log(`📱 Telefone com 9 dígitos: ${cleanPhone}`);
-    } else if (cleanPhone.length === 10) {
-      // Sem o 9, adiciona? Não, mantém como está
-      console.log(`📱 Telefone com 10 dígitos: ${cleanPhone}`);
-    }
-    
     // Garante que tem pelo menos 10 dígitos
     if (cleanPhone.length < 10) {
       console.log(`⚠️ Telefone inválido (${cleanPhone.length} dígitos): ${cleanPhone}`);
@@ -1940,11 +1952,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
     
     // ============================================================
-    //  🛡️ COMANDO !p - DETECÇÃO MELHORADA
+    //  🛡️ COMANDO !p - VERSÃO MELHORADA
     //  ============================================================
     const mensagemLower = messageText.toLowerCase().trim();
     console.log(`🔍 Verificando comando: "${mensagemLower}"`);
-    console.log(`🔍 Primeiros 3 caracteres: "${mensagemLower.substring(0, 3)}"`);
     
     // Detecta !p de várias formas
     const isComandoP = mensagemLower === '!p' || 
@@ -1965,18 +1976,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Remetente do comando: ${cleanPhone}`);
       
       // NÚMEROS AUTORIZADOS (ADICIONE TODOS OS SEUS NÚMEROS AQUI)
-      const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182', '21998251001'];
+      const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182'];
       
-      // Verifica se é admin (comparação flexível)
-      const isAdmin = numerosAdmin.some(num => {
-        return cleanPhone === num || 
-               cleanPhone.includes(num) || 
-               num.includes(cleanPhone) ||
-               cleanPhone.replace(/^9/, '') === num.replace(/^9/, '');
-      });
+      // Verifica se é admin
+      const isAdmin = numerosAdmin.some(num => cleanPhone === num);
       
       console.log(`🔑 É admin? ${isAdmin}`);
-      console.log(`🔑 Número comparado: ${cleanPhone} vs ${numerosAdmin.join(', ')}`);
       
       if (!isAdmin) {
         console.log(`⛔ Número ${cleanPhone} NÃO é admin!`);
@@ -1996,19 +2001,17 @@ app.post('/api/webhook/zapi', async (req, res) => {
         console.log(`📱 Telefone alvo extraído da mensagem: ${telefoneAlvo}`);
       }
       
-      // Se não encontrou, usa o telefone do remetente (que é o admin)
-      // MAS isso vai marcar o admin como em_processo, não o cliente!
-      // Então precisamos de uma forma melhor...
+      // Se não encontrou telefone na mensagem, usa o telefone do remetente
+      // MAS o remetente é o admin, então isso vai marcar o admin como em_processo
       if (!telefoneAlvo) {
         console.log(`⚠️ Nenhum telefone alvo encontrado na mensagem!`);
         console.log(`💡 Use: !p 21985234917 para marcar um cliente específico`);
         console.log(`💡 Ou envie !p na conversa com o cliente`);
         
-        // Tenta usar o telefone do cliente da conversa
-        // Como não temos como saber qual é o cliente, vamos usar o telefone do remetente
+        // Aqui você precisa decidir: marcar o admin ou não?
+        // Vou marcar o admin mesmo (para teste)
         telefoneAlvo = cleanPhone;
         console.log(`📱 Usando telefone do remetente como alvo: ${telefoneAlvo}`);
-        console.log(`⚠️ Isso vai marcar O ADMIN como em_processo!`);
       }
       
       // LIMPA O TELEFONE ALVO
@@ -2048,7 +2051,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
         console.log(`📊 Cliente encontrado: ${clienteExistente ? 'SIM' : 'NÃO'}`);
         if (clienteExistente && clienteExistente.length > 0) {
           console.log(`📊 Status atual: ${clienteExistente[0].status}`);
-          console.log(`📊 Nome: ${clienteExistente[0].nome_completo || 'N/A'}`);
         }
 
         let resultado = null;
@@ -2116,13 +2118,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
           `👤 Nome: ${nomeCliente}\n` +
           `📋 Status: em_processo\n` +
           `🆔 ID: ${resultado.id}\n\n` +
-          `🔒 Agora o cliente NÃO verá mais o menu repetidamente.\n\n` +
-          `📌 *Teste:* Envie uma mensagem como cliente para confirmar.`;
+          `🔒 Agora o cliente NÃO verá mais o menu repetidamente.`;
         
         await sendReply(cleanPhone, mensagemConfirmacao);
         console.log(`✅ Confirmação enviada para admin ${cleanPhone}`);
         
-        // Envia mensagem para o cliente avisando
+        // Envia mensagem para o cliente avisando (se for diferente do admin)
         if (telefoneAlvo !== cleanPhone) {
           const mensagemCliente = 
             `📋 *Seu processo foi iniciado!*\n\n` +
@@ -2133,7 +2134,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
           console.log(`✅ Mensagem enviada para o cliente ${telefoneAlvo}`);
         }
         
-        console.log(`🎉 PROCESSO CONCLUÍDO! Cliente ${telefoneAlvo} marcado como em_processo`);
+        console.log(`🎉 PROCESSO CONCLUÍDO!`);
         return;
         
       } catch (error) {
@@ -2144,7 +2145,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  CONTINUAÇÃO DO FLUXO NORMAL (CADASTRO, MENU, ETC)
+    //  CONTINUAÇÃO DO FLUXO NORMAL
     //  ============================================================
     console.log(`🔄 Processando mensagem normal: "${messageText}"`);
     
@@ -2190,7 +2191,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       }
     }
 
-    // COMANDO: MENU ou 0 - VOLTA AO MENU PRINCIPAL
+    // COMANDO: MENU ou 0
     if (messageText === '0' || cleanMessage === 'menu') {
       state.nivel = 'principal';
       state.service = null;
@@ -2203,9 +2204,9 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // 🟢 CLIENTE EM PROCESSO - RESPOSTA CONTEXTUAL (SEM MENU)
+    // 🟢 CLIENTE EM PROCESSO
     if (state.emProcesso === true) {
-      console.log(`🟢 Cliente ${cleanPhone} está em processo - resposta contextual`);
+      console.log(`🟢 Cliente ${cleanPhone} em processo - resposta sem menu`);
       
       const respostasProcesso = {
         'sim': `✅ *Ótimo!*\n\nVamos dar continuidade ao seu processo.\n\n📋 *Status atual:* ${state.tipoSolicitacao || 'Processo em andamento'}\n\n💬 *Em breve nossa equipe entrará em contato.*\n\n📌 *Digite 0 para o MENU principal* 🚀`,
@@ -2224,7 +2225,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
 
-      // Se o cliente em processo enviar qualquer número que não seja 0
+      // Se enviar qualquer número que não seja 0
       if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(messageText)) {
         const resposta = 
           `👋 *Olá!*\n\n📋 *Seu processo (${state.tipoSolicitacao || 'Em andamento'}) já está em andamento.*\n\n✅ *Status atual:* ${state.statusSolicitacao || 'Em processamento'}\n\n🔄 *O que você precisa?*\n• Digite *0* para o MENU principal\n• Digite *7* para falar com um especialista\n• Ou me envie sua mensagem diretamente\n\n💬 *Estou aqui para ajudar no seu processo!* 🚀`;
@@ -2232,7 +2233,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
         return;
       }
 
-      // Resposta genérica para cliente em processo
+      // Resposta genérica
       const respostaContextual = 
         `👋 *Olá!*\n\n📋 *Seu processo (${state.tipoSolicitacao || 'Em andamento'}) está em andamento.*\n\n✅ *Status:* ${state.statusSolicitacao || 'Em processamento'}\n\n💬 *Recebi sua mensagem!*\n\n🔄 *Como posso ajudar?*\n• Digite *0* para o MENU principal\n• Digite *7* para falar com um especialista\n• Ou me envie sua dúvida específica\n\n💬 *Estou aqui para ajudar no seu processo!* 🚀`;
       
@@ -2241,7 +2242,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  FLUXO NORMAL - SAUDAÇÕES, INTENÇÕES, MENU
+    //  FLUXO NORMAL - MENU
     //  ============================================================
     
     // SAUDAÇÕES
@@ -2261,7 +2262,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // DETECTAR INTENÇÃO
     const intent = detectIntent(messageText);
 
-    // SE ESTIVER NO SUBMENU
+    // SUBMENU
     if (state.nivel === 'submenu' && state.service) {
       const service = state.service;
       console.log(`🔹 Processando no submenu de: ${service}`);
