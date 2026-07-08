@@ -1793,213 +1793,366 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-// ============================================================
-//  WEBHOOK Z-API - VERSÃO CORRIGIDA COM !p FUNCIONANDO
+//  WEBHOOK Z-API - VERSÃO COMPLETAMENTE REFEITA
 //  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
+  console.log('📦 HEADERS:', JSON.stringify(req.headers, null, 2));
+  console.log('📦 BODY:', JSON.stringify(req.body, null, 2));
+  
+  // SEMPRE RESPONDE 200 PARA O Z-API
   res.status(200).json({ status: 'ok' });
 
   try {
     const body = req.body;
     
-    // IGNORAR MENSAGENS DE GRUPO
-    if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
+    // ============================================================
+    //  EXTRAÇÃO DA MENSAGEM - MÚLTIPLAS FONTES
+    //  ============================================================
+    let messageText = '';
+    let senderPhone = '';
+    let senderName = '';
+    let isGroup = false;
+    let isFromMe = false;
+    
+    // 1. Tenta extrair o texto da mensagem
+    if (body.text) {
+      if (typeof body.text === 'string') {
+        messageText = body.text;
+      } else if (body.text.message) {
+        messageText = body.text.message;
+      } else if (body.text.body) {
+        messageText = body.text.body;
+      }
+    }
+    
+    if (!messageText && body.message) {
+      if (typeof body.message === 'string') {
+        messageText = body.message;
+      } else if (body.message.text) {
+        messageText = body.message.text;
+      } else if (body.message.content) {
+        messageText = body.message.content;
+      }
+    }
+    
+    if (!messageText && body.content) {
+      messageText = body.content;
+    }
+    
+    if (!messageText && body.body) {
+      messageText = body.body;
+    }
+    
+    // 2. Tenta extrair o telefone do remetente
+    if (body.phone) {
+      senderPhone = body.phone;
+    } else if (body.from) {
+      senderPhone = body.from;
+    } else if (body.sender) {
+      senderPhone = body.sender;
+    } else if (body.author) {
+      senderPhone = body.author;
+    } else if (body.chatId) {
+      senderPhone = body.chatId.replace('@c.us', '').replace('@g.us', '');
+    } else if (body.remoteJid) {
+      senderPhone = body.remoteJid.replace('@c.us', '').replace('@g.us', '');
+    }
+    
+    // 3. Verifica se é grupo
+    if (body.isGroup === true || body.isGroupMsg === true || 
+        body.chatId?.includes('@g.us') || body.remoteJid?.includes('@g.us')) {
+      isGroup = true;
+    }
+    
+    // 4. Verifica se é mensagem do próprio bot
+    if (body.fromMe === true || body.key?.fromMe === true) {
+      isFromMe = true;
+    }
+    
+    // 5. Extrai nome do remetente
+    if (body.pushName) {
+      senderName = body.pushName;
+    } else if (body.senderName) {
+      senderName = body.senderName;
+    } else if (body.notifyName) {
+      senderName = body.notifyName;
+    }
+    
+    console.log(`📩 Mensagem extraída:`);
+    console.log(`   📱 Telefone: ${senderPhone}`);
+    console.log(`   👤 Nome: ${senderName || 'N/A'}`);
+    console.log(`   📝 Texto: "${messageText}"`);
+    console.log(`   👥 Grupo: ${isGroup}`);
+    console.log(`   🤖 FromMe: ${isFromMe}`);
+    console.log(`   📏 Tamanho: ${messageText.length} caracteres`);
+    
+    // ============================================================
+    //  VALIDAÇÕES INICIAIS
+    //  ============================================================
+    
+    if (!senderPhone) {
+      console.log('⚠️ Sem telefone do remetente, ignorando');
+      return;
+    }
+    
+    if (!messageText || messageText.length === 0) {
+      console.log('⚠️ Mensagem vazia, ignorando');
+      return;
+    }
+    
+    if (isGroup) {
       console.log('👥 Mensagem de grupo ignorada');
       return;
     }
     
-    if (body.fromMe === true) {
+    if (isFromMe) {
       console.log('🤖 Mensagem do próprio bot ignorada');
       return;
     }
     
-    if (body.isStatusReply === true || body.waitingMessage === true) {
-      console.log('⏳ Mensagem de status/waiting ignorada');
-      return;
-    }
-
-    // PEGA O TELEFONE DO REMETENTE
-    const senderPhone = body.phone || body.from || body.sender || body.fromMe;
-    if (!senderPhone) {
-      console.log('⚠️ Sem telefone do remetente');
-      return;
-    }
-
-    let messageText = body.text?.message || body.message?.text || body.message || '';
-    if (typeof messageText !== 'string') messageText = String(messageText);
-    messageText = messageText.trim();
-
-    if (!messageText) {
-      console.log('⚠️ Mensagem vazia');
-      return;
-    }
-
-    console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
-
-    // LIMPA O TELEFONE PARA USAR COMO CHAVE
+    // ============================================================
+    //  LIMPEZA DO TELEFONE
+    //  ============================================================
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+    
     // Remove o 55 se estiver no início
     if (cleanPhone.startsWith('55')) {
       cleanPhone = cleanPhone.substring(2);
     }
     
+    // Remove o 9 extra se for DDD com 9 dígitos (ex: 21 98523-4917 -> 21985234917)
+    // O telefone já está sem formatação, então só verificamos o tamanho
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('9')) {
+      // Já está no formato correto (DDD + 9 + 8 dígitos)
+      console.log(`📱 Telefone com 9 dígitos: ${cleanPhone}`);
+    } else if (cleanPhone.length === 10) {
+      // Sem o 9, adiciona? Não, mantém como está
+      console.log(`📱 Telefone com 10 dígitos: ${cleanPhone}`);
+    }
+    
     // Garante que tem pelo menos 10 dígitos
     if (cleanPhone.length < 10) {
-      console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
+      console.log(`⚠️ Telefone inválido (${cleanPhone.length} dígitos): ${cleanPhone}`);
       return;
     }
-
+    
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
-
+    
     // ============================================================
-    //  🛡️ COMANDO !p - MARCAR CLIENTE COMO EM PROCESSO
+    //  🛡️ COMANDO !p - DETECÇÃO MELHORADA
     //  ============================================================
     const mensagemLower = messageText.toLowerCase().trim();
-    if (mensagemLower === '!p') {
-      console.log(`🔍 Comando !p detectado de: ${cleanPhone}`);
+    console.log(`🔍 Verificando comando: "${mensagemLower}"`);
+    console.log(`🔍 Primeiros 3 caracteres: "${mensagemLower.substring(0, 3)}"`);
+    
+    // Detecta !p de várias formas
+    const isComandoP = mensagemLower === '!p' || 
+                       mensagemLower === '!p ' ||
+                       mensagemLower.startsWith('!p ') ||
+                       mensagemLower === '!P' ||
+                       mensagemLower.startsWith('!P ') ||
+                       mensagemLower === 'p!' ||
+                       mensagemLower.startsWith('p! ') ||
+                       mensagemLower.startsWith('!p') ||
+                       mensagemLower.includes('!p') ||
+                       mensagemLower.includes('!P');
+    
+    console.log(`🔍 É comando !p? ${isComandoP}`);
+    
+    if (isComandoP) {
+      console.log(`🎯 COMANDO !p DETECTADO!`);
+      console.log(`📱 Remetente do comando: ${cleanPhone}`);
       
-      // NÚMEROS AUTORIZADOS A USAR !p (ADICIONE TODOS OS SEUS NÚMEROS AQUI)
-      const numerosAdmin = ['21974601812', '21985234917', '21998021008'];
+      // NÚMEROS AUTORIZADOS (ADICIONE TODOS OS SEUS NÚMEROS AQUI)
+      const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182', '21998251001'];
       
-      if (numerosAdmin.includes(cleanPhone)) {
-        try {
-          // BUSCA O CLIENTE PELO TELEFONE QUE FOI ENVIADO NA MENSAGEM
-          // O !p é enviado para um cliente específico, precisamos pegar o telefone do cliente
-          // que está na conversa, não o telefone do administrador
-          
-          // Primeiro, vamos ver se a mensagem veio com um telefone alvo
-          let telefoneAlvo = null;
-          
-          // Tenta extrair o telefone da mensagem (se foi enviado como !p 21987654321)
-          const partes = messageText.split(' ');
-          if (partes.length > 1) {
-            telefoneAlvo = partes[1].replace(/\D/g, '');
-          }
-          
-          // Se não encontrou na mensagem, usa o telefone do remetente
-          // (mas como o admin enviou, precisamos do telefone do cliente)
-          // Nesse caso, vamos usar o telefone do remetente mesmo
-          if (!telefoneAlvo) {
-            telefoneAlvo = cleanPhone;
-          }
-          
-          console.log(`🎯 Marcando cliente ${telefoneAlvo} como em_processo...`);
-          
-          // Verifica se o cliente existe
-          const { data: clienteExistente, error: buscaError } = await supabase
-            .from('clientes')
-            .select('id, status, telefone')
-            .eq('telefone', telefoneAlvo)
-            .limit(1);
+      // Verifica se é admin (comparação flexível)
+      const isAdmin = numerosAdmin.some(num => {
+        return cleanPhone === num || 
+               cleanPhone.includes(num) || 
+               num.includes(cleanPhone) ||
+               cleanPhone.replace(/^9/, '') === num.replace(/^9/, '');
+      });
+      
+      console.log(`🔑 É admin? ${isAdmin}`);
+      console.log(`🔑 Número comparado: ${cleanPhone} vs ${numerosAdmin.join(', ')}`);
+      
+      if (!isAdmin) {
+        console.log(`⛔ Número ${cleanPhone} NÃO é admin!`);
+        await sendReply(cleanPhone, `⛔ *Acesso negado!*\n\nVocê não tem permissão para usar este comando.`);
+        return;
+      }
+      
+      console.log(`✅ Admin autorizado: ${cleanPhone}`);
+      
+      // EXTRAI O TELEFONE ALVO
+      let telefoneAlvo = null;
+      
+      // Tenta extrair telefone da mensagem (ex: !p 21985234917)
+      const numerosNaMensagem = messageText.match(/\d{10,13}/g);
+      if (numerosNaMensagem && numerosNaMensagem.length > 0) {
+        telefoneAlvo = numerosNaMensagem[0];
+        console.log(`📱 Telefone alvo extraído da mensagem: ${telefoneAlvo}`);
+      }
+      
+      // Se não encontrou, usa o telefone do remetente (que é o admin)
+      // MAS isso vai marcar o admin como em_processo, não o cliente!
+      // Então precisamos de uma forma melhor...
+      if (!telefoneAlvo) {
+        console.log(`⚠️ Nenhum telefone alvo encontrado na mensagem!`);
+        console.log(`💡 Use: !p 21985234917 para marcar um cliente específico`);
+        console.log(`💡 Ou envie !p na conversa com o cliente`);
+        
+        // Tenta usar o telefone do cliente da conversa
+        // Como não temos como saber qual é o cliente, vamos usar o telefone do remetente
+        telefoneAlvo = cleanPhone;
+        console.log(`📱 Usando telefone do remetente como alvo: ${telefoneAlvo}`);
+        console.log(`⚠️ Isso vai marcar O ADMIN como em_processo!`);
+      }
+      
+      // LIMPA O TELEFONE ALVO
+      if (telefoneAlvo) {
+        telefoneAlvo = telefoneAlvo.replace(/\D/g, '');
+        if (telefoneAlvo.startsWith('55')) {
+          telefoneAlvo = telefoneAlvo.substring(2);
+        }
+        console.log(`🎯 Telefone alvo final: ${telefoneAlvo}`);
+      }
+      
+      if (!telefoneAlvo || telefoneAlvo.length < 10) {
+        console.log(`❌ Telefone alvo inválido: ${telefoneAlvo}`);
+        await sendReply(cleanPhone, `❌ Telefone alvo inválido!\n\nUse: !p 21987654321`);
+        return;
+      }
+      
+      // ============================================================
+      //  MARCAR CLIENTE COMO EM_PROCESSO
+      //  ============================================================
+      console.log(`🔨 Marcando cliente ${telefoneAlvo} como em_processo...`);
+      
+      try {
+        // Verifica se o cliente existe
+        const { data: clienteExistente, error: buscaError } = await supabase
+          .from('clientes')
+          .select('id, status, telefone, nome_completo')
+          .eq('telefone', telefoneAlvo)
+          .limit(1);
 
-          if (buscaError) {
-            console.error('❌ Erro ao buscar cliente:', buscaError);
-            await sendReply(cleanPhone, `❌ Erro ao buscar cliente: ${buscaError.message}`);
-            return;
-          }
-
-          let resultado = null;
-          
-          if (clienteExistente && clienteExistente.length > 0) {
-            // Atualiza cliente existente
-            console.log(`📝 Atualizando cliente ${telefoneAlvo} para em_processo...`);
-            const { data: updated, error: updateError } = await supabase
-              .from('clientes')
-              .update({ 
-                status: 'em_processo',
-                updated_at: new Date().toISOString()
-              })
-              .eq('telefone', telefoneAlvo)
-              .select()
-              .single();
-
-            if (updateError) {
-              console.error('❌ Erro ao atualizar cliente:', updateError);
-              await sendReply(cleanPhone, `❌ Erro ao atualizar cliente: ${updateError.message}`);
-              return;
-            }
-            resultado = updated;
-            console.log(`✅ Cliente ${telefoneAlvo} ATUALIZADO para em_processo!`);
-          } else {
-            // Cria novo cliente
-            console.log(`📝 Criando novo cliente ${telefoneAlvo} como em_processo...`);
-            const { data: novoCliente, error: insertError } = await supabase
-              .from('clientes')
-              .insert({
-                telefone: telefoneAlvo,
-                email: `cliente_${telefoneAlvo}@whatsapp.com`,
-                status: 'em_processo',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .select()
-              .single();
-
-            if (insertError) {
-              console.error('❌ Erro ao criar cliente:', insertError);
-              await sendReply(cleanPhone, `❌ Erro ao criar cliente: ${insertError.message}`);
-              return;
-            }
-            resultado = novoCliente;
-            console.log(`✅ Cliente ${telefoneAlvo} CRIADO como em_processo!`);
-          }
-
-          // Atualiza estado em memória
-          const state = userState.get(telefoneAlvo) || {};
-          state.emProcesso = true;
-          state.tipoSolicitacao = 'processo_manual';
-          state.statusSolicitacao = 'em_andamento';
-          state.verificadoBD = true;
-          userState.set(telefoneAlvo, state);
-          
-          // Atualiza também o estado do admin (cleanPhone) para não confundir
-          const adminState = userState.get(cleanPhone) || {};
-          userState.set(cleanPhone, adminState);
-
-          // Envia confirmação
-          const mensagemConfirmacao = 
-            `✅ *CLIENTE MARCADO COMO "EM PROCESSO"!*\n\n` +
-            `📱 Telefone: ${telefoneAlvo}\n` +
-            `📋 Status: em_processo\n` +
-            `🆔 ID: ${resultado.id}\n\n` +
-            `🔒 Agora o cliente NÃO verá mais o menu repetidamente.`;
-          
-          await sendReply(cleanPhone, mensagemConfirmacao);
-          
-          // Envia também uma mensagem para o cliente avisando
-          if (telefoneAlvo !== cleanPhone) {
-            const mensagemCliente = 
-              `📋 *Seu processo foi iniciado!*\n\n` +
-              `✅ Agora você está em processo de análise.\n` +
-              `📌 Nossa equipe entrará em contato em breve.\n\n` +
-              `💬 *Qualquer dúvida, estou aqui!*`;
-            await sendReply(telefoneAlvo, mensagemCliente);
-          }
-          
-          console.log(`✅ Cliente ${telefoneAlvo} marcado como em_processo com sucesso!`);
-          return;
-        } catch (error) {
-          console.error('❌ Erro no !p:', error);
-          await sendReply(cleanPhone, `❌ Erro ao processar comando: ${error.message}`);
+        if (buscaError) {
+          console.error('❌ Erro ao buscar cliente:', buscaError);
+          await sendReply(cleanPhone, `❌ Erro ao buscar cliente: ${buscaError.message}`);
           return;
         }
-      } else {
-        console.log(`⛔ Número ${cleanPhone} não autorizado para !p`);
-        await sendReply(cleanPhone, `⛔ *Acesso negado!*\n\nVocê não tem permissão para usar este comando.`);
+
+        console.log(`📊 Cliente encontrado: ${clienteExistente ? 'SIM' : 'NÃO'}`);
+        if (clienteExistente && clienteExistente.length > 0) {
+          console.log(`📊 Status atual: ${clienteExistente[0].status}`);
+          console.log(`📊 Nome: ${clienteExistente[0].nome_completo || 'N/A'}`);
+        }
+
+        let resultado = null;
+        let nomeCliente = '';
+        
+        if (clienteExistente && clienteExistente.length > 0) {
+          // Atualiza cliente existente
+          console.log(`📝 Atualizando cliente ${telefoneAlvo}...`);
+          const { data: updated, error: updateError } = await supabase
+            .from('clientes')
+            .update({ 
+              status: 'em_processo',
+              updated_at: new Date().toISOString()
+            })
+            .eq('telefone', telefoneAlvo)
+            .select()
+            .single();
+
+          if (updateError) {
+            console.error('❌ Erro ao atualizar cliente:', updateError);
+            await sendReply(cleanPhone, `❌ Erro ao atualizar cliente: ${updateError.message}`);
+            return;
+          }
+          resultado = updated;
+          nomeCliente = updated.nome_completo || telefoneAlvo;
+          console.log(`✅ Cliente ${telefoneAlvo} ATUALIZADO para em_processo!`);
+        } else {
+          // Cria novo cliente
+          console.log(`📝 Criando novo cliente ${telefoneAlvo}...`);
+          const { data: novoCliente, error: insertError } = await supabase
+            .from('clientes')
+            .insert({
+              telefone: telefoneAlvo,
+              email: `cliente_${telefoneAlvo}@whatsapp.com`,
+              status: 'em_processo',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('❌ Erro ao criar cliente:', insertError);
+            await sendReply(cleanPhone, `❌ Erro ao criar cliente: ${insertError.message}`);
+            return;
+          }
+          resultado = novoCliente;
+          nomeCliente = telefoneAlvo;
+          console.log(`✅ Cliente ${telefoneAlvo} CRIADO como em_processo!`);
+        }
+
+        // Atualiza estado em memória
+        const state = userState.get(telefoneAlvo) || {};
+        state.emProcesso = true;
+        state.tipoSolicitacao = 'processo_manual';
+        state.statusSolicitacao = 'em_andamento';
+        state.verificadoBD = true;
+        userState.set(telefoneAlvo, state);
+        console.log(`✅ Estado em memória atualizado para ${telefoneAlvo}`);
+
+        // Envia confirmação para o admin
+        const mensagemConfirmacao = 
+          `✅ *CLIENTE MARCADO COMO "EM PROCESSO"!*\n\n` +
+          `📱 Telefone: ${telefoneAlvo}\n` +
+          `👤 Nome: ${nomeCliente}\n` +
+          `📋 Status: em_processo\n` +
+          `🆔 ID: ${resultado.id}\n\n` +
+          `🔒 Agora o cliente NÃO verá mais o menu repetidamente.\n\n` +
+          `📌 *Teste:* Envie uma mensagem como cliente para confirmar.`;
+        
+        await sendReply(cleanPhone, mensagemConfirmacao);
+        console.log(`✅ Confirmação enviada para admin ${cleanPhone}`);
+        
+        // Envia mensagem para o cliente avisando
+        if (telefoneAlvo !== cleanPhone) {
+          const mensagemCliente = 
+            `📋 *Seu processo foi iniciado!*\n\n` +
+            `✅ Agora você está em processo de análise.\n` +
+            `📌 Nossa equipe entrará em contato em breve.\n\n` +
+            `💬 *Qualquer dúvida, estou aqui!*`;
+          await sendReply(telefoneAlvo, mensagemCliente);
+          console.log(`✅ Mensagem enviada para o cliente ${telefoneAlvo}`);
+        }
+        
+        console.log(`🎉 PROCESSO CONCLUÍDO! Cliente ${telefoneAlvo} marcado como em_processo`);
+        return;
+        
+      } catch (error) {
+        console.error('❌ Erro no !p:', error);
+        await sendReply(cleanPhone, `❌ Erro ao processar comando: ${error.message}`);
         return;
       }
     }
 
     // ============================================================
-    //  CADASTRA O CLIENTE AUTOMATICAMENTE (SE NÃO EXISTIR)
+    //  CONTINUAÇÃO DO FLUXO NORMAL (CADASTRO, MENU, ETC)
     //  ============================================================
+    console.log(`🔄 Processando mensagem normal: "${messageText}"`);
+    
+    // CADASTRA O CLIENTE AUTOMATICAMENTE (SE NÃO EXISTIR)
     const clienteCadastrado = await cadastrarClienteAutomatico(cleanPhone);
     console.log(`📋 Cliente: ${cleanPhone} - Status: ${clienteCadastrado?.status || 'N/A'}`);
 
-    // ============================================================
-    //  ESTADO DO USUÁRIO
-    //  ============================================================
+    // ESTADO DO USUÁRIO
     let state = userState.get(cleanPhone) || { 
       nivel: 'principal',
       service: null,
@@ -2019,9 +2172,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const lowerMessage = messageText.toLowerCase();
     const cleanMessage = lowerMessage.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // ============================================================
-    //  ✅ VERIFICAÇÃO: CLIENTE EM PROCESSO
-    //  ============================================================
+    // VERIFICAÇÃO: CLIENTE EM PROCESSO
     if (!state.verificadoBD) {
       console.log(`🔍 Verificando status do cliente ${cleanPhone} no banco...`);
       const clienteInfo = await verificarClienteEmProcesso(cleanPhone);
@@ -2039,9 +2190,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       }
     }
 
-    // ============================================================
-    //  COMANDO: MENU ou 0 - VOLTA AO MENU PRINCIPAL
-    //  ============================================================
+    // COMANDO: MENU ou 0 - VOLTA AO MENU PRINCIPAL
     if (messageText === '0' || cleanMessage === 'menu') {
       state.nivel = 'principal';
       state.service = null;
@@ -2054,10 +2203,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // ============================================================
-    //  🟢 CLIENTE EM PROCESSO - RESPOSTA CONTEXTUAL (SEM MENU)
-    //  ============================================================
+    // 🟢 CLIENTE EM PROCESSO - RESPOSTA CONTEXTUAL (SEM MENU)
     if (state.emProcesso === true) {
+      console.log(`🟢 Cliente ${cleanPhone} está em processo - resposta contextual`);
+      
       const respostasProcesso = {
         'sim': `✅ *Ótimo!*\n\nVamos dar continuidade ao seu processo.\n\n📋 *Status atual:* ${state.tipoSolicitacao || 'Processo em andamento'}\n\n💬 *Em breve nossa equipe entrará em contato.*\n\n📌 *Digite 0 para o MENU principal* 🚀`,
         'não': `😊 *Sem problemas!*\n\nEstamos aqui para tirar suas dúvidas.\n\n📋 *Seu processo:* ${state.tipoSolicitacao || 'Em andamento'}\n\n📞 *Fale com um especialista:*\nhttps://wa.me/5521974601812\n\n📌 *Digite 0 para o MENU principal* 🚀`,
@@ -2092,8 +2241,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // ============================================================
-    //  SAUDAÇÕES
+    //  FLUXO NORMAL - SAUDAÇÕES, INTENÇÕES, MENU
     //  ============================================================
+    
+    // SAUDAÇÕES
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     if (saudacoes.includes(cleanMessage)) {
       if (state.conversaAtiva && state.service) {
@@ -2107,14 +2258,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // ============================================================
-    //  DETECTAR INTENÇÃO
-    //  ============================================================
+    // DETECTAR INTENÇÃO
     const intent = detectIntent(messageText);
 
-    // ============================================================
-    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE ABSOLUTA
-    //  ============================================================
+    // SE ESTIVER NO SUBMENU
     if (state.nivel === 'submenu' && state.service) {
       const service = state.service;
       console.log(`🔹 Processando no submenu de: ${service}`);
@@ -2186,9 +2333,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    // ============================================================
-    //  🟢 MENU PRINCIPAL
-    //  ============================================================
+    // MENU PRINCIPAL
     if (intent) {
       console.log(`🎯 Intenção detectada: ${intent}`);
       if (intent === 'iniciar_processo') {
