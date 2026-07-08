@@ -1793,22 +1793,20 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - VERSÃO ESTÁVEL (RESTAURADA E CORRIGIDA)
+//  WEBHOOK Z-API - CORRIGIDO (CADASTRA CLIENTE)
 //  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
-  
-  // SEMPRE RESPONDE 200 - ESSENCIAL PARA O Z-API NÃO BLOQUEAR
   res.status(200).json({ status: 'ok' });
 
   try {
     const body = req.body;
     
-    // LOG PARA DEBUG - mostra o que está chegando
-    console.log('📦 Body:', JSON.stringify(body).substring(0, 500));
+    // LOG COMPLETO
+    console.log('📦 Body:', JSON.stringify(body));
     
     // ============================================================
-    //  EXTRAÇÃO PADRÃO - COMO ESTAVA FUNCIONANDO ANTES
+    //  EXTRAÇÃO DA MENSAGEM
     //  ============================================================
     let messageText = '';
     let senderPhone = '';
@@ -1836,6 +1834,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
     
+    // Se for DeliveryCallback, ignora
+    if (body.type === 'DeliveryCallback') {
+      console.log('⏭️ DeliveryCallback ignorado');
+      return;
+    }
+    
     if (!messageText || messageText.trim().length === 0) {
       console.log('⚠️ Mensagem vazia');
       return;
@@ -1844,27 +1848,90 @@ app.post('/api/webhook/zapi', async (req, res) => {
     messageText = messageText.trim();
     console.log(`📩 Mensagem: "${messageText}" de ${senderPhone}`);
     
-    // LIMPA TELEFONE
+    // ============================================================
+    //  LIMPEZA DO TELEFONE - CORRIGIDA
+    //  ============================================================
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+    console.log(`📱 Telefone bruto: ${cleanPhone}`);
+    
+    // Remove o 55 se estiver no início
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    
+    // Se ainda tiver mais de 11 dígitos, pega os últimos 11
+    if (cleanPhone.length > 11) {
+      cleanPhone = cleanPhone.substring(cleanPhone.length - 11);
+    }
+    
+    // Se tiver 11 dígitos e começar com 9, mantém
+    // Se tiver 10 dígitos, mantém
     if (cleanPhone.length < 10) {
       console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
       return;
     }
-    console.log(`📱 Telefone limpo: ${cleanPhone}`);
+    
+    console.log(`📱 Telefone limpo FINAL: ${cleanPhone}`);
     
     // ============================================================
-    //  🛡️ COMANDO PARA MARCAR - AGORA FUNCIONA COM TUDO
+    //  🔥 CADASTRA O CLIENTE - PRIORIDADE ABSOLUTA
     //  ============================================================
-    const mensagemLower = messageText.toLowerCase().trim();
+    console.log(`🔍 Verificando se cliente ${cleanPhone} existe...`);
     
-    // Lista de administradores - ADICIONE SEU NÚMERO AQUI
-    const numerosAdmin = ['21974601812', '21985234917', '21998021008'];
+    const { data: clienteExistente, error: buscaError } = await supabase
+      .from('clientes')
+      .select('id, status, telefone')
+      .eq('telefone', cleanPhone)
+      .limit(1);
+    
+    if (buscaError) {
+      console.error('❌ Erro ao buscar cliente:', buscaError);
+    }
+    
+    let clienteId = null;
+    let clienteStatus = 'novo';
+    
+    if (clienteExistente && clienteExistente.length > 0) {
+      clienteId = clienteExistente[0].id;
+      clienteStatus = clienteExistente[0].status;
+      console.log(`✅ Cliente ${cleanPhone} já existe (ID: ${clienteId}, Status: ${clienteStatus})`);
+    } else {
+      // CRIA O CLIENTE AGORA!
+      console.log(`📝 Criando novo cliente ${cleanPhone}...`);
+      
+      const { data: novoCliente, error: insertError } = await supabase
+        .from('clientes')
+        .insert({
+          telefone: cleanPhone,
+          email: `cliente_${cleanPhone}@whatsapp.com`,
+          status: 'novo',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('❌ ERRO AO CRIAR CLIENTE:', insertError);
+        console.error('❌ Detalhes:', JSON.stringify(insertError));
+      } else {
+        clienteId = novoCliente.id;
+        clienteStatus = novoCliente.status;
+        console.log(`✅ CLIENTE ${cleanPhone} CRIADO COM SUCESSO! ID: ${clienteId}`);
+        console.log(`📊 Dados:`, JSON.stringify(novoCliente));
+      }
+    }
+    
+    // ============================================================
+    //  ADMIN - VERIFICA SE É ADMIN
+    //  ============================================================
+    const numerosAdmin = ['21974601812', '21985234917', '21998021008', '21967476182'];
     const isAdmin = numerosAdmin.includes(cleanPhone);
-    
     console.log(`🔑 Admin: ${isAdmin}`);
     
-    // EXTRAI QUALQUER NÚMERO DE TELEFONE DA MENSAGEM
+    // ============================================================
+    //  COMANDO PARA MARCAR - SE FOR ADMIN E TIVER NÚMERO NA MENSAGEM
+    //  ============================================================
     const numerosNaMensagem = messageText.match(/\d{10,13}/g);
     let telefoneEncontrado = null;
     if (numerosNaMensagem && numerosNaMensagem.length > 0) {
@@ -1873,21 +1940,24 @@ app.post('/api/webhook/zapi', async (req, res) => {
       console.log(`📱 Telefone encontrado na mensagem: ${telefoneEncontrado}`);
     }
     
-    // SE FOR ADMIN E TIVER UM TELEFONE NA MENSAGEM - MARCA!
     if (isAdmin && telefoneEncontrado && telefoneEncontrado.length >= 10) {
       console.log(`🎯 ADMIN marcando ${telefoneEncontrado}...`);
       
       try {
         // Verifica se o cliente existe
-        const { data: clienteExistente } = await supabase
+        const { data: clienteAlvo, error: buscaAlvo } = await supabase
           .from('clientes')
-          .select('id, status, nome_completo')
+          .select('id, status')
           .eq('telefone', telefoneEncontrado)
           .limit(1);
         
-        if (clienteExistente && clienteExistente.length > 0) {
+        if (buscaAlvo) {
+          console.error('❌ Erro ao buscar alvo:', buscaAlvo);
+        }
+        
+        if (clienteAlvo && clienteAlvo.length > 0) {
           // Atualiza cliente existente
-          await supabase
+          const { error: updateError } = await supabase
             .from('clientes')
             .update({ 
               status: 'em_processo', 
@@ -1895,10 +1965,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
             })
             .eq('telefone', telefoneEncontrado);
           
-          console.log(`✅ Cliente ${telefoneEncontrado} atualizado para em_processo`);
+          if (updateError) {
+            console.error('❌ Erro ao atualizar:', updateError);
+          } else {
+            console.log(`✅ Cliente ${telefoneEncontrado} atualizado para em_processo`);
+          }
         } else {
           // Cria novo cliente
-          await supabase
+          const { error: insertError } = await supabase
             .from('clientes')
             .insert({
               telefone: telefoneEncontrado,
@@ -1908,22 +1982,22 @@ app.post('/api/webhook/zapi', async (req, res) => {
               updated_at: new Date().toISOString()
             });
           
-          console.log(`✅ Cliente ${telefoneEncontrado} criado como em_processo`);
+          if (insertError) {
+            console.error('❌ Erro ao criar alvo:', insertError);
+          } else {
+            console.log(`✅ Cliente ${telefoneEncontrado} criado como em_processo`);
+          }
         }
         
         // Atualiza estado em memória
         const state = userState.get(telefoneEncontrado) || {};
         state.emProcesso = true;
-        state.tipoSolicitacao = 'processo_manual';
-        state.statusSolicitacao = 'em_andamento';
         state.verificadoBD = true;
         userState.set(telefoneEncontrado, state);
         
         // Confirma para o admin
         await sendReply(cleanPhone, 
-          `✅ *CLIENTE MARCADO!*\n\n` +
-          `📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n` +
-          `🔒 O menu não será mais exibido para ele.`
+          `✅ *CLIENTE MARCADO!*\n\n📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n🔒 O menu não será mais exibido.`
         );
         
         console.log(`🎉 Cliente ${telefoneEncontrado} marcado com sucesso!`);
@@ -1937,60 +2011,34 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  CADASTRA O CLIENTE (SE NÃO EXISTIR)
+    //  VERIFICA SE ESTÁ EM PROCESSO
     //  ============================================================
-    const { data: clienteExistente } = await supabase
+    // Busca o cliente novamente (pode ter sido criado agora)
+    const { data: clienteFinal } = await supabase
       .from('clientes')
       .select('id, status')
       .eq('telefone', cleanPhone)
       .limit(1);
     
-    let clienteStatus = 'novo';
-    if (!clienteExistente || clienteExistente.length === 0) {
-      await supabase
-        .from('clientes')
-        .insert({
-          telefone: cleanPhone,
-          email: `cliente_${cleanPhone}@whatsapp.com`,
-          status: 'novo',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-      console.log(`📝 Cliente ${cleanPhone} cadastrado como novo`);
-    } else {
-      clienteStatus = clienteExistente[0].status;
-    }
+    const statusFinal = clienteFinal?.[0]?.status || 'novo';
+    const emProcesso = statusFinal === 'em_processo' || statusFinal === 'ativo';
     
-    console.log(`📊 Status do cliente: ${clienteStatus}`);
+    console.log(`📊 Status final: ${statusFinal} - Em processo: ${emProcesso}`);
     
     // ============================================================
-    //  🟢 VERIFICA SE ESTÁ EM PROCESSO
+    //  RESPOSTA
     //  ============================================================
-    const emProcesso = clienteStatus === 'em_processo' || clienteStatus === 'ativo';
-    
     if (emProcesso) {
       console.log(`🟢 Cliente EM PROCESSO - SEM MENU`);
       
-      // Atualiza estado em memória
-      let state = userState.get(cleanPhone) || {};
-      if (!state.emProcesso) {
-        state.emProcesso = true;
-        state.tipoSolicitacao = 'processo_manual';
-        state.statusSolicitacao = 'em_andamento';
-        state.verificadoBD = true;
-        userState.set(cleanPhone, state);
-      }
-      
-      // Resposta SEM menu
-      const resposta = 
-        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* Em processamento\n\n🔄 *Como posso ajudar?*\n• Digite *0* para o MENU principal\n• Digite *7* para falar com um especialista\n\n💬 *Estou aqui para ajudar!* 🚀`;
-      
-      await sendReply(cleanPhone, resposta);
+      await sendReply(cleanPhone, 
+        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* Em processamento\n\n🔄 Digite *0* para o MENU principal\n\n💬 *Estou aqui para ajudar!* 🚀`
+      );
       return;
     }
     
     // ============================================================
-    //  🟡 CLIENTE NOVO - MOSTRA MENU
+    //  MENU PRINCIPAL
     //  ============================================================
     console.log(`🟡 Cliente NOVO - MOSTRANDO MENU`);
     
@@ -1999,12 +2047,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
       `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
       `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
       `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-      `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+      `4️⃣ 🇬🇧 eTA UK\n` +
       `5️⃣ 🇨🇦 eTA CANADENSE\n` +
       `6️⃣ 📘 PASSAPORTE\n` +
       `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-      `💬 *Digite o número da opção desejada (1 a 7) ou me pergunte algo!*\n` +
-      `• Digite *0* para ver este MENU novamente 🚀`;
+      `💬 *Digite o número da opção (1 a 7) ou me pergunte algo!*`;
     
     await sendReply(cleanPhone, menuPrincipal);
 
