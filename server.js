@@ -1678,15 +1678,16 @@ async function cadastrarClienteAutomatico(telefone) {
     
     console.log(`📝 Cadastrando novo cliente: ${telefone}`);
     const { data: novoCliente, error: insertError } = await supabase
-      .from('clientes')
-      .insert({
-        telefone: telefone,
-        status: 'novo',
-        created_at: new Date(),
-        updated_at: new Date()
-      })
-      .select()
-      .single();
+  .from('clientes')
+  .insert({
+    telefone: telefone,
+    email: `cliente_${telefone}@whatsapp.com`, // Email padrão
+    status: 'novo',
+    created_at: new Date(),
+    updated_at: new Date()
+  })
+  .select()
+  .single();
     
     if (insertError) {
       console.error('❌ Erro ao cadastrar cliente:', insertError);
