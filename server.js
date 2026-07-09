@@ -1793,7 +1793,7 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - CORRIGIDO (RECONHECE marcar, !p, ip, lp)
+//  WEBHOOK Z-API - VERSÃO CORRIGIDA
 //  ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1803,9 +1803,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     const body = req.body;
     console.log('📦 Body:', JSON.stringify(body).substring(0, 500));
     
-    // ============================================================
-    //  EXTRAÇÃO DA MENSAGEM
-    //  ============================================================
     let messageText = '';
     let senderPhone = '';
     
@@ -1842,9 +1839,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     messageText = messageText.trim();
     console.log(`📩 Mensagem: "${messageText}" de ${senderPhone}`);
     
-    // ============================================================
-    //  LIMPEZA DO TELEFONE
-    //  ============================================================
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
     if (cleanPhone.length < 10) {
@@ -1854,19 +1848,18 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
     
     // ============================================================
-    //  🔥 LISTA DE ADMINISTRADORES - ATUALIZE AQUI!
+    //  LISTA DE ADMINISTRADORES - CORRETA
     //  ============================================================
     const numerosAdmin = ['21991868954', '21985234917', '21998021008'];
     const isAdmin = numerosAdmin.includes(cleanPhone);
     console.log(`🔑 Admin: ${isAdmin} (${cleanPhone})`);
     
     // ============================================================
-    //  🎯 DETECTA COMANDO "MARCAR" - VERSÃO MELHORADA
+    //  DETECTA COMANDO MARCAR
     //  ============================================================
     const mensagemLower = messageText.toLowerCase().trim();
-    console.log(`🔍 Mensagem lower: "${mensagemLower}"`);
+    console.log(`🔍 Mensagem: "${mensagemLower}"`);
     
-    // Verifica se começa com marcar, !p, ip, lp, iniciar
     const comandosMarcar = ['marcar', '!p', 'ip', 'lp', '1p', 'iniciar'];
     const isComandoMarcar = comandosMarcar.some(cmd => 
       mensagemLower === cmd || mensagemLower.startsWith(cmd + ' ')
@@ -1874,7 +1867,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     
     console.log(`🔍 É comando marcar? ${isComandoMarcar}`);
     
-    // EXTRAI TELEFONE DA MENSAGEM
     let telefoneEncontrado = null;
     const numerosNaMensagem = messageText.match(/\d{10,13}/g);
     if (numerosNaMensagem && numerosNaMensagem.length > 0) {
@@ -1884,13 +1876,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  ✅ SE FOR ADMIN E TIVER COMANDO + TELEFONE - MARCA!
+    //  SE FOR ADMIN E TIVER COMANDO + TELEFONE - MARCA!
     //  ============================================================
     if (isAdmin && isComandoMarcar && telefoneEncontrado && telefoneEncontrado.length >= 10) {
       console.log(`🎯 ADMIN marcando ${telefoneEncontrado}...`);
       
       try {
-        // Verifica se o cliente existe
         const { data: clienteExistente, error: buscaError } = await supabase
           .from('clientes')
           .select('id, status, telefone')
@@ -1903,28 +1894,17 @@ app.post('/api/webhook/zapi', async (req, res) => {
           return;
         }
         
-        let resultado = null;
-        
         if (clienteExistente && clienteExistente.length > 0) {
-          // Atualiza
-          const { error: updateError } = await supabase
+          await supabase
             .from('clientes')
             .update({ 
               status: 'em_processo', 
               updated_at: new Date().toISOString() 
             })
             .eq('telefone', telefoneEncontrado);
-          
-          if (updateError) {
-            console.error('❌ Erro ao atualizar:', updateError);
-            await sendReply(cleanPhone, `❌ Erro: ${updateError.message}`);
-            return;
-          }
-          resultado = clienteExistente[0];
           console.log(`✅ Cliente ${telefoneEncontrado} ATUALIZADO!`);
         } else {
-          // Cria
-          const { data: novoCliente, error: insertError } = await supabase
+          await supabase
             .from('clientes')
             .insert({
               telefone: telefoneEncontrado,
@@ -1932,33 +1912,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
               status: 'em_processo',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-          
-          if (insertError) {
-            console.error('❌ Erro ao criar:', insertError);
-            await sendReply(cleanPhone, `❌ Erro: ${insertError.message}`);
-            return;
-          }
-          resultado = novoCliente;
+            });
           console.log(`✅ Cliente ${telefoneEncontrado} CRIADO!`);
         }
         
-        // Atualiza estado em memória
         const state = userState.get(telefoneEncontrado) || {};
         state.emProcesso = true;
         state.verificadoBD = true;
         userState.set(telefoneEncontrado, state);
         
-        // Confirma para o admin
         await sendReply(cleanPhone, 
-          `✅ *CLIENTE MARCADO!*\n\n` +
-          `📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n` +
-          `🔒 O menu não será mais exibido para ele.`
+          `✅ *CLIENTE MARCADO!*\n\n📱 ${telefoneEncontrado} agora está em PROCESSO.\n\n🔒 O menu não será mais exibido.`
         );
         
-        console.log(`🎉 Cliente ${telefoneEncontrado} marcado com sucesso!`);
+        console.log(`🎉 Cliente ${telefoneEncontrado} marcado!`);
         return;
         
       } catch (error) {
@@ -1969,19 +1936,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  SE FOR ADMIN E NÃO TIVER TELEFONE NA MENSAGEM
-    //  ============================================================
-    if (isAdmin && isComandoMarcar && !telefoneEncontrado) {
-      await sendReply(cleanPhone, 
-        `⚠️ *Telefone não encontrado!*\n\n` +
-        `Use: *marcar 219XXXXXXXX*\n\n` +
-        `(substitua pelo telefone do cliente)`
-      );
-      return;
-    }
-    
-    // ============================================================
-    //  CADASTRA O CLIENTE (SE NÃO EXISTIR)
+    //  CADASTRA O CLIENTE
     //  ============================================================
     const { data: clienteExistente } = await supabase
       .from('clientes')
@@ -2000,21 +1955,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
-      console.log(`📝 Cliente ${cleanPhone} cadastrado como novo`);
+      console.log(`📝 Cliente ${cleanPhone} cadastrado`);
     } else {
       clienteStatus = clienteExistente[0].status;
     }
     
-    console.log(`📊 Status do cliente: ${clienteStatus}`);
+    console.log(`📊 Status: ${clienteStatus}`);
     
     // ============================================================
-    //  🟢 VERIFICA SE ESTÁ EM PROCESSO
+    //  VERIFICA SE ESTÁ EM PROCESSO
     //  ============================================================
     const emProcesso = clienteStatus === 'em_processo' || clienteStatus === 'ativo';
     
     if (emProcesso) {
       console.log(`🟢 Cliente EM PROCESSO - SEM MENU`);
-      
       await sendReply(cleanPhone, 
         `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* Em processamento\n\n🔄 Digite *0* para o MENU principal\n\n💬 *Estou aqui para ajudar!* 🚀`
       );
@@ -2022,7 +1976,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  🟡 CLIENTE NOVO - MOSTRA MENU
+    //  MENU PRINCIPAL
     //  ============================================================
     console.log(`🟡 Cliente NOVO - MOSTRANDO MENU`);
     
@@ -2040,8 +1994,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     await sendReply(cleanPhone, menuPrincipal);
 
   } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
-    console.error('❌ Stack:', error.stack);
+    console.error('❌ Erro:', error.message);
   }
 });
 
