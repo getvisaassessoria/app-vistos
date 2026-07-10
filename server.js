@@ -1,6 +1,6 @@
 // ============================================================
 //  SERVER.JS - GETVISA ASSESSORIA
-//  VERSÃO COM 3 TABELAS (ativos, novos, amigos)
+//  VERSÃO COM PAINEL DE CONTROLE
 // ============================================================
 
 const express = require('express');
@@ -266,83 +266,6 @@ function getServiceName(service) {
   return names[service] || 'Serviço';
 }
 
-
-// ============================================================
-//  ⭐ FUNÇÕES DA TABELA ÚNICA - controle_clientes
-// ============================================================
-
-// 1. Buscar cliente
-async function buscarCliente(telefone) {
-    console.log(`🔍 Buscando ${telefone}...`);
-    
-    const { data: cliente, error } = await supabase
-        .from('controle_clientes')
-        .select('*')
-        .eq('telefone', telefone)
-        .maybeSingle();
-    
-    if (error) {
-        console.error('❌ Erro ao buscar:', error);
-        return null;
-    }
-    
-    if (cliente) {
-        console.log(`📋 Cliente: ${cliente.nome || 'Sem nome'} - Status: ${cliente.status_atual}`);
-        return cliente;
-    }
-    
-    console.log(`📝 Cliente ${telefone} NÃO encontrado`);
-    return null;
-}
-
-// 2. Cadastrar novo cliente
-async function cadastrarCliente(telefone, nome = null) {
-    console.log(`📝 Cadastrando ${telefone}...`);
-    
-    const { data, error } = await supabase
-        .from('controle_clientes')
-        .insert({
-            telefone: telefone,
-            nome: nome || `Cliente_${telefone}`,
-            status_atual: 'novo',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-    
-    if (error) {
-        console.error('❌ Erro ao cadastrar:', error);
-        return null;
-    }
-    
-    console.log(`✅ Cliente ${telefone} cadastrado como NOVO`);
-    return data;
-}
-
-// 3. Atualizar status do cliente
-async function atualizarStatusCliente(telefone, novoStatus) {
-    console.log(`🔄 Atualizando ${telefone} para ${novoStatus}...`);
-    
-    const { data, error } = await supabase
-        .from('controle_clientes')
-        .update({
-            status_atual: novoStatus,
-            updated_at: new Date().toISOString()
-        })
-        .eq('telefone', telefone)
-        .select()
-        .single();
-    
-    if (error) {
-        console.error('❌ Erro ao atualizar:', error);
-        return null;
-    }
-    
-    console.log(`✅ Cliente ${telefone} agora é ${novoStatus}`);
-    return data;
-}
-
 // ============================================================
 //  ANTI-SPAM
 // ============================================================
@@ -367,8 +290,6 @@ function isSpamData(dados) {
   
   return false;
 }
-
-
 
 // ============================================================
 //  ENVIO WHATSAPP
@@ -408,9 +329,7 @@ async function enviarWhatsApp(telefone, mensagem) {
 //  ⭐ FUNÇÕES PARA AS 3 TABELAS
 // ============================================================
 
-// ============================================================
-//  1. BUSCAR CLIENTE NAS 3 TABELAS
-// ============================================================
+// 1. BUSCAR CLIENTE NAS 3 TABELAS
 async function buscarCliente(telefone) {
     console.log(`🔍 Buscando cliente ${telefone}...`);
     
@@ -462,28 +381,19 @@ async function buscarCliente(telefone) {
         };
     }
     
-    // 4️⃣ Não encontrado em nenhuma
     console.log(`📝 Cliente ${telefone} NÃO encontrado`);
     return null;
 }
 
-// ============================================================
-//  2. CADASTRAR NOVO CLIENTE
-// ============================================================
+// 2. CADASTRAR NOVO CLIENTE
 async function cadastrarCliente(telefone, nome = null) {
     console.log(`📝 Cadastrando ${telefone} como NOVO...`);
     
     const dadosCliente = {
         telefone: telefone,
-        email: `cliente_${telefone}@whatsapp.com`,
-        status: 'novo',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        nome: nome || `Cliente_${telefone}`,
+        data_contato: new Date().toISOString()
     };
-    
-    if (nome && nome.trim()) {
-        dadosCliente.nome_completo = nome.trim();
-    }
     
     const { data, error } = await supabase
         .from('clientes_novos')
@@ -498,79 +408,6 @@ async function cadastrarCliente(telefone, nome = null) {
     
     console.log(`✅ Cliente ${telefone} cadastrado como NOVO`);
     return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
-}
-
-// ============================================================
-//  3. MOVER CLIENTE DE NOVO PARA ATIVO
-// ============================================================
-async function moverClienteParaAtivo(telefone) {
-    console.log(`📦 Movendo ${telefone} de NOVO para ATIVO...`);
-    
-    // 1. Busca em clientes_novos
-    const { data: clienteNovo, error: buscaError } = await supabase
-        .from('clientes_novos')
-        .select('*')
-        .eq('telefone', telefone)
-        .maybeSingle();
-    
-    if (buscaError || !clienteNovo) {
-        console.log(`⚠️ Cliente ${telefone} não encontrado em clientes_novos`);
-        return false;
-    }
-    
-    // 2. Insere em clientes_ativos
-    const { data: ativo, error: insertError } = await supabase
-        .from('clientes_ativos')
-        .insert({
-            telefone: clienteNovo.telefone,
-            email: clienteNovo.email,
-            nome_completo: clienteNovo.nome_completo,
-            status: 'em_processo',
-            created_at: clienteNovo.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-    
-    if (insertError) {
-        console.error('❌ Erro ao mover para ativo:', insertError);
-        return false;
-    }
-    
-    // 3. Remove de clientes_novos
-    await supabase
-        .from('clientes_novos')
-        .delete()
-        .eq('telefone', telefone);
-    
-    console.log(`✅ Cliente ${telefone} movido para ATIVO`);
-    return true;
-}
-
-// ============================================================
-//  4. ADICIONAR CONTATO COMO AMIGO
-// ============================================================
-async function adicionarContatoAmigo(telefone, nome = null) {
-    console.log(`🤝 Adicionando ${telefone} como AMIGO...`);
-    
-    const { data, error } = await supabase
-        .from('contatos_amigos')
-        .insert({
-            telefone: telefone,
-            nome: nome || `Amigo_${telefone}`,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-    
-    if (error) {
-        console.error('❌ Erro ao adicionar amigo:', error);
-        return null;
-    }
-    
-    console.log(`✅ Contato ${telefone} adicionado como AMIGO`);
-    return { dados: data, tipo: 'amigo', tabela: 'contatos_amigos' };
 }
 
 // ============================================================
@@ -643,6 +480,191 @@ app.get('/health', (req, res) => {
 
 app.get('/ping', (req, res) => {
   res.status(200).send('ok');
+});
+
+// ============================================================
+//  ROTAS PARA O PAINEL
+//  ============================================================
+
+// Buscar pendentes
+app.get('/api/painel/pendentes', async (req, res) => {
+    try {
+        const { data: pendentes, error: err1 } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .order('data_contato', { ascending: false });
+
+        if (err1) {
+            console.error('❌ Erro ao buscar pendentes:', err1);
+            return res.status(500).json({ success: false, message: err1.message });
+        }
+
+        const { count: total_ativos, error: err2 } = await supabase
+            .from('clientes_ativos')
+            .select('*', { count: 'exact', head: true });
+
+        const { count: total_amigos, error: err3 } = await supabase
+            .from('contatos_amigos')
+            .select('*', { count: 'exact', head: true });
+
+        res.json({
+            success: true,
+            pendentes: pendentes || [],
+            total_ativos: total_ativos || 0,
+            total_amigos: total_amigos || 0
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar pendentes:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Mover 1 cliente
+app.post('/api/painel/mover', async (req, res) => {
+    try {
+        const { telefone, destino } = req.body;
+
+        if (!telefone || !destino) {
+            return res.status(400).json({ success: false, message: 'Telefone e destino são obrigatórios' });
+        }
+
+        if (!['ativo', 'amigo'].includes(destino)) {
+            return res.status(400).json({ success: false, message: 'Destino deve ser "ativo" ou "amigo"' });
+        }
+
+        const { data: cliente, error: buscaError } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+
+        if (buscaError) {
+            console.error('❌ Erro ao buscar cliente:', buscaError);
+            return res.status(500).json({ success: false, message: buscaError.message });
+        }
+
+        if (!cliente) {
+            return res.status(404).json({ success: false, message: 'Cliente não encontrado em clientes_novos' });
+        }
+
+        if (destino === 'ativo') {
+            const { error: insertError } = await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato,
+                    atualizado_em: new Date().toISOString()
+                });
+
+            if (insertError) {
+                console.error('❌ Erro ao inserir em ativos:', insertError);
+                return res.status(500).json({ success: false, message: insertError.message });
+            }
+        } else {
+            const { error: insertError } = await supabase
+                .from('contatos_amigos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato
+                });
+
+            if (insertError) {
+                console.error('❌ Erro ao inserir em amigos:', insertError);
+                return res.status(500).json({ success: false, message: insertError.message });
+            }
+        }
+
+        const { error: deleteError } = await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefone);
+
+        if (deleteError) {
+            console.error('❌ Erro ao deletar de novos:', deleteError);
+            return res.status(500).json({ success: false, message: deleteError.message });
+        }
+
+        res.json({ success: true, message: `Cliente ${telefone} movido para ${destino}` });
+
+    } catch (error) {
+        console.error('❌ Erro ao mover cliente:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Mover vários clientes
+app.post('/api/painel/mover-varios', async (req, res) => {
+    try {
+        const { telefones, destino } = req.body;
+
+        if (!telefones || !Array.isArray(telefones) || telefones.length === 0) {
+            return res.status(400).json({ success: false, message: 'Lista de telefones é obrigatória' });
+        }
+
+        if (!['ativo', 'amigo'].includes(destino)) {
+            return res.status(400).json({ success: false, message: 'Destino deve ser "ativo" ou "amigo"' });
+        }
+
+        let movidos = 0;
+        let erros = [];
+
+        for (const telefone of telefones) {
+            try {
+                const { data: cliente } = await supabase
+                    .from('clientes_novos')
+                    .select('*')
+                    .eq('telefone', telefone)
+                    .maybeSingle();
+
+                if (!cliente) {
+                    erros.push(`${telefone}: não encontrado`);
+                    continue;
+                }
+
+                if (destino === 'ativo') {
+                    await supabase
+                        .from('clientes_ativos')
+                        .insert({
+                            telefone: cliente.telefone,
+                            nome: cliente.nome,
+                            criado_em: cliente.data_contato,
+                            atualizado_em: new Date().toISOString()
+                        });
+                } else {
+                    await supabase
+                        .from('contatos_amigos')
+                        .insert({
+                            telefone: cliente.telefone,
+                            nome: cliente.nome,
+                            criado_em: cliente.data_contato
+                        });
+                }
+
+                await supabase
+                    .from('clientes_novos')
+                    .delete()
+                    .eq('telefone', telefone);
+
+                movidos++;
+            } catch (err) {
+                erros.push(`${telefone}: ${err.message}`);
+            }
+        }
+
+        res.json({
+            success: true,
+            movidos,
+            erros: erros.length > 0 ? erros : undefined,
+            message: `${movidos} cliente(s) movido(s)`
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao mover clientes:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 // ============================================================
@@ -788,7 +810,7 @@ app.post('/api/submit-ds160', async (req, res) => {
 });
 
 // ============================================================
-//  FUNÇÃO GERAR PDF DS-160 (resumida para não estourar limite)
+//  FUNÇÃO GERAR PDF DS-160 (resumida)
 // ============================================================
 async function gerarPDF_DS160(data) {
   return new Promise((resolve, reject) => {
@@ -803,9 +825,6 @@ async function gerarPDF_DS160(data) {
     doc.moveDown(2);
     doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown(1);
-
-    // ... (restante da função gerarPDF_DS160 - mantenha seu código existente)
-    // Para não estourar o limite, estou mantendo a estrutura mas você deve manter sua implementação completa
     
     doc.moveDown(2);
     doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
@@ -1413,7 +1432,7 @@ async function sendReply(phone, message) {
   }
 }
 
-/// ============================================================
+// ============================================================
 //  WEBHOOK Z-API - VERSÃO TABELA ÚNICA
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
@@ -1485,7 +1504,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
 
     // ============================================================
-    //  🔍 BUSCA CLIENTE NA TABELA ÚNICA
+    //  🔍 BUSCA CLIENTE NAS 3 TABELAS
     //  ============================================================
     let cliente = await buscarCliente(cleanPhone);
     
@@ -1495,20 +1514,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // ============================================================
-    //  🎯 DECIDE O QUE FAZER BASEADO NO STATUS
+    //  🎯 DECIDE O QUE FAZER BASEADO NO TIPO
     //  ============================================================
     
     // 🤝 SE FOR "amigo" - SILÊNCIO TOTAL
-    if (cliente.status_atual === 'amigo') {
+    if (cliente.tipo === 'amigo') {
       console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
       return; // 👈 NÃO RESPONDE NADA
     }
     
-    // 🟢 SE FOR "em_processo" - RESPOSTA CONTEXTUAL (SEM MENU)
-    if (cliente.status_atual === 'em_processo') {
+    // 🟢 SE FOR "ativo" - RESPOSTA CONTEXTUAL (SEM MENU)
+    if (cliente.tipo === 'ativo') {
       console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
       await sendReply(cleanPhone, 
-        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* ${cliente.status_atual}\n\n📌 *Digite 0 para o MENU principal* 🚀`
+        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`
       );
       return;
     }
@@ -1855,146 +1874,6 @@ app.post('/api/zapi/send-test', async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
-});
-
-// ============================================================
-//  ROTAS PARA O PAINEL
-//  ============================================================
-
-// Buscar pendentes
-app.get('/api/painel/pendentes', async (req, res) => {
-    try {
-        const { data: pendentes, error: err1 } = await supabase
-            .from('clientes_novos')
-            .select('*')
-            .order('data_contato', { ascending: false });
-
-        const { count: total_ativos, error: err2 } = await supabase
-            .from('clientes_ativos')
-            .select('*', { count: 'exact', head: true });
-
-        const { count: total_amigos, error: err3 } = await supabase
-            .from('contatos_amigos')
-            .select('*', { count: 'exact', head: true });
-
-        res.json({
-            success: true,
-            pendentes: pendentes || [],
-            total_ativos: total_ativos || 0,
-            total_amigos: total_amigos || 0
-        });
-
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Mover 1 cliente
-app.post('/api/painel/mover', async (req, res) => {
-    try {
-        const { telefone, destino } = req.body;
-
-        if (!telefone || !destino) {
-            return res.status(400).json({ success: false, message: 'Telefone e destino são obrigatórios' });
-        }
-
-        const { data: cliente } = await supabase
-            .from('clientes_novos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-
-        if (!cliente) {
-            return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
-        }
-
-        if (destino === 'ativo') {
-            await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: cliente.telefone,
-                    nome: cliente.nome,
-                    criado_em: cliente.data_contato,
-                    atualizado_em: new Date().toISOString()
-                });
-        } else {
-            await supabase
-                .from('contatos_amigos')
-                .insert({
-                    telefone: cliente.telefone,
-                    nome: cliente.nome,
-                    criado_em: cliente.data_contato
-                });
-        }
-
-        await supabase
-            .from('clientes_novos')
-            .delete()
-            .eq('telefone', telefone);
-
-        res.json({ success: true, message: 'Cliente movido com sucesso' });
-
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Mover vários clientes
-app.post('/api/painel/mover-varios', async (req, res) => {
-    try {
-        const { telefones, destino } = req.body;
-
-        if (!telefones || !Array.isArray(telefones) || telefones.length === 0) {
-            return res.status(400).json({ success: false, message: 'Lista de telefones é obrigatória' });
-        }
-
-        let movidos = 0;
-
-        for (const telefone of telefones) {
-            try {
-                const { data: cliente } = await supabase
-                    .from('clientes_novos')
-                    .select('*')
-                    .eq('telefone', telefone)
-                    .maybeSingle();
-
-                if (!cliente) continue;
-
-                if (destino === 'ativo') {
-                    await supabase
-                        .from('clientes_ativos')
-                        .insert({
-                            telefone: cliente.telefone,
-                            nome: cliente.nome,
-                            criado_em: cliente.data_contato,
-                            atualizado_em: new Date().toISOString()
-                        });
-                } else {
-                    await supabase
-                        .from('contatos_amigos')
-                        .insert({
-                            telefone: cliente.telefone,
-                            nome: cliente.nome,
-                            criado_em: cliente.data_contato
-                        });
-                }
-
-                await supabase
-                    .from('clientes_novos')
-                    .delete()
-                    .eq('telefone', telefone);
-
-                movidos++;
-            } catch (err) {
-                console.error(`❌ Erro ao mover ${telefone}:`, err);
-            }
-        }
-
-        res.json({ success: true, movidos, message: `${movidos} cliente(s) movido(s)` });
-
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
 });
 
 // ============================================================
