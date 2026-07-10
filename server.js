@@ -1858,6 +1858,195 @@ app.post('/api/zapi/send-test', async (req, res) => {
 });
 
 // ============================================================
+//  ROTAS DE GERENCIAMENTO DE CLIENTES (PAINEL ADMIN)
+// ============================================================
+
+// ============================================================
+//  GET /api/clientes - Lista todos os clientes
+// ============================================================
+app.get('/api/clientes', validateApiKey, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('❌ Erro ao buscar clientes:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.json(data);
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+//  POST /api/clientes - Cria um novo cliente
+// ============================================================
+app.post('/api/clientes', validateApiKey, async (req, res) => {
+  try {
+    const { nome_completo, telefone, email, status } = req.body;
+    
+    if (!telefone) {
+      return res.status(400).json({ error: 'Telefone é obrigatório' });
+    }
+    
+    const { data, error } = await supabase
+      .from('clientes')
+      .insert({
+        nome_completo: nome_completo || null,
+        telefone: telefone,
+        email: email || null,
+        status: status || 'novo',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('❌ Erro ao criar cliente:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+//  PUT /api/clientes/:id - Atualiza um cliente
+// ============================================================
+app.put('/api/clientes/:id', validateApiKey, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nome_completo, telefone, email, status } = req.body;
+    
+    const updates = {};
+    if (nome_completo !== undefined) updates.nome_completo = nome_completo;
+    if (telefone !== undefined) updates.telefone = telefone;
+    if (email !== undefined) updates.email = email;
+    if (status !== undefined) updates.status = status;
+    updates.updated_at = new Date().toISOString();
+    
+    const { data, error } = await supabase
+      .from('clientes')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('❌ Erro ao atualizar cliente:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.json(data);
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+//  PATCH /api/clientes/batch - Atualiza múltiplos clientes em lote
+// ============================================================
+app.patch('/api/clientes/batch', validateApiKey, async (req, res) => {
+  try {
+    const { ids, status } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'IDs e status são obrigatórios' });
+    }
+    
+    if (!status) {
+      return res.status(400).json({ error: 'Status é obrigatório' });
+    }
+    
+    const { data, error } = await supabase
+      .from('clientes')
+      .update({ 
+        status: status,
+        updated_at: new Date().toISOString()
+      })
+      .in('id', ids)
+      .select();
+    
+    if (error) {
+      console.error('❌ Erro ao atualizar clientes em lote:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `${data.length} clientes atualizados`,
+      data 
+    });
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+//  DELETE /api/clientes/:id - Remove um cliente
+// ============================================================
+app.delete('/api/clientes/:id', validateApiKey, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { error } = await supabase
+      .from('clientes')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error('❌ Erro ao remover cliente:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+//  GET /api/clientes/stats - Estatísticas dos clientes
+// ============================================================
+app.get('/api/clientes/stats', validateApiKey, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('status');
+    
+    if (error) {
+      console.error('❌ Erro ao buscar estatísticas:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    const stats = {
+      total: data.length,
+      novo: data.filter(c => c.status === 'novo').length,
+      em_processo: data.filter(c => c.status === 'em_processo').length,
+      amigo: data.filter(c => c.status === 'amigo').length,
+      ativo: data.filter(c => c.status === 'ativo').length
+    };
+    
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
 //  INICIALIZAÇÃO
 // ============================================================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
