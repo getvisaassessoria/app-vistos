@@ -325,6 +325,16 @@ async function enviarWhatsApp(telefone, mensagem) {
   }
 }
 
+async function fecharConversa(phone, mensagem) {
+  const fechamento =
+    `\n\n✅ *Sua pergunta foi respondida?*\n\n` +
+    `8️⃣ *SIM* - Ótimo! Continue navegando ou digite *0* para o MENU principal.\n` +
+    `9️⃣ *NÃO* - Vamos te ajudar melhor! Digite *0* para o MENU principal ou *7* para falar com um especialista.\n\n` +
+    `📌 *Digite 0 para voltar ao MENU principal a qualquer momento* 🚀`;
+  
+  return mensagem + fechamento;
+}
+
 // ============================================================
 //  VALIDAÇÃO DS-160
 // ============================================================
