@@ -724,7 +724,7 @@ function validateApiKey(req, res, next) {
 }
 
 // ============================================================
-//  ROTA DS-160
+//  ROTA DS-160 - COM SALVAMENTO NO SUPABASE
 // ============================================================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
@@ -749,38 +749,101 @@ app.post('/api/submit-ds160', async (req, res) => {
 
   (async () => {
     try {
-      let solicitacaoId = null;
-      try {
-        const { data: cliente, error: clienteError } = await supabase
-          .from('clientes_ativos')
-          .upsert({
-            email: data['email-1'] || null,
-            nome_completo: data['full_name'] || null,
-            telefone: data['text-77'] || null
-          }, { onConflict: 'email' })
-          .select()
-          .single();
-        if (!clienteError) {
-          const { data: solicitacao, error: solError } = await supabase
-            .from('solicitacoes')
-            .insert({
-              cliente_id: cliente.id,
-              tipo: 'ds160',
-              dados: data,
-              status: 'pendente'
-            })
-            .select()
-            .single();
-          if (!solError) solicitacaoId = solicitacao.id;
-          console.log(`✅ DS-160 salvo. ID: ${solicitacaoId}`);
-        }
-      } catch (supabaseErr) {
-        console.error('⚠️ Erro ao salvar no Supabase:', supabaseErr.message);
-      }
-
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
+      const telefoneCliente = data['text-77'] || null;
 
+      // ============================================================
+      //  📝 SALVAR NA TABELA formulario_ds160
+      //  ============================================================
+      let formularioId = null;
+      try {
+        const { data: formulario, error: insertError } = await supabase
+          .from('formulario_ds160')
+          .insert({
+            nome_completo: nome,
+            email: emailCliente,
+            telefone: telefoneCliente,
+            dados_completos: data,
+            status: 'recebido',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('❌ Erro ao salvar formulário DS-160:', insertError);
+        } else {
+          formularioId = formulario.id;
+          console.log(`✅ Formulário DS-160 salvo com ID: ${formularioId}`);
+        }
+      } catch (err) {
+        console.error('⚠️ Erro ao salvar no Supabase:', err.message);
+      }
+
+      // ============================================================
+      //  🔄 ATUALIZAR CLIENTE (se existir)
+      //  ============================================================
+      if (telefoneCliente) {
+        try {
+          // Busca se o cliente existe em clientes_novos
+          const { data: clienteNovo } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefoneCliente)
+            .maybeSingle();
+
+          if (clienteNovo) {
+            // Move para clientes_ativos (já enviou DS-160, está em processo)
+            await supabase
+              .from('clientes_ativos')
+              .insert({
+                telefone: clienteNovo.telefone,
+                nome: clienteNovo.nome || nome,
+                email: emailCliente,
+                status: 'em_processo',
+                criado_em: clienteNovo.data_contato,
+                atualizado_em: new Date().toISOString()
+              });
+
+            await supabase
+              .from('clientes_novos')
+              .delete()
+              .eq('telefone', telefoneCliente);
+
+            console.log(`✅ Cliente ${telefoneCliente} movido para ATIVOS (enviou DS-160)`);
+          } else {
+            // Verifica se já está em clientes_ativos
+            const { data: clienteAtivo } = await supabase
+              .from('clientes_ativos')
+              .select('*')
+              .eq('telefone', telefoneCliente)
+              .maybeSingle();
+
+            if (!clienteAtivo) {
+              // Cria direto em clientes_ativos
+              await supabase
+                .from('clientes_ativos')
+                .insert({
+                  telefone: telefoneCliente,
+                  nome: nome,
+                  email: emailCliente,
+                  status: 'em_processo',
+                  criado_em: new Date().toISOString(),
+                  atualizado_em: new Date().toISOString()
+                });
+              console.log(`✅ Cliente ${telefoneCliente} criado em ATIVOS (enviou DS-160)`);
+            }
+          }
+        } catch (err) {
+          console.error('⚠️ Erro ao atualizar cliente:', err.message);
+        }
+      }
+
+      // ============================================================
+      //  📧 ENVIAR E-MAIL
+      //  ============================================================
       const pdfBuffer = await gerarPDF_DS160(data);
       console.log(`📄 PDF gerado para ${nome}, tamanho: ${pdfBuffer.length} bytes`);
 
@@ -803,6 +866,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         });
         console.log(`✅ E-mail enviado para o cliente: ${emailCliente}`);
       }
+      
     } catch (err) {
       console.error('❌ Erro no processamento DS-160 (background):', err);
     }
