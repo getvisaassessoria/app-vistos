@@ -1793,7 +1793,7 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - CORREÇÃO PARA CLIENTES "amigo"
+//  WEBHOOK Z-API - IGNORAR CLIENTES "amigo"
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1853,12 +1853,12 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // ============================================================
-    //  🟢 VERIFICAR CLIENTE NO BANCO - CORREÇÃO
-    //  ⚠️ IMPORTANTE: NÃO mostrar menu para clientes "amigo"
+    //  🚨 VERIFICAR CLIENTE - IGNORAR "amigo"
     // ============================================================
     
-    // Buscar cliente no Supabase
     let clienteData = null;
+    let isAmigo = false;
+    
     try {
       const { data: cliente, error } = await supabase
         .from('clientes')
@@ -1869,20 +1869,20 @@ app.post('/api/webhook/zapi', async (req, res) => {
       if (!error && cliente) {
         clienteData = cliente;
         console.log(`📝 Cliente encontrado: ${cliente.nome_completo || 'Sem nome'} - Status: ${cliente.status}`);
+        
+        // ============================================================
+        //  🚨 SE FOR "amigo" - IGNORA COMPLETAMENTE
+        // ============================================================
+        if (cliente.status === 'amigo') {
+          console.log(`🤝 Cliente é "amigo" - IGNORANDO mensagem`);
+          return; // 👈 NÃO RESPONDE NADA
+        }
       } else {
         console.log(`📝 Cliente NÃO encontrado no banco`);
       }
     } catch (err) {
       console.log('⚠️ Erro ao buscar cliente:', err.message);
     }
-
-    // ============================================================
-    //  🟢 SE FOR CLIENTE EXISTENTE (qualquer status que não seja 'novo')
-    //  Não mostrar menu de boas-vindas, entrar no fluxo normal
-    // ============================================================
-    
-    // ⚠️ CORREÇÃO: Verificar se o cliente existe (qualquer status)
-    const isClienteExistente = clienteData !== null;
 
     // ============================================================
     //  ESTADO DO USUÁRIO
@@ -1956,8 +1956,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     
-    // ⚠️ CORREÇÃO: Só mostra boas-vindas se for NOVO cliente
-    if (saudacoes.includes(messageText) && !isClienteExistente) {
+    // Só mostra boas-vindas se for NOVO cliente (não encontrado no banco)
+    if (saudacoes.includes(messageText) && !clienteData) {
       const menuPrincipal = await getMenuPrincipal();
       const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
       state.nivel = 'principal';
@@ -2092,8 +2092,8 @@ app.post('/api/webhook/zapi', async (req, res) => {
           await sendReply(cleanPhone, ajudaComFechamento);
           return;
         default:
-          // ⚠️ CORREÇÃO: Se não for um comando reconhecido e for cliente existente, mostrar mensagem de ajuda
-          if (isClienteExistente) {
+          // Se não for um comando reconhecido e for cliente existente, mostrar mensagem de ajuda
+          if (clienteData) {
             const mensagemAjuda =
               `👋 Olá! Como posso ajudar você hoje?\n\n` +
               `📌 *Digite 0 para ver o MENU principal*\n` +
@@ -2129,7 +2129,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     // ============================================================
     //  MENSAGEM NÃO RECONHECIDA - PARA CLIENTES EXISTENTES
     // ============================================================
-    if (isClienteExistente) {
+    if (clienteData) {
       const mensagemAjuda =
         `👋 Olá! Como posso ajudar você hoje?\n\n` +
         `📌 *Digite 0 para ver o MENU principal*\n` +
