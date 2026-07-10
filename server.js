@@ -1858,192 +1858,143 @@ app.post('/api/zapi/send-test', async (req, res) => {
 });
 
 // ============================================================
-//  ROTAS DE GERENCIAMENTO DE CLIENTES (PAINEL ADMIN)
-// ============================================================
+//  ROTAS PARA O PAINEL
+//  ============================================================
 
-// ============================================================
-//  GET /api/clientes - Lista todos os clientes
-// ============================================================
-app.get('/api/clientes', validateApiKey, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('❌ Erro ao buscar clientes:', error);
-      return res.status(500).json({ error: error.message });
+// Buscar pendentes
+app.get('/api/painel/pendentes', async (req, res) => {
+    try {
+        const { data: pendentes, error: err1 } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .order('data_contato', { ascending: false });
+
+        const { count: total_ativos, error: err2 } = await supabase
+            .from('clientes_ativos')
+            .select('*', { count: 'exact', head: true });
+
+        const { count: total_amigos, error: err3 } = await supabase
+            .from('contatos_amigos')
+            .select('*', { count: 'exact', head: true });
+
+        res.json({
+            success: true,
+            pendentes: pendentes || [],
+            total_ativos: total_ativos || 0,
+            total_amigos: total_amigos || 0
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
-    
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
-// ============================================================
-//  POST /api/clientes - Cria um novo cliente
-// ============================================================
-app.post('/api/clientes', validateApiKey, async (req, res) => {
-  try {
-    const { nome_completo, telefone, email, status } = req.body;
-    
-    if (!telefone) {
-      return res.status(400).json({ error: 'Telefone é obrigatório' });
+// Mover 1 cliente
+app.post('/api/painel/mover', async (req, res) => {
+    try {
+        const { telefone, destino } = req.body;
+
+        if (!telefone || !destino) {
+            return res.status(400).json({ success: false, message: 'Telefone e destino são obrigatórios' });
+        }
+
+        const { data: cliente } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+
+        if (!cliente) {
+            return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
+        }
+
+        if (destino === 'ativo') {
+            await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato,
+                    atualizado_em: new Date().toISOString()
+                });
+        } else {
+            await supabase
+                .from('contatos_amigos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato
+                });
+        }
+
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefone);
+
+        res.json({ success: true, message: 'Cliente movido com sucesso' });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
-    
-    const { data, error } = await supabase
-      .from('clientes')
-      .insert({
-        nome_completo: nome_completo || null,
-        telefone: telefone,
-        email: email || null,
-        status: status || 'novo',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('❌ Erro ao criar cliente:', error);
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(201).json(data);
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
-// ============================================================
-//  PUT /api/clientes/:id - Atualiza um cliente
-// ============================================================
-app.put('/api/clientes/:id', validateApiKey, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { nome_completo, telefone, email, status } = req.body;
-    
-    const updates = {};
-    if (nome_completo !== undefined) updates.nome_completo = nome_completo;
-    if (telefone !== undefined) updates.telefone = telefone;
-    if (email !== undefined) updates.email = email;
-    if (status !== undefined) updates.status = status;
-    updates.updated_at = new Date().toISOString();
-    
-    const { data, error } = await supabase
-      .from('clientes')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('❌ Erro ao atualizar cliente:', error);
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// Mover vários clientes
+app.post('/api/painel/mover-varios', async (req, res) => {
+    try {
+        const { telefones, destino } = req.body;
 
-// ============================================================
-//  PATCH /api/clientes/batch - Atualiza múltiplos clientes em lote
-// ============================================================
-app.patch('/api/clientes/batch', validateApiKey, async (req, res) => {
-  try {
-    const { ids, status } = req.body;
-    
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'IDs e status são obrigatórios' });
-    }
-    
-    if (!status) {
-      return res.status(400).json({ error: 'Status é obrigatório' });
-    }
-    
-    const { data, error } = await supabase
-      .from('clientes')
-      .update({ 
-        status: status,
-        updated_at: new Date().toISOString()
-      })
-      .in('id', ids)
-      .select();
-    
-    if (error) {
-      console.error('❌ Erro ao atualizar clientes em lote:', error);
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `${data.length} clientes atualizados`,
-      data 
-    });
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+        if (!telefones || !Array.isArray(telefones) || telefones.length === 0) {
+            return res.status(400).json({ success: false, message: 'Lista de telefones é obrigatória' });
+        }
 
-// ============================================================
-//  DELETE /api/clientes/:id - Remove um cliente
-// ============================================================
-app.delete('/api/clientes/:id', validateApiKey, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { error } = await supabase
-      .from('clientes')
-      .delete()
-      .eq('id', id);
-    
-    if (error) {
-      console.error('❌ Erro ao remover cliente:', error);
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(204).send();
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+        let movidos = 0;
 
-// ============================================================
-//  GET /api/clientes/stats - Estatísticas dos clientes
-// ============================================================
-app.get('/api/clientes/stats', validateApiKey, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('status');
-    
-    if (error) {
-      console.error('❌ Erro ao buscar estatísticas:', error);
-      return res.status(500).json({ error: error.message });
+        for (const telefone of telefones) {
+            try {
+                const { data: cliente } = await supabase
+                    .from('clientes_novos')
+                    .select('*')
+                    .eq('telefone', telefone)
+                    .maybeSingle();
+
+                if (!cliente) continue;
+
+                if (destino === 'ativo') {
+                    await supabase
+                        .from('clientes_ativos')
+                        .insert({
+                            telefone: cliente.telefone,
+                            nome: cliente.nome,
+                            criado_em: cliente.data_contato,
+                            atualizado_em: new Date().toISOString()
+                        });
+                } else {
+                    await supabase
+                        .from('contatos_amigos')
+                        .insert({
+                            telefone: cliente.telefone,
+                            nome: cliente.nome,
+                            criado_em: cliente.data_contato
+                        });
+                }
+
+                await supabase
+                    .from('clientes_novos')
+                    .delete()
+                    .eq('telefone', telefone);
+
+                movidos++;
+            } catch (err) {
+                console.error(`❌ Erro ao mover ${telefone}:`, err);
+            }
+        }
+
+        res.json({ success: true, movidos, message: `${movidos} cliente(s) movido(s)` });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
-    
-    const stats = {
-      total: data.length,
-      novo: data.filter(c => c.status === 'novo').length,
-      em_processo: data.filter(c => c.status === 'em_processo').length,
-      amigo: data.filter(c => c.status === 'amigo').length,
-      ativo: data.filter(c => c.status === 'ativo').length
-    };
-    
-    res.json(stats);
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // ============================================================
