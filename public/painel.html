@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel GetVisa</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f4f8;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #003366, #0055a5);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .header .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .stat-card .label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .stat-card.pendentes .number { color: #f59e0b; }
+        .stat-card.ativos .number { color: #10b981; }
+        .stat-card.amigos .number { color: #8b5cf6; }
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .table-header {
+            padding: 15px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .table-header input {
+            padding: 8px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            width: 250px;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #003366;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #002244;
+        }
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+        .btn-warning:hover {
+            background: #d97706;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        .btn-sm {
+            padding: 4px 12px;
+            font-size: 12px;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            text-align: left;
+            padding: 12px 20px;
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        td {
+            padding: 12px 20px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+        }
+        tr:hover {
+            background: #f8fafc;
+        }
+        .acoes {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.success { background: #10b981; }
+        .toast.error { background: #ef4444; }
+        .toast.info { background: #3b82f6; }
+        .checkbox-column {
+            text-align: center;
+        }
+        .checkbox-column input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .acoes-em-massa {
+            padding: 15px 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .acoes-em-massa span {
+            font-size: 14px;
+            color: #475569;
+            margin-right: 10px;
+        }
+        .telefone-link {
+            color: #003366;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .telefone-link:hover {
+            text-decoration: underline;
+        }
+        .data-hora {
+            font-size: 13px;
+            color: #64748b;
+        }
+        @media (max-width: 768px) {
+            .stats { grid-template-columns: 1fr; }
+            .table-header { flex-direction: column; }
+            .table-header input { width: 100%; }
+            td, th { padding: 8px 10px; font-size: 12px; }
+            .acoes { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📋 Painel GetVisa</h1>
+            <div class="badge">
+                🔄 <span id="ultima-atualizacao">-</span>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat-card pendentes">
+                <div class="number" id="total-pendentes">0</div>
+                <div class="label">🟡 Pendentes</div>
+            </div>
+            <div class="stat-card ativos">
+                <div class="number" id="total-ativos">0</div>
+                <div class="label">🟢 Em Processo</div>
+            </div>
+            <div class="stat-card amigos">
+                <div class="number" id="total-amigos">0</div>
+                <div class="label">🤝 Amigos</div>
+            </div>
+        </div>
+
+        <!-- Tabela -->
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight: 600; color: #1e293b;">
+                    📞 Contatos Pendentes
+                </span>
+                <div>
+                    <input type="text" id="buscar" placeholder="🔍 Buscar..." onkeyup="filtrarTabela()">
+                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left: 10px;">
+                        🔄 Atualizar
+                    </button>
+                </div>
+            </div>
+            <div id="tabela-container">
+                <div class="loading">🔄 Carregando...</div>
+            </div>
+            <div class="acoes-em-massa">
+                <span>✅ Ações em massa:</span>
+                <button class="btn btn-success" onclick="moverSelecionados('ativo')">
+                    🟢 Mover para EM PROCESSO
+                </button>
+                <button class="btn btn-warning" onclick="moverSelecionados('amigo')">
+                    🤝 Mover para AMIGO
+                </button>
+                <button class="btn btn-danger" onclick="desmarcarTodos()">
+                    Desmarcar todos
+                </button>
+                <span style="margin-left: auto; font-size: 13px; color: #94a3b8;">
+                    Selecione os contatos e clique em uma ação
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ============================================================
+        //  CARREGAR DADOS
+        //  ============================================================
+        async function carregarDados() {
+            const container = document.getElementById('tabela-container');
+            container.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+
+            try {
+                const response = await fetch('/api/painel/pendentes');
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Erro ao carregar');
+                }
+
+                // Atualiza stats
+                document.getElementById('total-pendentes').textContent = data.pendentes.length;
+                document.getElementById('total-ativos').textContent = data.total_ativos || 0;
+                document.getElementById('total-amigos').textContent = data.total_amigos || 0;
+                document.getElementById('ultima-atualizacao').textContent = new Date().toLocaleTimeString();
+
+                renderTabela(data.pendentes);
+
+            } catch (error) {
+                console.error('❌ Erro:', error);
+                container.innerHTML = `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
+            }
+        }
+
+        // ============================================================
+        //  RENDERIZAR TABELA
+        //  ============================================================
+        function renderTabela(dados) {
+            const container = document.getElementById('tabela-container');
+
+            if (!dados || dados.length === 0) {
+                container.innerHTML = `
+                    <div class="empty">
+                        🎉 Nenhum contato pendente!
+                        <br><br>
+                        <span style="font-size: 13px; color: #94a3b8;">
+                            Novos contatos aparecerão automaticamente aqui.
+                        </span>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="selecionar-todos" onchange="selecionarTodos(this.checked)">
+                            </th>
+                            <th>Telefone</th>
+                            <th>Nome</th>
+                            <th>Data</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            dados.forEach(item => {
+                const data = item.data_contato ? new Date(item.data_contato).toLocaleString('pt-BR') : '-';
+                const nome = item.nome || 'Sem nome';
+                html += `
+                    <tr data-telefone="${item.telefone}">
+                        <td class="checkbox-column">
+                            <input type="checkbox" class="selecionar-item" data-telefone="${item.telefone}">
+                        </td>
+                        <td>
+                            <a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">
+                                ${item.telefone}
+                            </a>
+                        </td>
+                        <td>${nome}</td>
+                        <td class="data-hora">${data}</td>
+                        <td>
+                            <div class="acoes">
+                                <button class="btn btn-success btn-sm" onclick="moverCliente('${item.telefone}', 'ativo')">
+                                    🟢 Em Processo
+                                </button>
+                                <button class="btn btn-warning btn-sm" onclick="moverCliente('${item.telefone}', 'amigo')">
+                                    🤝 Amigo
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // ============================================================
+        //  AÇÕES
+        //  ============================================================
+
+        async function moverCliente(telefone, destino) {
+            const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
+            if (!confirm(`Mover ${telefone} para ${destinoNome}?`)) return;
+
+            try {
+                const response = await fetch('/api/painel/mover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefone, destino })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`✅ ${telefone} movido para ${destinoNome}!`, 'success');
+                    carregarDados();
+                } else {
+                    showToast(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function moverSelecionados(destino) {
+            const selecionados = document.querySelectorAll('.selecionar-item:checked');
+            if (selecionados.length === 0) {
+                showToast('⚠️ Selecione pelo menos um contato', 'info');
+                return;
+            }
+
+            const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
+            if (!confirm(`Mover ${selecionados.length} contato(s) para ${destinoNome}?`)) return;
+
+            const telefones = Array.from(selecionados).map(el => el.dataset.telefone);
+
+            try {
+                const response = await fetch('/api/painel/mover-varios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefones, destino })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`✅ ${result.movidos} contato(s) movidos!`, 'success');
+                    carregarDados();
+                } else {
+                    showToast(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        function selecionarTodos(checked) {
+            document.querySelectorAll('.selecionar-item').forEach(el => el.checked = checked);
+        }
+
+        function desmarcarTodos() {
+            document.querySelectorAll('.selecionar-item').forEach(el => el.checked = false);
+        }
+
+        function filtrarTabela() {
+            const filtro = document.getElementById('buscar').value.toLowerCase();
+            const linhas = document.querySelectorAll('#tabela-container table tbody tr');
+
+            linhas.forEach(linha => {
+                const texto = linha.textContent.toLowerCase();
+                linha.style.display = texto.includes(filtro) ? '' : 'none';
+            });
+        }
+
+        // ============================================================
+        //  TOAST
+        //  ============================================================
+        function showToast(mensagem, tipo = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = mensagem;
+            toast.className = `toast ${tipo}`;
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ============================================================
+        //  INICIALIZAÇÃO
+        //  ============================================================
+        carregarDados();
+        setInterval(carregarDados, 30000);
+    </script>
+</body>
+</html>
