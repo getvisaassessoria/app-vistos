@@ -1433,7 +1433,7 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - VERSÃO TABELA ÚNICA
+//  WEBHOOK Z-API - VERSÃO COMPLETA (4 TABELAS)
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1504,7 +1504,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
 
     // ============================================================
-    //  🔍 BUSCA CLIENTE NAS 3 TABELAS
+    //  🔍 BUSCA CLIENTE NAS 4 TABELAS (ordem: finalizado → ativo → amigo → novo)
     //  ============================================================
     let cliente = await buscarCliente(cleanPhone);
     
@@ -1513,9 +1513,31 @@ app.post('/api/webhook/zapi', async (req, res) => {
       cliente = await cadastrarCliente(cleanPhone);
     }
     
+    // ✅ VERIFICA SE O CLIENTE FOI CADASTRADO COM SUCESSO
+    if (!cliente) {
+      console.error(`❌ Falha ao cadastrar cliente ${cleanPhone}`);
+      await sendReply(cleanPhone, '⚠️ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+      return;
+    }
+    
     // ============================================================
     //  🎯 DECIDE O QUE FAZER BASEADO NO TIPO
     //  ============================================================
+    
+    // 🏁 SE FOR "finalizado" - MENSAGEM DE AGRADECIMENTO
+    if (cliente.tipo === 'finalizado') {
+      console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
+      await sendReply(cleanPhone, 
+        `🙏 *Muito obrigado por confiar na GetVisa!*\n\n` +
+        `Seu processo foi concluído com sucesso.\n\n` +
+        `📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n` +
+        `📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n` +
+        `⭐ *Avalie nosso serviço:*\n` +
+        `https://getvisa.com.br/avaliacao\n\n` +
+        `💬 *Estamos aqui para você sempre que precisar!* 🙏`
+      );
+      return;
+    }
     
     // 🤝 SE FOR "amigo" - SILÊNCIO TOTAL
     if (cliente.tipo === 'amigo') {
@@ -1659,220 +1681,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
     console.error('❌ Stack:', error.stack);
-  }
-});
-
-// ============================================================
-//  FUNÇÕES AUXILIARES PARA MENUS
-// ============================================================
-
-async function getMenuPrincipal() {
-  return (
-    `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
-    `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
-    `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
-    `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-    `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
-    `5️⃣ 🇨🇦 eTA CANADENSE\n` +
-    `6️⃣ 📘 PASSAPORTE\n` +
-    `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-    `💬 *Digite o número da opção desejada (1 a 7) ou me pergunte algo!*\n` +
-    `• Digite *0* para ver este MENU novamente 🚀`
-  );
-}
-
-async function getSubmenu(service) {
-  const names = {
-    'visto_americano': '🇺🇸 VISTO AMERICANO',
-    'visto_canadense': '🇨🇦 VISTO CANADENSE',
-    'visto_australiano': '🇦🇺 VISTO AUSTRALIANO',
-    'eta_uk': '🇬🇧 eTA UK',
-    'eta_canadense': '🇨🇦 eTA CANADENSE',
-    'passaporte': '📘 PASSAPORTE'
-  };
-  const isPassaporte = service === 'passaporte';
-  return (
-    `${names[service] || 'SERVIÇO'}\n\n` +
-    `1️⃣ 💰 PREÇO\n` +
-    `2️⃣ ⏰ PRAZO\n` +
-    `3️⃣ 📄 DOCUMENTOS\n` +
-    `4️⃣ 📋 PROCESSO\n` +
-    `5️⃣ ${isPassaporte ? '📍 ONDE FAZER' : '⚠️ VISTO NEGADO'}\n` +
-    `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
-    `7️⃣ 📞 FALAR COM ESPECIALISTA\n` +
-    `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
-    `💬 *Digite o número da opção desejada ou me pergunte algo!* 🚀`
-  );
-}
-
-// ============================================================
-//  SISTEMA DE LEMBRETES AUTOMÁTICOS
-// ============================================================
-async function buscarTelefoneCliente(clienteNome, clienteId) {
-  if (clienteId) {
-    const { data: cliente } = await supabase
-      .from('clientes_ativos')
-      .select('telefone')
-      .eq('id', clienteId)
-      .single();
-    if (cliente?.telefone) return cliente.telefone.replace(/\D/g, '');
-  }
-  const { data: lead } = await supabase
-    .from('leads_simulador')
-    .select('telefone_whatsapp')
-    .ilike('nome_cliente', `%${clienteNome}%`)
-    .order('data_simulacao', { ascending: false })
-    .limit(1)
-    .single();
-  return lead?.telefone_whatsapp?.replace(/\D/g, '') || null;
-}
-
-async function enviarLembreteAgendamento(telefone, nomeCliente, agendamento, diasAntecedencia) {
-  const dataFormatada = formatarDataBR(agendamento.data);
-  const emoji = agendamento.atividade === 'ENTREVISTA' ? '🗣️' :
-    agendamento.atividade === 'CASV' ? '👆' :
-    agendamento.atividade.includes('TREINAMENTO') ? '💻' :
-    agendamento.atividade === 'RETIRADA PASSAPORTE' ? '📬' : '📌';
-  const diasTexto = diasAntecedencia === 3 ? '3 dias' : '1 dia';
-  let mensagem = `🔔 *LEMBRETE - GetVisa* 🔔\n\nOlá, ${nomeCliente.split(' ')[0]}! 👋\n\nFaltam *${diasTexto}* para seu compromisso:\n\n${emoji} *${agendamento.atividade}*\n📆 Data: ${dataFormatada}\n⏰ Horário: ${agendamento.hora}\n`;
-  if (agendamento.local) mensagem += `📍 Local: ${agendamento.local}\n`;
-  if (agendamento.atividade === 'ENTREVISTA') {
-    mensagem += `\n📋 *Dicas importantes:*\n• Chegue com 30 minutos de antecedência\n• Leve: passaporte, DS-160, foto 5x7\n• Documentos comprobatórios\n• Esteja bem vestido(a) e confiante!\n`;
-  } else if (agendamento.atividade === 'CASV') {
-    mensagem += `\n📋 *Para a Coleta CASV:*\n• Leve o passaporte original\n• Confirme o local exato no dia\n• Não precisa levar documentos comprobatórios\n`;
-  } else if (agendamento.atividade === 'RETIRADA PASSAPORTE') {
-    mensagem += `\n📋 *Retirada do passaporte:*\n• Leve o comprovante de agendamento\n• Documento de identificação original\n`;
-  }
-  mensagem += `\nBoa sorte! 🍀🇺🇸\n\n💬 *Precisa de mais alguma informação?*`;
-  let telefoneLimpo = telefone.toString().replace(/\D/g, '');
-  if (telefoneLimpo.startsWith('55')) telefoneLimpo = telefoneLimpo.substring(2);
-  await enviarWhatsApp(telefoneLimpo, mensagem);
-  console.log(`📨 Lembrete ${diasTexto} enviado para ${nomeCliente}: ${agendamento.atividade}`);
-}
-
-async function verificarLembretes() {
-  console.log(`🔍 Verificando lembretes - ${new Date().toLocaleString('pt-BR')}`);
-  try {
-    const hoje = new Date().toISOString().split('T')[0];
-    const { data: agendamentos, error } = await supabase
-      .from('compromissos')
-      .select('*')
-      .eq('concluido', 0)
-      .gte('data', hoje);
-    if (error) {
-      console.error('❌ Erro ao buscar agendamentos:', error);
-      return;
-    }
-    const dataAtual = new Date();
-    dataAtual.setHours(0, 0, 0, 0);
-    for (const ag of agendamentos) {
-      const dataAgenda = new Date(ag.data);
-      dataAgenda.setHours(0, 0, 0, 0);
-      const diffDays = Math.ceil((dataAgenda - dataAtual) / (1000 * 60 * 60 * 24));
-      const telefone = await buscarTelefoneCliente(ag.cliente, ag.cliente_id);
-      if (!telefone) {
-        console.log(`⚠️ Telefone não encontrado para ${ag.cliente}`);
-        continue;
-      }
-      if (diffDays === 3 && !ag.lembrete_3d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 3);
-        await supabase.from('compromissos').update({ lembrete_3d_enviado: true }).eq('id', ag.id);
-        console.log(`✅ Lembrete 3 dias enviado para ${ag.cliente}`);
-      }
-      if (diffDays === 1 && !ag.lembrete_1d_enviado) {
-        await enviarLembreteAgendamento(telefone, ag.cliente, ag, 1);
-        await supabase.from('compromissos').update({ lembrete_1d_enviado: true }).eq('id', ag.id);
-        console.log(`✅ Lembrete 1 dia enviado para ${ag.cliente}`);
-      }
-    }
-  } catch (err) {
-    console.error('❌ Erro no sistema de lembretes:', err);
-  }
-}
-
-setInterval(verificarLembretes, 6 * 60 * 60 * 1000);
-verificarLembretes();
-
-// ============================================================
-//  ROTAS DE DIAGNÓSTICO Z-API
-// ============================================================
-
-app.get('/api/zapi/check-phone', async (req, res) => {
-  try {
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    if (!instance || !token) {
-      return res.status(400).json({ success: false, message: 'Z-API não configurada' });
-    }
-    const url = `https://api.z-api.io/instances/${instance}/token/${token}/status`;
-    const response = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-    const data = await response.json();
-    const phoneNumber = data.phone || data.phoneNumber || data.whatsapp || data.connectedPhone || null;
-    res.json({
-      success: response.status === 200,
-      statusCode: response.status,
-      phoneNumber: phoneNumber,
-      fullResponse: data,
-      expectedNumber: '5521974601812',
-      isCorrectNumber: phoneNumber === '5521974601812' || String(phoneNumber).includes('21974601812') || String(phoneNumber).includes('974601812')
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/zapi/qrcode', async (req, res) => {
-  try {
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    if (!instance || !token) {
-      return res.status(400).json({ success: false, message: 'Z-API não configurada' });
-    }
-    const logoutUrl = `https://api.z-api.io/instances/${instance}/token/${token}/logout`;
-    await fetch(logoutUrl, { method: 'POST' });
-    const qrUrl = `https://api.z-api.io/instances/${instance}/token/${token}/qrcode`;
-    const response = await fetch(qrUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-    const data = await response.json();
-    res.json({
-      success: response.status === 200,
-      qrcode: data.qrcode || data,
-      instructions: 'Escaneie o QR Code com o WhatsApp do número +55 21 97460-1812',
-      expectedNumber: '5521974601812'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/zapi/send-test', async (req, res) => {
-  try {
-    const { phone, message } = req.body;
-    const instance = process.env.ZAPI_INSTANCE;
-    const token = process.env.ZAPI_TOKEN;
-    const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-    if (!instance || !token) {
-      return res.status(400).json({ success: false, message: 'Z-API não configurada' });
-    }
-    let targetPhone = phone || '5521974601812';
-    let cleanPhone = targetPhone.toString().replace(/\D/g, '');
-    if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
-    const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-    const testMessage = message || '🧪 Mensagem de teste do servidor!\n\n✅ Z-API configurada corretamente!\n📱 Número: ' + cleanPhone;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-      body: JSON.stringify({ phone: cleanPhone, message: testMessage })
-    });
-    const data = await response.json();
-    res.json({
-      success: response.status === 200,
-      statusCode: response.status,
-      phone: cleanPhone,
-      message: testMessage,
-      response: data
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
