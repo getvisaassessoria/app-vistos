@@ -1433,6 +1433,49 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
+//  FUNÇÕES AUXILIARES PARA MENUS
+//  ============================================================
+
+async function getMenuPrincipal() {
+  return (
+    `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
+    `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
+    `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
+    `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
+    `4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n` +
+    `5️⃣ 🇨🇦 eTA CANADENSE\n` +
+    `6️⃣ 📘 PASSAPORTE\n` +
+    `7️⃣ 📞 AJUDA / CONTATO\n\n` +
+    `💬 *Digite o número da opção desejada (1 a 7) ou me pergunte algo!*\n` +
+    `• Digite *0* para ver este MENU novamente 🚀`
+  );
+}
+
+async function getSubmenu(service) {
+  const names = {
+    'visto_americano': '🇺🇸 VISTO AMERICANO',
+    'visto_canadense': '🇨🇦 VISTO CANADENSE',
+    'visto_australiano': '🇦🇺 VISTO AUSTRALIANO',
+    'eta_uk': '🇬🇧 eTA UK',
+    'eta_canadense': '🇨🇦 eTA CANADENSE',
+    'passaporte': '📘 PASSAPORTE'
+  };
+  const isPassaporte = service === 'passaporte';
+  return (
+    `${names[service] || 'SERVIÇO'}\n\n` +
+    `1️⃣ 💰 PREÇO\n` +
+    `2️⃣ ⏰ PRAZO\n` +
+    `3️⃣ 📄 DOCUMENTOS\n` +
+    `4️⃣ 📋 PROCESSO\n` +
+    `5️⃣ ${isPassaporte ? '📍 ONDE FAZER' : '⚠️ VISTO NEGADO'}\n` +
+    `6️⃣ 📊 AVALIAÇÃO GRATUITA\n` +
+    `7️⃣ 📞 FALAR COM ESPECIALISTA\n` +
+    `0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n` +
+    `💬 *Digite o número da opção desejada ou me pergunte algo!* 🚀`
+  );
+}
+
+// ============================================================
 //  WEBHOOK Z-API - VERSÃO COMPLETA (4 TABELAS)
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
