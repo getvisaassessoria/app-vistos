@@ -1828,44 +1828,40 @@ app.post('/api/webhook/zapi', async (req, res) => {
       return;
     }
 
-    const senderPhone = body.phone || body.from;
-    if (!senderPhone) return;
+    // PEGA O TELEFONE DO REMETENTE
+    const senderPhone = body.phone || body.from || body.sender || body.fromMe;
+    if (!senderPhone) {
+      console.log('⚠️ Sem telefone do remetente');
+      return;
+    }
 
     let messageText = body.text?.message || body.message?.text || body.message || '';
     if (typeof messageText !== 'string') messageText = String(messageText);
-    messageText = messageText.trim().toLowerCase();
+    messageText = messageText.trim();
 
-    if (!messageText) return;
+    if (!messageText) {
+      console.log('⚠️ Mensagem vazia');
+      return;
+    }
 
     console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
 
+    // LIMPA O TELEFONE
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+    if (cleanPhone.startsWith('55')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
     
     if (cleanPhone.length < 10) {
       console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
       return;
     }
 
-    const sendReply = async (phone, mensagem) => {
-      const instance = process.env.ZAPI_INSTANCE;
-      const token = process.env.ZAPI_TOKEN;
-      const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-      if (!instance || !token) return false;
-      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
-        body: JSON.stringify({ phone: '55' + phone, message: mensagem })
-      });
-      console.log('✅ Resposta Z-API:', await response.json());
-      return response.status === 200;
-    };
+    console.log(`📱 Telefone limpo: ${cleanPhone}`);
 
     // ============================================================
     //  🚨 VERIFICAR CLIENTE - IGNORAR "amigo"
     // ============================================================
-    
     let clienteData = null;
     let isAmigo = false;
     
@@ -1900,107 +1896,72 @@ app.post('/api/webhook/zapi', async (req, res) => {
     let state = userState.get(cleanPhone) || { 
       nivel: 'principal', 
       service: null,
-      aguardandoFeedback: false,
       lastActivity: Date.now() 
     };
     state.lastActivity = Date.now();
     userState.set(cleanPhone, state);
 
     // ============================================================
-    //  🥇 COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
+    //  FUNÇÃO PARA ENVIAR RESPOSTA
+    // ============================================================
+    const sendReply = async (phone, mensagem) => {
+      try {
+        const instance = process.env.ZAPI_INSTANCE;
+        const token = process.env.ZAPI_TOKEN;
+        const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+        if (!instance || !token) return false;
+        const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+          body: JSON.stringify({ phone: '55' + phone, message: mensagem })
+        });
+        console.log(`📱 Resposta enviada para ${phone}: ${response.status}`);
+        return response.status === 200;
+      } catch (error) {
+        console.error('❌ Erro ao enviar resposta:', error.message);
+        return false;
+      }
+    };
+
+    // ============================================================
+    //  COMANDO: 0 - VOLTA AO MENU PRINCIPAL
     // ============================================================
     if (messageText === '0') {
       state.nivel = 'principal';
       state.service = null;
-      state.aguardandoFeedback = false;
       userState.set(cleanPhone, state);
 
       const menuPrincipal = await getMenuPrincipal();
-      const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-      state.aguardandoFeedback = true;
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, menuComFechamento);
+      await sendReply(cleanPhone, menuPrincipal);
       return;
     }
 
     // ============================================================
-    //  🥈 RESPOSTA AO FECHAMENTO (8 = SIM, 9 = NÃO)
-    // ============================================================
-    if (state.aguardandoFeedback === true) {
-      if (messageText === '8') {
-        const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
-          `Estamos aqui para você sempre que precisar.\n\n` +
-          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        state.aguardandoFeedback = false;
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
-        return;
-      }
-      
-      if (messageText === '9') {
-        const resposta =
-          `😊 *Sua pergunta não foi respondida?*\n\n` +
-          `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
-          `📋 *Para contratar nossos serviços:*\n` +
-          `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
-          `📞 *Fale com um especialista:*\n` +
-          `https://wa.me/5521974601812\n\n` +
-          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        state.aguardandoFeedback = false;
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
-        return;
-      }
-      
-      // Se não for 8 ou 9, sai do feedback
-      state.aguardandoFeedback = false;
-      userState.set(cleanPhone, state);
-    }
-
-    // ============================================================
-    //  🥉 SAUDAÇÕES - SOMENTE PARA NOVOS CLIENTES
+    //  SAUDAÇÕES - SOMENTE PARA NOVOS CLIENTES
     // ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     
-    // Só mostra boas-vindas se for NOVO cliente (não encontrado no banco)
-    if (saudacoes.includes(messageText) && !clienteData) {
+    if (saudacoes.includes(messageText.toLowerCase()) && !clienteData) {
       const menuPrincipal = await getMenuPrincipal();
-      const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
       state.nivel = 'principal';
       state.service = null;
-      state.aguardandoFeedback = true;
       userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, menuComFechamento);
+      await sendReply(cleanPhone, menuPrincipal);
       return;
     }
 
     // ============================================================
-    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE MÁXIMA
+    //  🟢 SE ESTIVER NO SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
       const service = state.service;
       
-      // Opção 7: Falar com especialista
       if (messageText === '7') {
-        const ajudaResposta =
-          `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\n` +
-          `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
-          `*Contato direto:*\n` +
-          `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-          `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-        state.aguardandoFeedback = true;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, ajudaComFechamento);
+        await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
         return;
       }
       
-      // OPÇÃO 6: AVALIAÇÃO GRATUITA
       if (messageText === '6') {
         const links = {
           'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
@@ -2010,7 +1971,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
           'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
           'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
         };
-        
         const nomes = {
           'visto_americano': 'VISTO AMERICANO',
           'visto_canadense': 'VISTO CANADENSE',
@@ -2019,59 +1979,34 @@ app.post('/api/webhook/zapi', async (req, res) => {
           'eta_canadense': 'eTA CANADENSE',
           'passaporte': 'PASSAPORTE'
         };
-        
         const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
         const nomeServico = nomes[service] || 'SERVIÇO';
-        
-        const resposta = 
-          `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\n` +
-          `Clique no link abaixo para fazer sua avaliação:\n\n` +
-          `${link}\n\n` +
-          `⏱️ Leva menos de 2 minutos!\n\n` +
-          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        
-        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.aguardandoFeedback = true;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, respostaComFechamento);
+        await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\n🔗 ${link}\n\n⏱️ Leva menos de 2 minutos!\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
         return;
       }
       
-      // OPÇÃO 5: Visto Negado / Onde Fazer
       if (messageText === '5') {
         let resposta = '';
         if (service === 'passaporte') {
           resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         } else {
-          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
         }
-        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.aguardandoFeedback = true;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, respostaComFechamento);
+        await sendReply(cleanPhone, resposta);
         return;
       }
       
-      // OPÇÕES 1-4: Preço, Prazo, Documentos, Processo
       if (['1', '2', '3', '4'].includes(messageText)) {
         const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
         const opcao = opcoesMap[messageText];
         let resposta = getRespostaSubmenu(service, opcao);
         resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        
-        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
-        state.aguardandoFeedback = true;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, respostaComFechamento);
+        await sendReply(cleanPhone, resposta);
         return;
       }
       
-      // Se não for 1-7, mostra o submenu novamente
       const submenu = await getSubmenu(service);
-      const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
-      state.aguardandoFeedback = true;
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, submenuComFechamento);
+      await sendReply(cleanPhone, submenu);
       return;
     }
 
@@ -2089,76 +2024,24 @@ app.post('/api/webhook/zapi', async (req, res) => {
         case '5': serviceKey = 'eta_canadense'; break;
         case '6': serviceKey = 'passaporte'; break;
         case '7':
-          const ajudaResposta =
-            `📞 *FALAR COM ESPECIALISTA*\n\n` +
-            `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
-            `*Contato direto:*\n` +
-            `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
-            `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
-            `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-          const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
-          state.aguardandoFeedback = true;
-          userState.set(cleanPhone, state);
-          await sendReply(cleanPhone, ajudaComFechamento);
+          await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
           return;
         default:
-          // Se não for um comando reconhecido e for cliente existente, mostrar mensagem de ajuda
-          if (clienteData) {
-            const mensagemAjuda =
-              `👋 Olá! Como posso ajudar você hoje?\n\n` +
-              `📌 *Digite 0 para ver o MENU principal*\n` +
-              `📌 *Digite 7 para falar com um especialista*\n\n` +
-              `*O que você gostaria de saber?* 🚀`;
-            await sendReply(cleanPhone, mensagemAjuda);
-            return;
-          }
-          
           const menuPrincipal = await getMenuPrincipal();
-          const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-          state.aguardandoFeedback = true;
-          userState.set(cleanPhone, state);
-          await sendReply(cleanPhone, menuComFechamento);
+          await sendReply(cleanPhone, menuPrincipal);
           return;
       }
       
       if (serviceKey) {
         state.nivel = 'submenu';
         state.service = serviceKey;
-        state.aguardandoFeedback = false;
         userState.set(cleanPhone, state);
         
         const submenu = await getSubmenu(serviceKey);
-        const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
-        state.aguardandoFeedback = true;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, submenuComFechamento);
+        await sendReply(cleanPhone, submenu);
         return;
       }
     }
-
-    // ============================================================
-    //  MENSAGEM NÃO RECONHECIDA - PARA CLIENTES EXISTENTES
-    // ============================================================
-    if (clienteData) {
-      const mensagemAjuda =
-        `👋 Olá! Como posso ajudar você hoje?\n\n` +
-        `📌 *Digite 0 para ver o MENU principal*\n` +
-        `📌 *Digite 7 para falar com um especialista*\n\n` +
-        `*O que você gostaria de saber?* 🚀`;
-      await sendReply(cleanPhone, mensagemAjuda);
-      return;
-    }
-
-    // ============================================================
-    //  MENSAGEM NÃO RECONHECIDA - PARA NOVOS CLIENTES
-    // ============================================================
-    const menuPrincipal = await getMenuPrincipal();
-    const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
-    state.nivel = 'principal';
-    state.service = null;
-    state.aguardandoFeedback = true;
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, menuComFechamento);
 
   } catch (error) {
     console.error('❌ Erro no webhook:', error.message);
