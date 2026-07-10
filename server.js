@@ -1803,7 +1803,7 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - IGNORAR CLIENTES "amigo"
+//  WEBHOOK Z-API - CORRIGIDO (CADASTRA CLIENTE)
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
@@ -1829,7 +1829,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
 
     // PEGA O TELEFONE DO REMETENTE
-    const senderPhone = body.phone || body.from || body.sender || body.fromMe;
+    const senderPhone = body.phone || body.from || body.sender;
     if (!senderPhone) {
       console.log('⚠️ Sem telefone do remetente');
       return;
@@ -1860,56 +1860,77 @@ app.post('/api/webhook/zapi', async (req, res) => {
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
 
     // ============================================================
-    //  🚨 VERIFICAR CLIENTE - IGNORAR "amigo"
-    // ============================================================
+    //  🔥 CADASTRA O CLIENTE OBRIGATORIAMENTE
+    //  ============================================================
     let clienteData = null;
     let isAmigo = false;
+    let clienteStatus = 'novo';
     
     try {
-      const { data: cliente, error } = await supabase
+      // 1. TENTA BUSCAR O CLIENTE
+      const { data: cliente, error: buscaError } = await supabase
         .from('clientes')
         .select('*')
         .eq('telefone', cleanPhone)
-        .single();
+        .maybeSingle(); // Usa maybeSingle ao invés de single para não dar erro se não encontrar
       
-      if (!error && cliente) {
+      if (buscaError) {
+        console.error('❌ Erro ao buscar cliente:', buscaError);
+      }
+      
+      if (cliente) {
+        // Cliente existe!
         clienteData = cliente;
+        clienteStatus = cliente.status;
         console.log(`📝 Cliente encontrado: ${cliente.nome_completo || 'Sem nome'} - Status: ${cliente.status}`);
         
-        // ============================================================
-        //  🚨 SE FOR "amigo" - IGNORA COMPLETAMENTE
-        // ============================================================
+        // VERIFICA SE É "amigo"
         if (cliente.status === 'amigo') {
           console.log(`🤝 Cliente é "amigo" - IGNORANDO mensagem`);
-          return; // 👈 NÃO RESPONDE NADA
+          return; // SILÊNCIO TOTAL
         }
       } else {
-        console.log(`📝 Cliente NÃO encontrado no banco`);
+        // 2. CLIENTE NÃO EXISTE - CRIA AGORA!
+        console.log(`📝 Cliente NÃO encontrado - CADASTRANDO...`);
+        
+        const { data: novoCliente, error: insertError } = await supabase
+          .from('clientes')
+          .insert({
+            telefone: cleanPhone,
+            email: `cliente_${cleanPhone}@whatsapp.com`,
+            status: 'novo',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('❌ ERRO AO CADASTRAR CLIENTE:', insertError);
+          console.error('❌ Detalhes:', JSON.stringify(insertError));
+        } else {
+          clienteData = novoCliente;
+          clienteStatus = 'novo';
+          console.log(`✅ CLIENTE ${cleanPhone} CADASTRADO COM SUCESSO!`);
+          console.log(`📊 Dados:`, JSON.stringify(novoCliente));
+        }
       }
     } catch (err) {
-      console.log('⚠️ Erro ao buscar cliente:', err.message);
+      console.error('❌ Erro CRÍTICO ao buscar/cadastrar cliente:', err.message);
     }
 
     // ============================================================
-    //  ESTADO DO USUÁRIO
-    // ============================================================
-    let state = userState.get(cleanPhone) || { 
-      nivel: 'principal', 
-      service: null,
-      lastActivity: Date.now() 
-    };
-    state.lastActivity = Date.now();
-    userState.set(cleanPhone, state);
-
-    // ============================================================
     //  FUNÇÃO PARA ENVIAR RESPOSTA
-    // ============================================================
+    //  ============================================================
     const sendReply = async (phone, mensagem) => {
       try {
         const instance = process.env.ZAPI_INSTANCE;
         const token = process.env.ZAPI_TOKEN;
         const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-        if (!instance || !token) return false;
+        if (!instance || !token) {
+          console.log('⚠️ Z-API não configurada');
+          return false;
+        }
         const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
         const response = await fetch(url, {
           method: 'POST',
@@ -1925,8 +1946,24 @@ app.post('/api/webhook/zapi', async (req, res) => {
     };
 
     // ============================================================
-    //  COMANDO: 0 - VOLTA AO MENU PRINCIPAL
+    //  ESTADO DO USUÁRIO
+    //  ============================================================
+    let state = userState.get(cleanPhone) || { 
+      nivel: 'principal', 
+      service: null,
+      lastActivity: Date.now() 
+    };
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+
     // ============================================================
+    //  SE FOR "amigo" - JÁ IGNORAMOS ACIMA
+    //  ============================================================
+    if (isAmigo) return;
+
+    // ============================================================
+    //  COMANDO: 0 - VOLTA AO MENU PRINCIPAL
+    //  ============================================================
     if (messageText === '0') {
       state.nivel = 'principal';
       state.service = null;
@@ -1939,10 +1976,10 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  SAUDAÇÕES - SOMENTE PARA NOVOS CLIENTES
-    // ============================================================
+    //  ============================================================
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     
-    if (saudacoes.includes(messageText.toLowerCase()) && !clienteData) {
+    if (saudacoes.includes(messageText.toLowerCase()) && clienteStatus === 'novo') {
       const menuPrincipal = await getMenuPrincipal();
       state.nivel = 'principal';
       state.service = null;
@@ -1953,7 +1990,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  🟢 SE ESTIVER NO SUBMENU
-    // ============================================================
+    //  ============================================================
     if (state.nivel === 'submenu') {
       const service = state.service;
       
@@ -2012,7 +2049,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
     // ============================================================
     //  🟢 MENU PRINCIPAL
-    // ============================================================
+    //  ============================================================
     if (state.nivel === 'principal') {
       let serviceKey = null;
       
@@ -2027,6 +2064,11 @@ app.post('/api/webhook/zapi', async (req, res) => {
           await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
           return;
         default:
+          // Se for cliente já existente e não for um comando válido
+          if (clienteData && clienteStatus === 'em_processo') {
+            await sendReply(cleanPhone, `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* ${clienteStatus}\n\n📌 *Digite 0 para o MENU principal* 🚀`);
+            return;
+          }
           const menuPrincipal = await getMenuPrincipal();
           await sendReply(cleanPhone, menuPrincipal);
           return;
