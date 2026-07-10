@@ -1793,8 +1793,8 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  WEBHOOK Z-API - CORRIGIDO (ACEITA ADMIN SEM LOOP)
-//  ============================================================
+//  WEBHOOK Z-API - CORREÇÃO PARA CLIENTES "amigo"
+// ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
   console.log('📥 Webhook Z-API recebido');
   res.status(200).json({ status: 'ok' });
@@ -1802,192 +1802,359 @@ app.post('/api/webhook/zapi', async (req, res) => {
   try {
     const body = req.body;
     
-    // ============================================================
-    //  🛡️ PROTEÇÃO CONTRA LOOP - PERMITE ADMIN
-    //  ============================================================
-    
-    // 1. Ignora DeliveryCallback
-    if (body.type === 'DeliveryCallback') {
-      console.log('⏭️ DeliveryCallback ignorado');
+    // IGNORAR MENSAGENS DE GRUPO
+    if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
+      console.log('👥 Mensagem de grupo ignorada');
       return;
     }
     
-    // 2. EXTRAI INFORMAÇÕES
-    let messageText = '';
-    let senderPhone = '';
-    
-    if (body.text) {
-      if (typeof body.text === 'string') messageText = body.text;
-      else if (body.text.message) messageText = body.text.message;
-    }
-    if (!messageText && body.message) {
-      if (typeof body.message === 'string') messageText = body.message;
-      else if (body.message.text) messageText = body.message.text;
-    }
-    if (!messageText && body.content) messageText = body.content;
-    if (!messageText && body.body) messageText = body.body;
-    
-    if (body.phone) senderPhone = body.phone;
-    else if (body.from) senderPhone = body.from;
-    else if (body.sender) senderPhone = body.sender;
-    
-    // 3. VALIDAÇÕES
-    if (!senderPhone) {
-      console.log('⚠️ Sem telefone');
+    if (body.fromMe === true) {
+      console.log('🤖 Mensagem do próprio bot ignorada');
       return;
     }
     
-    if (!messageText || messageText.trim().length === 0) {
-      console.log('⚠️ Mensagem vazia');
+    if (body.isStatusReply === true || body.waitingMessage === true) {
+      console.log('⏳ Mensagem de status/waiting ignorada');
       return;
     }
-    
-    messageText = messageText.trim();
-    console.log(`📩 Mensagem: "${messageText}" de ${senderPhone}`);
-    
-    // 4. LIMPA TELEFONE DO REMETENTE
+
+    const senderPhone = body.phone || body.from;
+    if (!senderPhone) return;
+
+    let messageText = body.text?.message || body.message?.text || body.message || '';
+    if (typeof messageText !== 'string') messageText = String(messageText);
+    messageText = messageText.trim().toLowerCase();
+
+    if (!messageText) return;
+
+    console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
+
     let cleanPhone = senderPhone.toString().replace(/\D/g, '');
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+    
     if (cleanPhone.length < 10) {
       console.log(`⚠️ Telefone inválido: ${cleanPhone}`);
       return;
     }
-    console.log(`📱 Remetente: ${cleanPhone}`);
+
+    const sendReply = async (phone, mensagem) => {
+      const instance = process.env.ZAPI_INSTANCE;
+      const token = process.env.ZAPI_TOKEN;
+      const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+      if (!instance || !token) return false;
+      const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-text`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Client-Token': securityToken || '' },
+        body: JSON.stringify({ phone: '55' + phone, message: mensagem })
+      });
+      console.log('✅ Resposta Z-API:', await response.json());
+      return response.status === 200;
+    };
+
+    // ============================================================
+    //  🟢 VERIFICAR CLIENTE NO BANCO - CORREÇÃO
+    //  ⚠️ IMPORTANTE: NÃO mostrar menu para clientes "amigo"
+    // ============================================================
     
-    // 5. VERIFICA SE É O PRÓPRIO BOT (EVITA LOOP)
-    // O número do bot é o que está conectado no Z-API
-    const botPhone = body.connectedPhone || '';
-    let cleanBot = botPhone.toString().replace(/\D/g, '');
-    if (cleanBot.startsWith('55')) cleanBot = cleanBot.substring(2);
-    
-    // SE FOR O PRÓPRIO BOT, IGNORA (mas só se NÃO for admin)
-    // Na verdade, vamos permitir o admin, mas evitar loop
-    if (cleanPhone === cleanBot && !messageText.includes('marcar')) {
-      console.log(`🤖 Mensagem do próprio bot ignorada`);
-      return;
-    }
-    
-    // 6. LISTA DE ADMINS
-    const numerosAdmin = ['21991868954', '21974601812', '21985234917'];
-    const isAdmin = numerosAdmin.includes(cleanPhone);
-    console.log(`🔑 Admin: ${isAdmin}`);
-    
-    // 7. DETECTA NÚMERO NA MENSAGEM
-    const numerosNaMensagem = messageText.match(/\d{10,13}/g);
-    let telefoneEncontrado = null;
-    if (numerosNaMensagem && numerosNaMensagem.length > 0) {
-      telefoneEncontrado = numerosNaMensagem[0].replace(/\D/g, '');
-      if (telefoneEncontrado.startsWith('55')) telefoneEncontrado = telefoneEncontrado.substring(2);
-      console.log(`📱 Telefone encontrado: ${telefoneEncontrado}`);
-    }
-    
-    // 8. SE FOR ADMIN E TIVER NÚMERO - MARCA!
-    if (isAdmin && telefoneEncontrado && telefoneEncontrado.length >= 10) {
-      console.log(`🎯 ADMIN ${cleanPhone} marcando ${telefoneEncontrado}...`);
-      
-      // Marca o cliente
-      const { data: clienteExistente } = await supabase
+    // Buscar cliente no Supabase
+    let clienteData = null;
+    try {
+      const { data: cliente, error } = await supabase
         .from('clientes')
-        .select('id, status')
-        .eq('telefone', telefoneEncontrado)
-        .limit(1);
+        .select('*')
+        .eq('telefone', cleanPhone)
+        .single();
       
-      if (clienteExistente && clienteExistente.length > 0) {
-        await supabase
-          .from('clientes')
-          .update({ 
-            status: 'em_processo', 
-            updated_at: new Date().toISOString() 
-          })
-          .eq('telefone', telefoneEncontrado);
-        console.log(`✅ Cliente ${telefoneEncontrado} ATUALIZADO!`);
+      if (!error && cliente) {
+        clienteData = cliente;
+        console.log(`📝 Cliente encontrado: ${cliente.nome_completo || 'Sem nome'} - Status: ${cliente.status}`);
       } else {
-        await supabase
-          .from('clientes')
-          .insert({
-            telefone: telefoneEncontrado,
-            email: `cliente_${telefoneEncontrado}@whatsapp.com`,
-            status: 'em_processo',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        console.log(`✅ Cliente ${telefoneEncontrado} CRIADO!`);
+        console.log(`📝 Cliente NÃO encontrado no banco`);
       }
-      
-      // Atualiza estado em memória
-      const state = userState.get(telefoneEncontrado) || {};
-      state.emProcesso = true;
-      state.verificadoBD = true;
-      userState.set(telefoneEncontrado, state);
-      
-      // Confirma para o admin (mas não envia para não criar loop)
-      // Vamos enviar apenas se NÃO for o próprio bot
-      if (cleanPhone !== cleanBot) {
-        await sendReply(cleanPhone, 
-          `✅ *CLIENTE MARCADO!*\n\n📱 ${telefoneEncontrado} agora está em PROCESSO.`
-        );
-      }
-      
-      console.log(`🎉 Cliente ${telefoneEncontrado} marcado!`);
+    } catch (err) {
+      console.log('⚠️ Erro ao buscar cliente:', err.message);
+    }
+
+    // ============================================================
+    //  🟢 SE FOR CLIENTE EXISTENTE (qualquer status que não seja 'novo')
+    //  Não mostrar menu de boas-vindas, entrar no fluxo normal
+    // ============================================================
+    
+    // ⚠️ CORREÇÃO: Verificar se o cliente existe (qualquer status)
+    const isClienteExistente = clienteData !== null;
+
+    // ============================================================
+    //  ESTADO DO USUÁRIO
+    // ============================================================
+    let state = userState.get(cleanPhone) || { 
+      nivel: 'principal', 
+      service: null,
+      aguardandoFeedback: false,
+      lastActivity: Date.now() 
+    };
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+
+    // ============================================================
+    //  🥇 COMANDO GLOBAL: 0 - VOLTA AO MENU PRINCIPAL
+    // ============================================================
+    if (messageText === '0') {
+      state.nivel = 'principal';
+      state.service = null;
+      state.aguardandoFeedback = false;
+      userState.set(cleanPhone, state);
+
+      const menuPrincipal = await getMenuPrincipal();
+      const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
+      state.aguardandoFeedback = true;
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, menuComFechamento);
       return;
     }
-    
-    // 9. CADASTRA O CLIENTE
-    const { data: clienteExistente } = await supabase
-      .from('clientes')
-      .select('id, status')
-      .eq('telefone', cleanPhone)
-      .limit(1);
-    
-    let clienteStatus = 'novo';
-    if (!clienteExistente || clienteExistente.length === 0) {
-      await supabase
-        .from('clientes')
-        .insert({
-          telefone: cleanPhone,
-          email: `cliente_${cleanPhone}@whatsapp.com`,
-          status: 'novo',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-      console.log(`📝 Cliente ${cleanPhone} cadastrado`);
-    } else {
-      clienteStatus = clienteExistente[0].status;
+
+    // ============================================================
+    //  🥈 RESPOSTA AO FECHAMENTO (8 = SIM, 9 = NÃO)
+    // ============================================================
+    if (state.aguardandoFeedback === true) {
+      if (messageText === '8') {
+        const resposta = `🎉 *Que bom que conseguimos ajudar!*\n\n` +
+          `Estamos aqui para você sempre que precisar.\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        await sendReply(cleanPhone, resposta);
+        state.aguardandoFeedback = false;
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
+        return;
+      }
+      
+      if (messageText === '9') {
+        const resposta =
+          `😊 *Sua pergunta não foi respondida?*\n\n` +
+          `Fique à vontade para deixar sua mensagem que logo entraremos em contato.\n\n` +
+          `📋 *Para contratar nossos serviços:*\n` +
+          `🔗 https://getvisa.com.br/formulario-passaporte/\n\n` +
+          `📞 *Fale com um especialista:*\n` +
+          `https://wa.me/5521974601812\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        await sendReply(cleanPhone, resposta);
+        state.aguardandoFeedback = false;
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
+        return;
+      }
+      
+      // Se não for 8 ou 9, sai do feedback
+      state.aguardandoFeedback = false;
+      userState.set(cleanPhone, state);
     }
+
+    // ============================================================
+    //  🥉 SAUDAÇÕES - SOMENTE PARA NOVOS CLIENTES
+    // ============================================================
+    const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
     
-    console.log(`📊 Status: ${clienteStatus}`);
-    
-    // 10. VERIFICA EM PROCESSO
-    const emProcesso = clienteStatus === 'em_processo' || clienteStatus === 'ativo';
-    
-    if (emProcesso) {
-      console.log(`🟢 Cliente EM PROCESSO - SEM MENU`);
-      await sendReply(cleanPhone, 
-        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* Em processamento\n\n🔄 Digite *0* para o MENU principal\n\n💬 *Estou aqui para ajudar!* 🚀`
-      );
+    // ⚠️ CORREÇÃO: Só mostra boas-vindas se for NOVO cliente
+    if (saudacoes.includes(messageText) && !isClienteExistente) {
+      const menuPrincipal = await getMenuPrincipal();
+      const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
+      state.nivel = 'principal';
+      state.service = null;
+      state.aguardandoFeedback = true;
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, menuComFechamento);
       return;
     }
-    
-    // 11. MENU
-    console.log(`🟡 Cliente NOVO - MOSTRANDO MENU`);
-    const menuPrincipal = 
-      `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n` +
-      `1️⃣ 🇺🇸 VISTO AMERICANO\n` +
-      `2️⃣ 🇨🇦 VISTO CANADENSE\n` +
-      `3️⃣ 🇦🇺 VISTO AUSTRALIANO\n` +
-      `4️⃣ 🇬🇧 eTA UK\n` +
-      `5️⃣ 🇨🇦 eTA CANADENSE\n` +
-      `6️⃣ 📘 PASSAPORTE\n` +
-      `7️⃣ 📞 AJUDA / CONTATO\n\n` +
-      `💬 *Digite o número da opção (1 a 7) ou me pergunte algo!*`;
-    
-    await sendReply(cleanPhone, menuPrincipal);
+
+    // ============================================================
+    //  🟢 SE ESTIVER NO SUBMENU - PRIORIDADE MÁXIMA
+    // ============================================================
+    if (state.nivel === 'submenu') {
+      const service = state.service;
+      
+      // Opção 7: Falar com especialista
+      if (messageText === '7') {
+        const ajudaResposta =
+          `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\n` +
+          `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+          `*Contato direto:*\n` +
+          `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+          `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, ajudaComFechamento);
+        return;
+      }
+      
+      // OPÇÃO 6: AVALIAÇÃO GRATUITA
+      if (messageText === '6') {
+        const links = {
+          'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
+          'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense',
+          'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano',
+          'eta_uk': 'https://getvisa.com.br/simulador-eta-uk',
+          'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
+          'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+        };
+        
+        const nomes = {
+          'visto_americano': 'VISTO AMERICANO',
+          'visto_canadense': 'VISTO CANADENSE',
+          'visto_australiano': 'VISTO AUSTRALIANO',
+          'eta_uk': 'eTA UK',
+          'eta_canadense': 'eTA CANADENSE',
+          'passaporte': 'PASSAPORTE'
+        };
+        
+        const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano';
+        const nomeServico = nomes[service] || 'SERVIÇO';
+        
+        const resposta = 
+          `📊 *AVALIAÇÃO GRATUITA - ${nomeServico}*\n\n` +
+          `Clique no link abaixo para fazer sua avaliação:\n\n` +
+          `${link}\n\n` +
+          `⏱️ Leva menos de 2 minutos!\n\n` +
+          `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // OPÇÃO 5: Visto Negado / Onde Fazer
+      if (messageText === '5') {
+        let resposta = '';
+        if (service === 'passaporte') {
+          resposta = `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        } else {
+          resposta = `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita do seu caso:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n*O que fazemos:*\n✅ Análise do motivo da negativa\n✅ Correção do formulário\n✅ Documentação reforçada\n✅ Preparação para entrevista\n\n💰 *Assessoria especializada:* R$ 380\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        }
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // OPÇÕES 1-4: Preço, Prazo, Documentos, Processo
+      if (['1', '2', '3', '4'].includes(messageText)) {
+        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
+        const opcao = opcoesMap[messageText];
+        let resposta = getRespostaSubmenu(service, opcao);
+        resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+        
+        const respostaComFechamento = await fecharConversa(cleanPhone, resposta);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, respostaComFechamento);
+        return;
+      }
+      
+      // Se não for 1-7, mostra o submenu novamente
+      const submenu = await getSubmenu(service);
+      const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
+      state.aguardandoFeedback = true;
+      userState.set(cleanPhone, state);
+      await sendReply(cleanPhone, submenuComFechamento);
+      return;
+    }
+
+    // ============================================================
+    //  🟢 MENU PRINCIPAL
+    // ============================================================
+    if (state.nivel === 'principal') {
+      let serviceKey = null;
+      
+      switch (messageText) {
+        case '1': serviceKey = 'visto_americano'; break;
+        case '2': serviceKey = 'visto_canadense'; break;
+        case '3': serviceKey = 'visto_australiano'; break;
+        case '4': serviceKey = 'eta_uk'; break;
+        case '5': serviceKey = 'eta_canadense'; break;
+        case '6': serviceKey = 'passaporte'; break;
+        case '7':
+          const ajudaResposta =
+            `📞 *FALAR COM ESPECIALISTA*\n\n` +
+            `Meu nome é *Moisés* e estou aqui para te ajudar!\n\n` +
+            `*Contato direto:*\n` +
+            `🐱‍👤 *WhatsApp:* https://wa.me/5521974601812\n\n` +
+            `🕘 *Horário:* Segunda a Sexta, 9h às 18h\n\n` +
+            `📌 *Digite 0 para voltar ao MENU principal* 🚀`;
+          const ajudaComFechamento = await fecharConversa(cleanPhone, ajudaResposta);
+          state.aguardandoFeedback = true;
+          userState.set(cleanPhone, state);
+          await sendReply(cleanPhone, ajudaComFechamento);
+          return;
+        default:
+          // ⚠️ CORREÇÃO: Se não for um comando reconhecido e for cliente existente, mostrar mensagem de ajuda
+          if (isClienteExistente) {
+            const mensagemAjuda =
+              `👋 Olá! Como posso ajudar você hoje?\n\n` +
+              `📌 *Digite 0 para ver o MENU principal*\n` +
+              `📌 *Digite 7 para falar com um especialista*\n\n` +
+              `*O que você gostaria de saber?* 🚀`;
+            await sendReply(cleanPhone, mensagemAjuda);
+            return;
+          }
+          
+          const menuPrincipal = await getMenuPrincipal();
+          const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
+          state.aguardandoFeedback = true;
+          userState.set(cleanPhone, state);
+          await sendReply(cleanPhone, menuComFechamento);
+          return;
+      }
+      
+      if (serviceKey) {
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        state.aguardandoFeedback = false;
+        userState.set(cleanPhone, state);
+        
+        const submenu = await getSubmenu(serviceKey);
+        const submenuComFechamento = await fecharConversa(cleanPhone, submenu);
+        state.aguardandoFeedback = true;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, submenuComFechamento);
+        return;
+      }
+    }
+
+    // ============================================================
+    //  MENSAGEM NÃO RECONHECIDA - PARA CLIENTES EXISTENTES
+    // ============================================================
+    if (isClienteExistente) {
+      const mensagemAjuda =
+        `👋 Olá! Como posso ajudar você hoje?\n\n` +
+        `📌 *Digite 0 para ver o MENU principal*\n` +
+        `📌 *Digite 7 para falar com um especialista*\n\n` +
+        `*O que você gostaria de saber?* 🚀`;
+      await sendReply(cleanPhone, mensagemAjuda);
+      return;
+    }
+
+    // ============================================================
+    //  MENSAGEM NÃO RECONHECIDA - PARA NOVOS CLIENTES
+    // ============================================================
+    const menuPrincipal = await getMenuPrincipal();
+    const menuComFechamento = await fecharConversa(cleanPhone, menuPrincipal);
+    state.nivel = 'principal';
+    state.service = null;
+    state.aguardandoFeedback = true;
+    userState.set(cleanPhone, state);
+    await sendReply(cleanPhone, menuComFechamento);
 
   } catch (error) {
-    console.error('❌ Erro:', error.message);
+    console.error('❌ Erro no webhook:', error.message);
+    console.error('❌ Stack:', error.stack);
   }
 });
-//// DEPLOY FORÇADO - 08/07/2026 15:45 - COMANDO MARCAR
 
 // ============================================================
 //  FUNÇÕES AUXILIARES PARA MENUS
