@@ -35,6 +35,69 @@ const supabase = createClient(
 );
 
 // ============================================================
+//  CONFIGURAÇÃO DAS ETAPAS DO PROCESSO
+// ============================================================
+const ETAPAS = {
+    'formulario_enviado': {
+        id: 'formulario_enviado',
+        label: '📝 Formulário Enviado',
+        next: 'analise_correcoes',
+        color: '#3498db'
+    },
+    'analise_correcoes': {
+        id: 'analise_correcoes',
+        label: '🔍 Análise e Correções',
+        next: 'boleto_emitido',
+        color: '#f39c12'
+    },
+    'boleto_emitido': {
+        id: 'boleto_emitido',
+        label: '💰 Boleto Emitido',
+        next: 'boleto_pago',
+        color: '#e67e22'
+    },
+    'boleto_pago': {
+        id: 'boleto_pago',
+        label: '✅ Boleto Pago',
+        next: 'agendamento_realizado',
+        color: '#27ae60'
+    },
+    'agendamento_realizado': {
+        id: 'agendamento_realizado',
+        label: '📅 Agendamento Realizado',
+        next: 'treinamento_realizado',
+        color: '#2980b9'
+    },
+    'treinamento_realizado': {
+        id: 'treinamento_realizado',
+        label: '🎯 Treinamento Concluído',
+        next: 'entrevista_realizada',
+        color: '#8e44ad'
+    },
+    'entrevista_realizada': {
+        id: 'entrevista_realizada',
+        label: '🎤 Entrevista Realizada',
+        next: 'passaporte_retornado',
+        color: '#2c3e50'
+    },
+    'passaporte_retornado': {
+        id: 'passaporte_retornado',
+        label: '📫 Passaporte Retornado',
+        next: null,
+        color: '#2ecc71'
+    }
+};
+
+// FEATURE FLAG - Permite desativar rapidamente se necessário
+const FEATURES = {
+    SISTEMA_ETAPAS: {
+        ativo: true,
+        notificar_cliente: true,
+        auto_avancar: true
+    }
+};
+
+// ============================================================
 //  ESTADO DA CONVERSA
 // ============================================================
 const userState = new Map();
@@ -385,6 +448,93 @@ async function buscarCliente(telefone) {
     return null;
 }
 
+// ============================================================
+//  FUNÇÕES AUXILIARES - ETAPAS
+// ============================================================
+
+async function criarEtapaInicial(telefone) {
+    try {
+        const { data: cliente, error: clienteError } = await supabase
+            .from('clientes_ativos')
+            .select('telefone, nome, criado_em')
+            .eq('telefone', telefone)
+            .single();
+            
+        if (clienteError) throw clienteError;
+        
+        const novaEtapa = {
+            cliente_telefone: telefone,
+            etapa_atual: 'formulario_enviado',
+            data_inicio: cliente.criado_em || new Date().toISOString(),
+            data_atualizacao: new Date().toISOString(),
+            data_formulario_enviado: new Date().toISOString(),
+            historico: [
+                {
+                    etapa: 'formulario_enviado',
+                    data: new Date().toISOString(),
+                    nota: 'Início do processo',
+                    observacao: 'Cliente movido para clientes_ativos'
+                }
+            ]
+        };
+        
+        const { data, error } = await supabase
+            .from('etapas_processo')
+            .insert(novaEtapa)
+            .select()
+            .single();
+            
+        if (error) throw error;
+        
+        console.log(`✅ Etapa inicial criada para: ${telefone}`);
+        return data;
+    } catch (error) {
+        console.error('Erro ao criar etapa inicial:', error);
+        return null;
+    }
+}
+
+async function notificarClienteEtapa(telefone, novaEtapa) {
+    try {
+        const { data: cliente } = await supabase
+            .from('clientes_ativos')
+            .select('nome')
+            .eq('telefone', telefone)
+            .single();
+            
+        const nomeCliente = cliente?.nome || 'Cliente';
+        const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
+        
+        await enviarWhatsApp(telefone, mensagem);
+        console.log(`📨 Notificação enviada para ${telefone}: ${novaEtapa}`);
+        
+    } catch (error) {
+        console.error('Erro ao notificar cliente:', error);
+    }
+}
+
+function gerarMensagemEtapa(etapa, nomeCliente) {
+    const mensagens = {
+        'formulario_enviado': `📝 *Olá ${nomeCliente}!*\n\nSeu formulário DS-160 foi recebido com sucesso!\n\n✅ Iniciamos a análise do seu processo.\n\nPróxima etapa: Análise e correções dos dados.`,
+        
+        'analise_correcoes': `🔍 *${nomeCliente}, estamos analisando seu processo!*\n\nNossa equipe está revisando todos os dados do seu formulário.\n\n⏳ Em breve entraremos em contato com o próximo passo.`,
+        
+        'boleto_emitido': `💰 *${nomeCliente}, boleto emitido!*\n\nO boleto do consulado foi gerado com sucesso.\n\n📎 Você receberá o PDF por e-mail.\n\nPrazo de pagamento: 7 dias úteis.`,
+        
+        'boleto_pago': `✅ *Boleto pago, ${nomeCliente}!*\n\nConfirmamos o pagamento do seu boleto consular.\n\nPróxima etapa: Agendamento da entrevista.`,
+        
+        'agendamento_realizado': `📅 *Entrevista agendada, ${nomeCliente}!*\n\nSua entrevista foi agendada com sucesso.\n\n📌 Você receberá todos os detalhes por e-mail e WhatsApp.\n\nNão se esqueça do treinamento!`,
+        
+        'treinamento_realizado': `🎯 *Treinamento concluído, ${nomeCliente}!*\n\nExcelente! Você está preparado para a entrevista.\n\n📆 Aguarde as instruções para o grande dia.`,
+        
+        'entrevista_realizada': `🎤 *Entrevista realizada, ${nomeCliente}!*\n\nParabéns por completar sua entrevista!\n\n📫 Aguarde o retorno do seu passaporte.`,
+        
+        'passaporte_retornado': `🎉 *PARABÉNS, ${nomeCliente}!*\n\nSeu passaporte com o visto foi retornado!\n\n🌟 Seu processo foi concluído com sucesso!\n\nAgradecemos por confiar na GetVisa Assessoria! 🙏`
+    };
+    
+    return mensagens[etapa] || `📌 ${nomeCliente}, seu processo avançou para: ${ETAPAS[etapa]?.label || etapa}`;
+}
+
 // 2. CADASTRAR NOVO CLIENTE
 async function cadastrarCliente(telefone, nome = null) {
     console.log(`📝 Cadastrando ${telefone} como NOVO...`);
@@ -483,6 +633,201 @@ app.get('/ping', (req, res) => {
 });
 
 // ============================================================
+//  ROTAS DA API - SISTEMA DE ETAPAS
+// ============================================================
+
+// GET - Buscar etapa atual do cliente
+app.get('/api/etapas/cliente/:telefone', async (req, res) => {
+    try {
+        const { telefone } = req.params;
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        const { data, error } = await supabase
+            .from('etapas_processo')
+            .select('*')
+            .eq('cliente_telefone', telefoneLimpo)
+            .single();
+            
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+        
+        if (!data) {
+            const novaEtapa = await criarEtapaInicial(telefoneLimpo);
+            if (novaEtapa) {
+                return res.json(novaEtapa);
+            }
+            return res.status(404).json({ erro: 'Cliente não encontrado' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Erro ao buscar etapa:', error);
+        res.status(500).json({ erro: 'Erro ao buscar etapa do cliente' });
+    }
+});
+
+// POST - Avançar etapa
+app.post('/api/etapas/avancar', async (req, res) => {
+    try {
+        const { telefone, nota, observacao } = req.body;
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        if (!FEATURES.SISTEMA_ETAPAS.ativo) {
+            return res.status(503).json({ 
+                erro: 'Sistema de etapas está temporariamente desativado' 
+            });
+        }
+        
+        const { data: etapaAtual, error: buscaError } = await supabase
+            .from('etapas_processo')
+            .select('*')
+            .eq('cliente_telefone', telefoneLimpo)
+            .single();
+            
+        if (buscaError) {
+            if (buscaError.code === 'PGRST116') {
+                const novaEtapa = await criarEtapaInicial(telefoneLimpo);
+                if (novaEtapa) {
+                    return res.json({
+                        sucesso: true,
+                        mensagem: 'Etapa inicial criada',
+                        etapa_atual: novaEtapa.etapa_atual
+                    });
+                }
+            }
+            throw buscaError;
+        }
+        
+        const etapaId = etapaAtual.etapa_atual;
+        const proximaEtapa = ETAPAS[etapaId]?.next;
+        
+        if (!proximaEtapa) {
+            return res.status(400).json({ 
+                erro: 'Cliente já está na última etapa' 
+            });
+        }
+        
+        const historicoAtualizado = [
+            ...(etapaAtual.historico || []),
+            {
+                etapa: etapaId,
+                data: new Date().toISOString(),
+                nota: nota || 'Avanço manual',
+                observacao: observacao || 'Avançado pelo painel administrativo'
+            }
+        ];
+        
+        const campoData = `data_${proximaEtapa}`;
+        const dadosAtualizacao = {
+            etapa_atual: proximaEtapa,
+            data_atualizacao: new Date().toISOString(),
+            historico: historicoAtualizado,
+            [campoData]: new Date().toISOString()
+        };
+        
+        const { data: updated, error: updateError } = await supabase
+            .from('etapas_processo')
+            .update(dadosAtualizacao)
+            .eq('cliente_telefone', telefoneLimpo)
+            .select()
+            .single();
+            
+        if (updateError) throw updateError;
+        
+        if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+            await notificarClienteEtapa(telefoneLimpo, proximaEtapa);
+        }
+        
+        console.log(`📊 Cliente ${telefoneLimpo} avançou para: ${proximaEtapa}`);
+        
+        res.json({
+            sucesso: true,
+            etapa_anterior: etapaId,
+            etapa_atual: proximaEtapa,
+            dados: updated
+        });
+        
+    } catch (error) {
+        console.error('Erro ao avançar etapa:', error);
+        res.status(500).json({ 
+            erro: 'Erro ao avançar etapa',
+            detalhe: error.message 
+        });
+    }
+});
+
+// GET - Histórico completo
+app.get('/api/etapas/historico/:telefone', async (req, res) => {
+    try {
+        const { telefone } = req.params;
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        const { data, error } = await supabase
+            .from('etapas_processo')
+            .select('historico, etapa_atual, data_inicio, data_atualizacao')
+            .eq('cliente_telefone', telefoneLimpo)
+            .single();
+            
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ erro: 'Cliente não encontrado' });
+            }
+            throw error;
+        }
+        
+        res.json({
+            etapa_atual: data.etapa_atual,
+            data_inicio: data.data_inicio,
+            data_atualizacao: data.data_atualizacao,
+            historico: data.historico || []
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar histórico:', error);
+        res.status(500).json({ erro: 'Erro ao buscar histórico' });
+    }
+});
+
+// GET - Estatísticas das etapas
+app.get('/api/etapas/estatisticas', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('etapas_processo')
+            .select('etapa_atual');
+            
+        if (error) throw error;
+        
+        const estatisticas = {};
+        const total = data.length;
+        
+        data.forEach(item => {
+            if (!estatisticas[item.etapa_atual]) {
+                estatisticas[item.etapa_atual] = 0;
+            }
+            estatisticas[item.etapa_atual]++;
+        });
+        
+        const resultado = Object.keys(estatisticas).map(etapa => ({
+            etapa,
+            label: ETAPAS[etapa]?.label || etapa,
+            quantidade: estatisticas[etapa],
+            porcentagem: total > 0 ? ((estatisticas[etapa] / total) * 100).toFixed(2) : 0
+        }));
+        
+        res.json({
+            total_clientes_ativos: total,
+            distribuicao: resultado,
+            ultima_atualizacao: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({ erro: 'Erro ao buscar estatísticas' });
+    }
+});
+
+// ============================================================
 //  ROTAS PARA O PAINEL
 //  ============================================================
 
@@ -549,33 +894,29 @@ app.post('/api/painel/mover', async (req, res) => {
         }
 
         if (destino === 'ativo') {
-            const { error: insertError } = await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: cliente.telefone,
-                    nome: cliente.nome,
-                    criado_em: cliente.data_contato,
-                    atualizado_em: new Date().toISOString()
-                });
+    const { error: insertError } = await supabase
+        .from('clientes_ativos')
+        .insert({
+            telefone: cliente.telefone,
+            nome: cliente.nome,
+            criado_em: cliente.data_contato,
+            atualizado_em: new Date().toISOString()
+        });
 
-            if (insertError) {
-                console.error('❌ Erro ao inserir em ativos:', insertError);
-                return res.status(500).json({ success: false, message: insertError.message });
-            }
-        } else {
-            const { error: insertError } = await supabase
-                .from('contatos_amigos')
-                .insert({
-                    telefone: cliente.telefone,
-                    nome: cliente.nome,
-                    criado_em: cliente.data_contato
-                });
-
-            if (insertError) {
-                console.error('❌ Erro ao inserir em amigos:', insertError);
-                return res.status(500).json({ success: false, message: insertError.message });
-            }
-        }
+    if (insertError) {
+        console.error('❌ Erro ao inserir em ativos:', insertError);
+        return res.status(500).json({ success: false, message: insertError.message });
+    }
+    
+    // ✅ NOVO: Criar etapa inicial automaticamente
+    try {
+        await criarEtapaInicial(cliente.telefone);
+        console.log(`✅ Etapa criada para cliente: ${cliente.telefone}`);
+    } catch (err) {
+        console.error('⚠️ Erro ao criar etapa:', err);
+        // Não bloquear o fluxo principal
+    }
+}
 
         const { error: deleteError } = await supabase
             .from('clientes_novos')
@@ -2148,13 +2489,31 @@ app.post('/api/webhook/zapi', async (req, res) => {
     }
     
     // 🟢 SE FOR "ativo" - RESPOSTA CONTEXTUAL (SEM MENU)
-    if (cliente.tipo === 'ativo') {
-      console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
-      await sendReply(cleanPhone, 
-        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`
-      );
-      return;
+if (cliente.tipo === 'ativo') {
+    console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
+    
+    // Buscar etapa atual
+    let etapaMsg = '';
+    try {
+        const { data: etapa } = await supabase
+            .from('etapas_processo')
+            .select('etapa_atual')
+            .eq('cliente_telefone', cleanPhone)
+            .single();
+        
+        if (etapa) {
+            const etapaInfo = ETAPAS[etapa.etapa_atual];
+            etapaMsg = `\n📌 *Etapa atual:* ${etapaInfo?.label || etapa.etapa_atual}`;
+        }
+    } catch (err) {
+        console.error('Erro ao buscar etapa:', err);
     }
+    
+    await sendReply(cleanPhone, 
+        `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*${etapaMsg}\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`
+    );
+    return;
+}
     
     // ============================================================
     //  🟡 CLIENTE NOVO - MOSTRA MENU
