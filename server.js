@@ -394,41 +394,32 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
 
 function validateDS160(data) {
   const errors = [];
-  const requiredQuestions = [
-    { field: 'radio-visto-negado', message: 'Responda se já teve visto americano negado' },
-    { field: 'radio-entrada-negada', message: 'Responda se já teve entrada negada nos EUA' },
-    { field: 'radio-deportado', message: 'Responda se já foi deportado dos EUA' }
-  ];
-  for (const q of requiredQuestions) {
-    if (!data[q.field] || data[q.field] === '') errors.push(q.message);
-  }
+  
+  // Remover a validação obrigatória dos 3 campos
+  // Apenas valida se os campos foram preenchidos (se existirem)
+  
+  // Validar datas e outros campos existentes...
   if (data['radio-visto-negado'] === 'one') {
     if (!data['text-visto-negado-ano'] || data['text-visto-negado-ano'] === '') {
       errors.push('Ano da negativa do visto é obrigatório');
-    } else {
-      const ano = parseInt(data['text-visto-negado-ano']);
-      if (ano < 1900 || ano > 2026) errors.push('Ano da negativa do visto inválido (use entre 1900 e 2026)');
     }
   }
+  
   if (data['radio-entrada-negada'] === 'one') {
     if (!data['text-entrada-negada-ano'] || data['text-entrada-negada-ano'] === '') {
       errors.push('Ano da negativa de entrada é obrigatório');
-    } else {
-      const ano = parseInt(data['text-entrada-negada-ano']);
-      if (ano < 1900 || ano > 2026) errors.push('Ano da negativa de entrada inválido (use entre 1900 e 2026)');
     }
   }
+  
   if (data['radio-deportado'] === 'one') {
     if (!data['text-deportado-ano'] || data['text-deportado-ano'] === '') {
       errors.push('Ano da deportação é obrigatório');
-    } else {
-      const ano = parseInt(data['text-deportado-ano']);
-      if (ano < 1900 || ano > 2026) errors.push('Ano da deportação inválido (use entre 1900 e 2026)');
     }
     if (!data['select-deportado-duracao'] || data['select-deportado-duracao'] === '') {
       errors.push('Duração da deportação é obrigatória');
     }
   }
+  
   return { isValid: errors.length === 0, errors: errors };
 }
 
