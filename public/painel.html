@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel GetVisa</title>
+    
+    <!-- ============================================================
+         ESTILOS
+         ============================================================ -->
     <style>
+        /* ===== RESET E BASE ===== */
         * {
             margin: 0;
             padding: 0;
@@ -19,6 +24,8 @@
             max-width: 1200px;
             margin: 0 auto;
         }
+
+        /* ===== HEADER ===== */
         .header {
             background: linear-gradient(135deg, #003366, #0055a5);
             color: white;
@@ -41,6 +48,8 @@
             border-radius: 20px;
             font-size: 14px;
         }
+
+        /* ===== STATS CARDS ===== */
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -76,8 +85,8 @@
         .stat-card.active {
             border: 3px solid #003366;
         }
-        
-        /* Tabs */
+
+        /* ===== TABS ===== */
         .tabs {
             display: flex;
             gap: 5px;
@@ -86,6 +95,7 @@
             padding: 5px;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            flex-wrap: wrap;
         }
         .tab-btn {
             flex: 1;
@@ -98,6 +108,7 @@
             cursor: pointer;
             transition: all 0.2s;
             color: #64748b;
+            min-width: 120px;
         }
         .tab-btn:hover {
             background: #f1f5f9;
@@ -113,6 +124,7 @@
             display: block;
         }
 
+        /* ===== TABELAS ===== */
         .table-container {
             background: white;
             border-radius: 12px;
@@ -129,13 +141,21 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-        .table-header input {
+        .table-header input,
+        .table-header select {
             padding: 8px 15px;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            width: 250px;
             font-size: 14px;
         }
+        .table-header input {
+            width: 250px;
+        }
+        .table-header select {
+            min-width: 200px;
+        }
+
+        /* ===== BOTÕES ===== */
         .btn {
             padding: 8px 20px;
             border: none;
@@ -145,49 +165,22 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-primary {
-            background: #003366;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #002244;
-        }
-        .btn-success {
-            background: #10b981;
-            color: white;
-        }
-        .btn-success:hover {
-            background: #059669;
-        }
-        .btn-warning {
-            background: #f59e0b;
-            color: white;
-        }
-        .btn-warning:hover {
-            background: #d97706;
-        }
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-        .btn-info {
-            background: #3b82f6;
-            color: white;
-        }
-        .btn-info:hover {
-            background: #2563eb;
-        }
-        .btn-sm {
-            padding: 4px 12px;
-            font-size: 12px;
-        }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        .btn-primary { background: #003366; color: white; }
+        .btn-primary:hover { background: #002244; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-info { background: #3b82f6; color: white; }
+        .btn-info:hover { background: #2563eb; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
+        .btn-sm { padding: 4px 12px; font-size: 12px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ===== TABELA ===== */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -216,37 +209,11 @@
             gap: 8px;
             flex-wrap: wrap;
         }
-        .empty {
+        .empty, .loading {
             text-align: center;
             padding: 40px;
             color: #94a3b8;
         }
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #94a3b8;
-        }
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 15px 25px;
-            border-radius: 12px;
-            color: white;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s;
-            z-index: 1000;
-        }
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
-        }
-        .toast.success { background: #10b981; }
-        .toast.error { background: #ef4444; }
-        .toast.info { background: #3b82f6; }
         .checkbox-column {
             text-align: center;
         }
@@ -281,10 +248,15 @@
             font-size: 13px;
             color: #64748b;
         }
+        .badge-status {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
 
-        /* ============================================
-           TIMELINE CSS
-           ============================================ */
+        /* ===== TIMELINE ===== */
         .timeline {
             position: relative;
             padding: 20px 0;
@@ -346,733 +318,622 @@
             padding: 15px;
             background: #f8fafc;
             border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .timeline-actions input {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
         }
 
+        /* ===== TOAST ===== */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.success { background: #10b981; }
+        .toast.error { background: #ef4444; }
+        .toast.info { background: #3b82f6; }
+
+        /* ===== RESPONSIVO ===== */
         @media (max-width: 768px) {
             .stats { grid-template-columns: 1fr 1fr; }
             .table-header { flex-direction: column; }
             .table-header input { width: 100%; }
+            .table-header select { width: 100%; }
             td, th { padding: 8px 10px; font-size: 12px; }
             .acoes { flex-direction: column; }
             .tabs { flex-direction: column; }
+            .timeline-actions { flex-direction: column; }
+            .timeline-actions input { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>📋 Painel GetVisa</h1>
-            <div class="badge">
-                🔄 <span id="ultima-atualizacao">-</span>
-            </div>
-        </div>
 
-        <!-- Stats -->
-        <div class="stats">
-            <div class="stat-card pendentes" onclick="mudarAba('pendentes')">
-                <div class="number" id="total-pendentes">0</div>
-                <div class="label">🟡 Pendentes</div>
-            </div>
-            <div class="stat-card ativos" onclick="mudarAba('ativos')">
-                <div class="number" id="total-ativos">0</div>
-                <div class="label">🟢 Em Processo</div>
-            </div>
-            <div class="stat-card amigos" onclick="mudarAba('amigos')">
-                <div class="number" id="total-amigos">0</div>
-                <div class="label">🤝 Amigos</div>
-            </div>
-            <div class="stat-card etapas" onclick="mudarAba('etapas')">
-                <div class="number" id="total-etapas">0</div>
-                <div class="label">📊 Etapas</div>
-            </div>
-        </div>
+<div class="container">
+    <!-- ============================================================
+         HEADER
+         ============================================================ -->
+    <div class="header">
+        <h1>📋 Painel GetVisa</h1>
+        <div class="badge">🔄 <span id="ultima-atualizacao">-</span></div>
+    </div>
 
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">
-                📞 Pendentes
-            </button>
-            <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">
-                🟢 Em Processo
-            </button>
-            <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">
-                🤝 Amigos
-            </button>
-            <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">
-                📊 Etapas
-            </button>
+    <!-- ============================================================
+         STATS
+         ============================================================ -->
+    <div class="stats">
+        <div class="stat-card pendentes" onclick="mudarAba('pendentes')">
+            <div class="number" id="total-pendentes">0</div>
+            <div class="label">🟡 Pendentes</div>
         </div>
+        <div class="stat-card ativos" onclick="mudarAba('ativos')">
+            <div class="number" id="total-ativos">0</div>
+            <div class="label">🟢 Em Processo</div>
+        </div>
+        <div class="stat-card amigos" onclick="mudarAba('amigos')">
+            <div class="number" id="total-amigos">0</div>
+            <div class="label">🤝 Amigos</div>
+        </div>
+        <div class="stat-card etapas" onclick="mudarAba('etapas')">
+            <div class="number" id="total-etapas">0</div>
+            <div class="label">📊 Etapas</div>
+        </div>
+    </div>
 
-        <!-- Tab: Pendentes -->
-        <div class="tab-content active" id="tab-pendentes">
-            <div class="table-container">
-                <div class="table-header">
-                    <span style="font-weight: 600; color: #1e293b;">
-                        📞 Contatos Pendentes
-                    </span>
-                    <div>
-                        <input type="text" id="buscar-pendentes" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('pendentes')">
-                        <button class="btn btn-primary" onclick="carregarDados()" style="margin-left: 10px;">
-                            🔄 Atualizar
-                        </button>
-                    </div>
-                </div>
-                <div id="tabela-pendentes">
-                    <div class="loading">🔄 Carregando...</div>
-                </div>
-                <div class="acoes-em-massa">
-                    <span>✅ Ações em massa:</span>
-                    <button class="btn btn-success" onclick="moverSelecionados('ativo')">
-                        🟢 Mover para EM PROCESSO
-                    </button>
-                    <button class="btn btn-warning" onclick="moverSelecionados('amigo')">
-                        🤝 Mover para AMIGO
-                    </button>
-                    <button class="btn btn-danger" onclick="desmarcarTodos()">
-                        Desmarcar todos
-                    </button>
-                    <span style="margin-left: auto; font-size: 13px; color: #94a3b8;">
-                        Selecione os contatos e clique em uma ação
-                    </span>
+    <!-- ============================================================
+         TABS
+         ============================================================ -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
+        <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
+        <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
+        <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
+    </div>
+
+    <!-- ============================================================
+         TAB: PENDENTES
+         ============================================================ -->
+    <div class="tab-content active" id="tab-pendentes">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">📞 Contatos Pendentes</span>
+                <div>
+                    <input type="text" id="buscar-pendentes" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('pendentes')">
+                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
                 </div>
             </div>
-        </div>
-
-        <!-- Tab: Em Processo -->
-        <div class="tab-content" id="tab-ativos">
-            <div class="table-container">
-                <div class="table-header">
-                    <span style="font-weight: 600; color: #1e293b;">
-                        🟢 Clientes em Processo
-                    </span>
-                    <div>
-                        <input type="text" id="buscar-ativos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('ativos')">
-                        <button class="btn btn-primary" onclick="carregarDados()" style="margin-left: 10px;">
-                            🔄 Atualizar
-                        </button>
-                    </div>
-                </div>
-                <div id="tabela-ativos">
-                    <div class="loading">🔄 Carregando...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: Amigos -->
-        <div class="tab-content" id="tab-amigos">
-            <div class="table-container">
-                <div class="table-header">
-                    <span style="font-weight: 600; color: #1e293b;">
-                        🤝 Contatos Amigos
-                    </span>
-                    <div>
-                        <input type="text" id="buscar-amigos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('amigos')">
-                        <button class="btn btn-primary" onclick="carregarDados()" style="margin-left: 10px;">
-                            🔄 Atualizar
-                        </button>
-                    </div>
-                </div>
-                <div id="tabela-amigos">
-                    <div class="loading">🔄 Carregando...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: Etapas (Timeline) -->
-        <div class="tab-content" id="tab-etapas">
-            <div class="table-container">
-                <div class="table-header">
-                    <span style="font-weight: 600; color: #1e293b;">
-                        📊 Timeline do Processo
-                    </span>
-                    <div>
-                        <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;">
-                            <option value="">Selecione um cliente...</option>
-                        </select>
-                        <button class="btn btn-info" onclick="carregarDadosEtapas()" style="margin-left:10px;">
-                            🔄 Atualizar
-                        </button>
-                    </div>
-                </div>
-                <div id="timeline-container" style="padding:20px;">
-                    <div class="empty">
-                        📊 Selecione um cliente para ver a timeline
-                    </div>
-                </div>
-                <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-                    <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
-                        <div style="flex:1;min-width:200px;">
-                            <input type="text" id="nota-avancar" class="form-control" placeholder="Nota sobre este avanço (opcional)" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;">
-                        </div>
-                        <button class="btn btn-success" onclick="avancarEtapa()">
-                            ➡️ Avançar Etapa
-                        </button>
-                        <button class="btn btn-info" onclick="verHistorico()">
-                            📜 Ver Histórico
-                        </button>
-                        <button class="btn btn-danger" onclick="fecharTimeline()">
-                            ✕ Fechar
-                        </button>
-                    </div>
-                </div>
+            <div id="tabela-pendentes"><div class="loading">🔄 Carregando...</div></div>
+            <div class="acoes-em-massa">
+                <span>✅ Ações em massa:</span>
+                <button class="btn btn-success" onclick="moverSelecionados('ativo')">🟢 Mover para EM PROCESSO</button>
+                <button class="btn btn-warning" onclick="moverSelecionados('amigo')">🤝 Mover para AMIGO</button>
+                <button class="btn btn-danger" onclick="desmarcarTodos()">Desmarcar todos</button>
+                <span style="margin-left:auto;font-size:13px;color:#94a3b8;">Selecione os contatos e clique em uma ação</span>
             </div>
         </div>
     </div>
 
-    <!-- Toast -->
-    <div class="toast" id="toast"></div>
-
-    <script>
-        // ============================================================
-        //  CONFIGURAÇÃO DAS ETAPAS
-        //  ============================================================
-        const ETAPAS_CONFIG = {
-            'formulario_enviado': { label: '📝 Formulário Enviado', color: '#3498db' },
-            'analise_correcoes': { label: '🔍 Análise e Correções', color: '#f39c12' },
-            'boleto_emitido': { label: '💰 Boleto Emitido', color: '#e67e22' },
-            'boleto_pago': { label: '✅ Boleto Pago', color: '#27ae60' },
-            'agendamento_realizado': { label: '📅 Agendamento Realizado', color: '#2980b9' },
-            'treinamento_realizado': { label: '🎯 Treinamento Concluído', color: '#8e44ad' },
-            'entrevista_realizada': { label: '🎤 Entrevista Realizada', color: '#2c3e50' },
-            'passaporte_retornado': { label: '📫 Passaporte Retornado', color: '#2ecc71' }
-        };
-
-        const ETAPAS_ORDEM = [
-            'formulario_enviado',
-            'analise_correcoes',
-            'boleto_emitido',
-            'boleto_pago',
-            'agendamento_realizado',
-            'treinamento_realizado',
-            'entrevista_realizada',
-            'passaporte_retornado'
-        ];
-
-        let clienteSelecionadoTimeline = null;
-        let dadosCompletos = { pendentes: [], ativos: [], amigos: [] };
-
-        // ============================================================
-        //  ABA/NAVEGAÇÃO
-        //  ============================================================
-        function mudarAba(aba) {
-            // Esconder todas as abas
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            
-            // Mostrar a aba selecionada
-            document.getElementById(`tab-${aba}`).classList.add('active');
-            document.querySelector(`.tab-btn[data-tab="${aba}"]`).classList.add('active');
-            
-            // Carregar dados específicos da aba
-            if (aba === 'pendentes') carregarPendentes();
-            else if (aba === 'ativos') carregarAtivos();
-            else if (aba === 'amigos') carregarAmigos();
-            else if (aba === 'etapas') carregarClientesParaTimeline();
-        }
-
-        // ============================================================
-        //  CARREGAR DADOS
-        //  ============================================================
-        async function carregarDados() {
-            try {
-                const response = await fetch('/api/painel/pendentes');
-                const data = await response.json();
-
-                if (!data.success) {
-                    throw new Error(data.message || 'Erro ao carregar');
-                }
-
-                dadosCompletos.pendentes = data.pendentes || [];
-                dadosCompletos.ativos = data.ativos || [];
-                dadosCompletos.amigos = data.amigos || [];
-
-                document.getElementById('total-pendentes').textContent = dadosCompletos.pendentes.length;
-                document.getElementById('total-ativos').textContent = dadosCompletos.ativos.length;
-                document.getElementById('total-amigos').textContent = dadosCompletos.amigos.length;
-                document.getElementById('ultima-atualizacao').textContent = new Date().toLocaleTimeString();
-
-                // Buscar total de etapas
-                try {
-                    const etapasRes = await fetch('/api/etapas/estatisticas');
-                    const etapasData = await etapasRes.json();
-                    document.getElementById('total-etapas').textContent = etapasData.total_clientes_ativos || 0;
-                } catch (e) {
-                    document.getElementById('total-etapas').textContent = '0';
-                }
-
-                // Renderizar a aba ativa
-                const abaAtiva = document.querySelector('.tab-content.active');
-                if (abaAtiva) {
-                    const id = abaAtiva.id.replace('tab-', '');
-                    if (id === 'pendentes') renderPendentes();
-                    else if (id === 'ativos') renderAtivos();
-                    else if (id === 'amigos') renderAmigos();
-                }
-
-            } catch (error) {
-                console.error('❌ Erro:', error);
-                showToast(`❌ Erro ao carregar: ${error.message}`, 'error');
-            }
-        }
-
-        // ============================================================
-        //  RENDERIZAR PENDENTES
-        //  ============================================================
-        function renderPendentes() {
-            const container = document.getElementById('tabela-pendentes');
-            const dados = dadosCompletos.pendentes;
-
-            if (!dados || dados.length === 0) {
-                container.innerHTML = `<div class="empty">🎉 Nenhum contato pendente!</div>`;
-                return;
-            }
-
-            let html = `<table><thead><tr>
-                <th style="width:40px;"><input type="checkbox" id="selecionar-todos" onchange="selecionarTodos(this.checked)"></th>
-                <th>Telefone</th><th>Nome</th><th>Data</th><th>Ações</th>
-            </tr></thead><tbody>`;
-
-            dados.forEach(item => {
-                const data = item.data_contato ? new Date(item.data_contato).toLocaleString('pt-BR') : '-';
-                const nome = item.nome || 'Sem nome';
-                html += `
-                    <tr data-telefone="${item.telefone}">
-                        <td class="checkbox-column"><input type="checkbox" class="selecionar-item" data-telefone="${item.telefone}"></td>
-                        <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
-                        <td>${nome}</td>
-                        <td class="data-hora">${data}</td>
-                        <td>
-                            <div class="acoes">
-                                <button class="btn btn-success btn-sm" onclick="moverCliente('${item.telefone}', 'ativo')">🟢 Em Processo</button>
-                                <button class="btn btn-warning btn-sm" onclick="moverCliente('${item.telefone}', 'amigo')">🤝 Amigo</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            html += `</tbody></table>`;
-            container.innerHTML = html;
-        }
-
-        // ============================================================
-        //  RENDERIZAR ATIVOS
-        //  ============================================================
-        function renderAtivos() {
-            const container = document.getElementById('tabela-ativos');
-            const dados = dadosCompletos.ativos;
-
-            if (!dados || dados.length === 0) {
-                container.innerHTML = `<div class="empty">🟢 Nenhum cliente em processo</div>`;
-                return;
-            }
-
-            let html = `<table><thead><tr>
-                <th>Telefone</th><th>Nome</th><th>Status</th><th>Início</th><th>Ações</th>
-            </tr></thead><tbody>`;
-
-            dados.forEach(item => {
-                const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
-                const nome = item.nome || 'Sem nome';
-                html += `
-                    <tr data-telefone="${item.telefone}">
-                        <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
-                        <td>${nome}</td>
-                        <td><span class="badge" style="background:#10b981;color:white;padding:4px 12px;border-radius:12px;font-size:12px;">${item.status || 'em_processo'}</span></td>
-                        <td class="data-hora">${data}</td>
-                        <td>
-                            <div class="acoes">
-                                <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${item.telefone}')">📊 Timeline</button>
-                                <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${item.telefone}')">✅ Finalizar</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            html += `</tbody></table>`;
-            container.innerHTML = html;
-        }
-
-        // ============================================================
-        //  RENDERIZAR AMIGOS
-        //  ============================================================
-        function renderAmigos() {
-            const container = document.getElementById('tabela-amigos');
-            const dados = dadosCompletos.amigos;
-
-            if (!dados || dados.length === 0) {
-                container.innerHTML = `<div class="empty">🤝 Nenhum contato amigo</div>`;
-                return;
-            }
-
-            let html = `<table><thead><tr>
-                <th>Telefone</th><th>Nome</th><th>Adicionado</th>
-            </tr></thead><tbody>`;
-
-            dados.forEach(item => {
-                const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
-                const nome = item.nome || 'Sem nome';
-                html += `
-                    <tr>
-                        <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
-                        <td>${nome}</td>
-                        <td class="data-hora">${data}</td>
-                    </tr>
-                `;
-            });
-
-            html += `</tbody></table>`;
-            container.innerHTML = html;
-        }
-
-        // ============================================================
-        //  CARREGAR CLIENTES PARA TIMELINE
-        //  ============================================================
-        async function carregarClientesParaTimeline() {
-            try {
-                const response = await fetch('/api/painel/pendentes');
-                const data = await response.json();
-                
-                const select = document.getElementById('select-cliente-etapa');
-                select.innerHTML = '<option value="">Selecione um cliente...</option>';
-                
-                // Adicionar clientes ativos
-                if (data.ativos) {
-                    data.ativos.forEach(cliente => {
-                        const option = document.createElement('option');
-                        option.value = cliente.telefone;
-                        option.textContent = `${cliente.nome || 'Sem nome'} (${cliente.telefone})`;
-                        select.appendChild(option);
-                    });
-                }
-                
-                // Se não tiver clientes ativos, mostrar mensagem
-                if (data.ativos && data.ativos.length === 0) {
-                    document.getElementById('timeline-container').innerHTML = `
-                        <div class="empty">
-                            📊 Nenhum cliente em processo ainda.<br>
-                            <small style="color:#94a3b8;">Mova um cliente para "Em Processo" para ver a timeline.</small>
-                        </div>
-                    `;
-                    document.getElementById('timeline-actions').style.display = 'none';
-                }
-                
-            } catch (error) {
-                console.error('Erro ao carregar clientes:', error);
-            }
-        }
-
-        async function carregarDadosEtapas() {
-            await carregarClientesParaTimeline();
-            showToast('✅ Lista atualizada!', 'success');
-        }
-
-        // ============================================================
-        //  TIMELINE - FUNÇÕES PRINCIPAIS
-        //  ============================================================
-        async function carregarTimelinePorSelect() {
-            const select = document.getElementById('select-cliente-etapa');
-            const telefone = select.value;
-            
-            if (!telefone) {
-                document.getElementById('timeline-container').innerHTML = `
-                    <div class="empty">📊 Selecione um cliente para ver a timeline</div>
-                `;
-                document.getElementById('timeline-actions').style.display = 'none';
-                return;
-            }
-            
-            await carregarTimeline(telefone);
-        }
-
-        async function verTimelineCliente(telefone) {
-            // Mudar para a aba de etapas
-            mudarAba('etapas');
-            
-            // Selecionar o cliente no dropdown
-            const select = document.getElementById('select-cliente-etapa');
-            select.value = telefone;
-            
-            // Carregar timeline
-            await carregarTimeline(telefone);
-        }
-
-        async function carregarTimeline(telefone) {
-            try {
-                const response = await fetch(`/api/etapas/cliente/${telefone}`);
-                const data = await response.json();
-                
-                if (data.erro) {
-                    showToast('Erro: ' + data.erro, 'error');
-                    return;
-                }
-                
-                clienteSelecionadoTimeline = telefone;
-                renderizarTimeline(data);
-                document.getElementById('timeline-actions').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Erro ao carregar timeline:', error);
-                showToast('Erro ao carregar timeline', 'error');
-            }
-        }
-
-        function renderizarTimeline(data) {
-            const container = document.getElementById('timeline-container');
-            const etapaAtual = data.etapa_atual;
-            const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
-            
-            // Buscar nome do cliente
-            let nomeCliente = 'Cliente';
-            const allClientes = [...dadosCompletos.ativos, ...dadosCompletos.pendentes];
-            const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
-            if (cliente) nomeCliente = cliente.nome || 'Cliente';
-            
-            let html = `
-                <div style="margin-bottom:15px;">
-                    <h4>📋 Timeline - ${nomeCliente}</h4>
-                    <small class="text-muted">Etapa atual: <strong>${ETAPAS_CONFIG[etapaAtual]?.label || etapaAtual}</strong></small>
+    <!-- ============================================================
+         TAB: EM PROCESSO
+         ============================================================ -->
+    <div class="tab-content" id="tab-ativos">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">🟢 Clientes em Processo</span>
+                <div>
+                    <input type="text" id="buscar-ativos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('ativos')">
+                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
                 </div>
-                <div class="timeline">
-            `;
-            
-            ETAPAS_ORDEM.forEach((etapa, index) => {
-                const isConcluida = index <= indexAtual;
-                const isAtual = index === indexAtual;
-                const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
-                const dataField = `data_${etapa}`;
-                const dataValue = data[dataField];
-                
-                html += `
-                    <div class="timeline-item ${isConcluida ? 'concluida' : 'pendente'} ${isAtual ? 'atual' : ''}">
-                        <div class="timeline-badge" style="background-color: ${isConcluida ? etapaInfo.color : '#e9ecef'}">
-                            ${isConcluida ? '✓' : index + 1}
-                        </div>
-                        <div class="timeline-content">
-                            <h6>${etapaInfo.label || etapa}</h6>
-                            <small>
-                                ${isAtual ? '🔄 Em andamento' : (isConcluida ? '✅ Concluída' : '⏳ Pendente')}
-                            </small>
-                            ${dataValue ? `<br><small class="text-muted">${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            container.innerHTML = html;
-            
-            // Atualizar botão
-            const isUltima = etapaAtual === 'passaporte_retornado';
-            const btnAvancar = document.querySelector('#timeline-actions .btn-success');
-            if (btnAvancar) {
-                btnAvancar.disabled = isUltima;
-                btnAvancar.textContent = isUltima ? '✅ Processo Finalizado' : '➡️ Avançar Etapa';
-            }
-        }
+            </div>
+            <div id="tabela-ativos"><div class="loading">🔄 Carregando...</div></div>
+        </div>
+    </div>
 
-        async function avancarEtapa() {
-            if (!clienteSelecionadoTimeline) {
-                showToast('Selecione um cliente primeiro!', 'info');
-                return;
-            }
-            
-            if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) return;
-            
-            const nota = document.getElementById('nota-avancar')?.value || '';
-            
-            try {
-                const response = await fetch('/api/etapas/avancar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        telefone: clienteSelecionadoTimeline,
-                        nota: nota || 'Avanço manual pelo painel',
-                        observacao: 'Cliente avançado pelo painel administrativo'
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.sucesso) {
-                    showToast(`✅ Cliente avançou para: ${data.etapa_atual}`, 'success');
-                    document.getElementById('nota-avancar').value = '';
-                    await carregarTimeline(clienteSelecionadoTimeline);
-                    await carregarDados();
-                } else {
-                    showToast(`❌ Erro: ${data.erro || 'Erro desconhecido'}`, 'error');
-                }
-                
-            } catch (error) {
-                console.error('Erro ao avançar etapa:', error);
-                showToast('Erro ao avançar etapa', 'error');
-            }
-        }
+    <!-- ============================================================
+         TAB: AMIGOS
+         ============================================================ -->
+    <div class="tab-content" id="tab-amigos">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">🤝 Contatos Amigos</span>
+                <div>
+                    <input type="text" id="buscar-amigos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('amigos')">
+                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
+                </div>
+            </div>
+            <div id="tabela-amigos"><div class="loading">🔄 Carregando...</div></div>
+        </div>
+    </div>
 
-        async function verHistorico() {
-            if (!clienteSelecionadoTimeline) {
-                showToast('Selecione um cliente primeiro!', 'info');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/etapas/historico/${clienteSelecionadoTimeline}`);
-                const data = await response.json();
-                
-                if (data.erro) {
-                    showToast('Erro: ' + data.erro, 'error');
-                    return;
-                }
-                
-                let msg = '📜 HISTÓRICO DO PROCESSO\n\n';
-                const historico = data.historico || [];
-                
-                if (historico.length === 0) {
-                    msg += 'Nenhum histórico registrado';
-                } else {
-                    historico.forEach((item, index) => {
-                        const etapaInfo = ETAPAS_CONFIG[item.etapa] || { label: item.etapa };
-                        const dataFormatada = new Date(item.data).toLocaleString('pt-BR');
-                        msg += `${index + 1}. ${etapaInfo.label}\n`;
-                        msg += `   📅 ${dataFormatada}\n`;
-                        if (item.nota) msg += `   📝 ${item.nota}\n`;
-                        msg += '\n';
-                    });
-                }
-                
-                alert(msg);
-                
-            } catch (error) {
-                console.error('Erro ao buscar histórico:', error);
-                showToast('Erro ao buscar histórico', 'error');
-            }
-        }
-
-        function fecharTimeline() {
-            clienteSelecionadoTimeline = null;
-            document.getElementById('timeline-container').innerHTML = `
+    <!-- ============================================================
+         TAB: ETAPAS (TIMELINE)
+         ============================================================ -->
+    <div class="tab-content" id="tab-etapas">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">📊 Timeline do Processo</span>
+                <div>
+                    <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()">
+                        <option value="">Selecione um cliente...</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="carregarClientesParaTimeline()" style="margin-left:10px;">🔄 Atualizar</button>
+                </div>
+            </div>
+            <div id="timeline-container" style="padding:20px;">
                 <div class="empty">📊 Selecione um cliente para ver a timeline</div>
+            </div>
+            <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+                <div class="timeline-actions">
+                    <input type="text" id="nota-avancar" placeholder="Nota sobre este avanço (opcional)">
+                    <button class="btn btn-success" onclick="avancarEtapa()">➡️ Avançar Etapa</button>
+                    <button class="btn btn-info" onclick="verHistorico()">📜 Ver Histórico</button>
+                    <button class="btn btn-danger" onclick="fecharTimeline()">✕ Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST
+     ============================================================ -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+// ============================================================
+//  CONFIGURAÇÃO DAS ETAPAS
+// ============================================================
+const ETAPAS_CONFIG = {
+    'formulario_enviado': { label: '📝 Formulário Enviado', color: '#3498db' },
+    'analise_correcoes': { label: '🔍 Análise e Correções', color: '#f39c12' },
+    'boleto_emitido': { label: '💰 Boleto Emitido', color: '#e67e22' },
+    'boleto_pago': { label: '✅ Boleto Pago', color: '#27ae60' },
+    'agendamento_realizado': { label: '📅 Agendamento Realizado', color: '#2980b9' },
+    'treinamento_realizado': { label: '🎯 Treinamento Concluído', color: '#8e44ad' },
+    'entrevista_realizada': { label: '🎤 Entrevista Realizada', color: '#2c3e50' },
+    'passaporte_retornado': { label: '📫 Passaporte Retornado', color: '#2ecc71' }
+};
+
+const ETAPAS_ORDEM = [
+    'formulario_enviado', 'analise_correcoes', 'boleto_emitido', 'boleto_pago',
+    'agendamento_realizado', 'treinamento_realizado', 'entrevista_realizada', 'passaporte_retornado'
+];
+
+let clienteSelecionadoTimeline = null;
+let dadosCompletos = { pendentes: [], ativos: [], amigos: [] };
+
+// ============================================================
+//  ABA/NAVEGAÇÃO
+// ============================================================
+function mudarAba(aba) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(`tab-${aba}`).classList.add('active');
+    document.querySelector(`.tab-btn[data-tab="${aba}"]`).classList.add('active');
+    
+    if (aba === 'pendentes') renderPendentes();
+    else if (aba === 'ativos') renderAtivos();
+    else if (aba === 'amigos') renderAmigos();
+    else if (aba === 'etapas') carregarClientesParaTimeline();
+}
+
+// ============================================================
+//  CARREGAR DADOS
+// ============================================================
+async function carregarDados() {
+    try {
+        const response = await fetch('/api/painel/pendentes');
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Erro ao carregar');
+
+        dadosCompletos.pendentes = data.pendentes || [];
+        dadosCompletos.ativos = data.ativos || [];
+        dadosCompletos.amigos = data.amigos || [];
+
+        document.getElementById('total-pendentes').textContent = dadosCompletos.pendentes.length;
+        document.getElementById('total-ativos').textContent = dadosCompletos.ativos.length;
+        document.getElementById('total-amigos').textContent = dadosCompletos.amigos.length;
+        document.getElementById('ultima-atualizacao').textContent = new Date().toLocaleTimeString();
+
+        try {
+            const etapasRes = await fetch('/api/etapas/estatisticas');
+            const etapasData = await etapasRes.json();
+            document.getElementById('total-etapas').textContent = etapasData.total_clientes_ativos || 0;
+        } catch (e) { document.getElementById('total-etapas').textContent = '0'; }
+
+        const abaAtiva = document.querySelector('.tab-content.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('tab-', '');
+            if (id === 'pendentes') renderPendentes();
+            else if (id === 'ativos') renderAtivos();
+            else if (id === 'amigos') renderAmigos();
+        }
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        showToast(`❌ Erro ao carregar: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================
+//  RENDERIZAR PENDENTES
+// ============================================================
+function renderPendentes() {
+    const container = document.getElementById('tabela-pendentes');
+    const dados = dadosCompletos.pendentes;
+    if (!dados || dados.length === 0) {
+        container.innerHTML = `<div class="empty">🎉 Nenhum contato pendente!</div>`;
+        return;
+    }
+    let html = `<table><thead><tr>
+        <th style="width:40px;"><input type="checkbox" id="selecionar-todos" onchange="selecionarTodos(this.checked)"></th>
+        <th>Telefone</th><th>Nome</th><th>Data</th><th>Ações</th>
+    </tr></thead><tbody>`;
+    dados.forEach(item => {
+        const data = item.data_contato ? new Date(item.data_contato).toLocaleString('pt-BR') : '-';
+        html += `
+            <tr data-telefone="${item.telefone}">
+                <td class="checkbox-column"><input type="checkbox" class="selecionar-item" data-telefone="${item.telefone}"></td>
+                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                <td>${item.nome || 'Sem nome'}</td>
+                <td class="data-hora">${data}</td>
+                <td>
+                    <div class="acoes">
+                        <button class="btn btn-success btn-sm" onclick="moverCliente('${item.telefone}', 'ativo')">🟢 Em Processo</button>
+                        <button class="btn btn-warning btn-sm" onclick="moverCliente('${item.telefone}', 'amigo')">🤝 Amigo</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+// ============================================================
+//  RENDERIZAR ATIVOS
+// ============================================================
+function renderAtivos() {
+    const container = document.getElementById('tabela-ativos');
+    const dados = dadosCompletos.ativos;
+    if (!dados || dados.length === 0) {
+        container.innerHTML = `<div class="empty">🟢 Nenhum cliente em processo</div>`;
+        return;
+    }
+    let html = `<table><thead><tr>
+        <th>Telefone</th><th>Nome</th><th>Status</th><th>Início</th><th>Ações</th>
+    </tr></thead><tbody>`;
+    dados.forEach(item => {
+        const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
+        html += `
+            <tr data-telefone="${item.telefone}">
+                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                <td>${item.nome || 'Sem nome'}</td>
+                <td><span class="badge-status">${item.status || 'em_processo'}</span></td>
+                <td class="data-hora">${data}</td>
+                <td>
+                    <div class="acoes">
+                        <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${item.telefone}')">📊 Timeline</button>
+                        <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${item.telefone}')">✅ Finalizar</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+// ============================================================
+//  RENDERIZAR AMIGOS
+// ============================================================
+function renderAmigos() {
+    const container = document.getElementById('tabela-amigos');
+    const dados = dadosCompletos.amigos;
+    if (!dados || dados.length === 0) {
+        container.innerHTML = `<div class="empty">🤝 Nenhum contato amigo</div>`;
+        return;
+    }
+    let html = `<table><thead><tr><th>Telefone</th><th>Nome</th><th>Adicionado</th></tr></thead><tbody>`;
+    dados.forEach(item => {
+        const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
+        html += `
+            <tr>
+                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                <td>${item.nome || 'Sem nome'}</td>
+                <td class="data-hora">${data}</td>
+            </tr>
+        `;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+// ============================================================
+//  CARREGAR CLIENTES PARA TIMELINE
+// ============================================================
+async function carregarClientesParaTimeline() {
+    try {
+        const response = await fetch('/api/clientes/ativos');
+        const data = await response.json();
+        const select = document.getElementById('select-cliente-etapa');
+        select.innerHTML = '<option value="">Selecione um cliente...</option>';
+        if (data.success && data.ativos && data.ativos.length > 0) {
+            data.ativos.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.telefone;
+                option.textContent = `${cliente.nome || 'Sem nome'} (${cliente.telefone})`;
+                select.appendChild(option);
+            });
+            document.getElementById('timeline-container').innerHTML = `
+                <div class="empty">📊 ${data.ativos.length} cliente(s) em processo.<br><small style="color:#94a3b8;">Selecione um cliente acima para ver a timeline.</small></div>
+            `;
+        } else {
+            document.getElementById('timeline-container').innerHTML = `
+                <div class="empty">📊 Nenhum cliente em processo ainda.<br><small style="color:#94a3b8;">Mova um cliente para "Em Processo" no painel.</small></div>
             `;
             document.getElementById('timeline-actions').style.display = 'none';
-            document.getElementById('select-cliente-etapa').value = '';
         }
+    } catch (error) {
+        console.error('❌ Erro ao carregar clientes:', error);
+    }
+}
 
-        // ============================================================
-        //  AÇÕES DOS CLIENTES
-        //  ============================================================
-        async function moverCliente(telefone, destino) {
-            const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
-            if (!confirm(`Mover ${telefone} para ${destinoNome}?`)) return;
+// ============================================================
+//  TIMELINE - FUNÇÕES PRINCIPAIS
+// ============================================================
+async function carregarTimelinePorSelect() {
+    const select = document.getElementById('select-cliente-etapa');
+    const telefone = select.value;
+    if (!telefone) {
+        document.getElementById('timeline-container').innerHTML = `<div class="empty">📊 Selecione um cliente para ver a timeline</div>`;
+        document.getElementById('timeline-actions').style.display = 'none';
+        return;
+    }
+    await carregarTimeline(telefone);
+}
 
-            try {
-                const response = await fetch('/api/painel/mover', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefone, destino })
-                });
+async function verTimelineCliente(telefone) {
+    mudarAba('etapas');
+    document.getElementById('select-cliente-etapa').value = telefone;
+    await carregarTimeline(telefone);
+}
 
-                const result = await response.json();
+async function carregarTimeline(telefone) {
+    try {
+        const response = await fetch(`/api/etapas/cliente/${telefone}`);
+        const data = await response.json();
+        if (data.erro) { showToast('Erro: ' + data.erro, 'error'); return; }
+        clienteSelecionadoTimeline = telefone;
+        renderizarTimeline(data);
+        document.getElementById('timeline-actions').style.display = 'block';
+    } catch (error) {
+        console.error('Erro ao carregar timeline:', error);
+        showToast('Erro ao carregar timeline', 'error');
+    }
+}
 
-                if (result.success) {
-                    showToast(`✅ ${telefone} movido para ${destinoNome}!`, 'success');
-                    await carregarDados();
-                } else {
-                    showToast(`❌ ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showToast(`❌ Erro: ${error.message}`, 'error');
-            }
+function renderizarTimeline(data) {
+    const container = document.getElementById('timeline-container');
+    const etapaAtual = data.etapa_atual;
+    const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
+    
+    let nomeCliente = 'Cliente';
+    const allClientes = [...dadosCompletos.ativos, ...dadosCompletos.pendentes];
+    const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
+    if (cliente) nomeCliente = cliente.nome || 'Cliente';
+    
+    let html = `
+        <div style="margin-bottom:15px;">
+            <h4>📋 Timeline - ${nomeCliente}</h4>
+            <small class="text-muted">Etapa atual: <strong>${ETAPAS_CONFIG[etapaAtual]?.label || etapaAtual}</strong></small>
+        </div>
+        <div class="timeline">
+    `;
+    ETAPAS_ORDEM.forEach((etapa, index) => {
+        const isConcluida = index <= indexAtual;
+        const isAtual = index === indexAtual;
+        const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
+        const dataValue = data[`data_${etapa}`];
+        html += `
+            <div class="timeline-item ${isConcluida ? 'concluida' : 'pendente'} ${isAtual ? 'atual' : ''}">
+                <div class="timeline-badge" style="background-color: ${isConcluida ? etapaInfo.color : '#e9ecef'}">
+                    ${isConcluida ? '✓' : index + 1}
+                </div>
+                <div class="timeline-content">
+                    <h6>${etapaInfo.label || etapa}</h6>
+                    <small>${isAtual ? '🔄 Em andamento' : (isConcluida ? '✅ Concluída' : '⏳ Pendente')}</small>
+                    ${dataValue ? `<br><small class="text-muted">${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+    
+    const isUltima = etapaAtual === 'passaporte_retornado';
+    const btnAvancar = document.querySelector('#timeline-actions .btn-success');
+    if (btnAvancar) {
+        btnAvancar.disabled = isUltima;
+        btnAvancar.textContent = isUltima ? '✅ Processo Finalizado' : '➡️ Avançar Etapa';
+    }
+}
+
+async function avancarEtapa() {
+    if (!clienteSelecionadoTimeline) { showToast('Selecione um cliente primeiro!', 'info'); return; }
+    if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) return;
+    const nota = document.getElementById('nota-avancar')?.value || '';
+    try {
+        const response = await fetch('/api/etapas/avancar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telefone: clienteSelecionadoTimeline,
+                nota: nota || 'Avanço manual pelo painel',
+                observacao: 'Cliente avançado pelo painel administrativo'
+            })
+        });
+        const data = await response.json();
+        if (data.sucesso) {
+            showToast(`✅ Cliente avançou para: ${data.etapa_atual}`, 'success');
+            document.getElementById('nota-avancar').value = '';
+            await carregarTimeline(clienteSelecionadoTimeline);
+            await carregarDados();
+        } else {
+            showToast(`❌ Erro: ${data.erro || 'Erro desconhecido'}`, 'error');
         }
+    } catch (error) {
+        console.error('Erro ao avançar etapa:', error);
+        showToast('Erro ao avançar etapa', 'error');
+    }
+}
 
-        async function finalizarCliente(telefone) {
-            if (!confirm(`Finalizar processo de ${telefone}?`)) return;
-            
-            try {
-                // TODO: Implementar endpoint de finalização
-                showToast(`✅ Cliente finalizado!`, 'success');
-                await carregarDados();
-            } catch (error) {
-                showToast(`❌ Erro: ${error.message}`, 'error');
-            }
-        }
-
-        async function moverSelecionados(destino) {
-            const selecionados = document.querySelectorAll('.selecionar-item:checked');
-            if (selecionados.length === 0) {
-                showToast('⚠️ Selecione pelo menos um contato', 'info');
-                return;
-            }
-
-            const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
-            if (!confirm(`Mover ${selecionados.length} contato(s) para ${destinoNome}?`)) return;
-
-            const telefones = Array.from(selecionados).map(el => el.dataset.telefone);
-
-            try {
-                const response = await fetch('/api/painel/mover-varios', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefones, destino })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    showToast(`✅ ${result.movidos} contato(s) movidos!`, 'success');
-                    await carregarDados();
-                } else {
-                    showToast(`❌ ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showToast(`❌ Erro: ${error.message}`, 'error');
-            }
-        }
-
-        function selecionarTodos(checked) {
-            document.querySelectorAll('.selecionar-item').forEach(el => el.checked = checked);
-        }
-
-        function desmarcarTodos() {
-            document.querySelectorAll('.selecionar-item').forEach(el => el.checked = false);
-        }
-
-        function filtrarTabela(tipo) {
-            const filtro = document.getElementById(`buscar-${tipo}`).value.toLowerCase();
-            const container = document.getElementById(`tabela-${tipo}`);
-            const linhas = container.querySelectorAll('tbody tr');
-
-            linhas.forEach(linha => {
-                const texto = linha.textContent.toLowerCase();
-                linha.style.display = texto.includes(filtro) ? '' : 'none';
+async function verHistorico() {
+    if (!clienteSelecionadoTimeline) { showToast('Selecione um cliente primeiro!', 'info'); return; }
+    try {
+        const response = await fetch(`/api/etapas/historico/${clienteSelecionadoTimeline}`);
+        const data = await response.json();
+        if (data.erro) { showToast('Erro: ' + data.erro, 'error'); return; }
+        let msg = '📜 HISTÓRICO DO PROCESSO\n\n';
+        const historico = data.historico || [];
+        if (historico.length === 0) { msg += 'Nenhum histórico registrado'; } else {
+            historico.forEach((item, index) => {
+                const etapaInfo = ETAPAS_CONFIG[item.etapa] || { label: item.etapa };
+                const dataFormatada = new Date(item.data).toLocaleString('pt-BR');
+                msg += `${index + 1}. ${etapaInfo.label}\n   📅 ${dataFormatada}\n`;
+                if (item.nota) msg += `   📝 ${item.nota}\n`;
+                msg += '\n';
             });
         }
+        alert(msg);
+    } catch (error) {
+        console.error('Erro ao buscar histórico:', error);
+        showToast('Erro ao buscar histórico', 'error');
+    }
+}
 
-        // ============================================================
-        //  TOAST
-        //  ============================================================
-        function showToast(mensagem, tipo = 'info') {
-            const toast = document.getElementById('toast');
-            toast.textContent = mensagem;
-            toast.className = `toast ${tipo}`;
-            setTimeout(() => toast.classList.add('show'), 10);
-            setTimeout(() => toast.classList.remove('show'), 3000);
+function fecharTimeline() {
+    clienteSelecionadoTimeline = null;
+    document.getElementById('timeline-container').innerHTML = `<div class="empty">📊 Selecione um cliente para ver a timeline</div>`;
+    document.getElementById('timeline-actions').style.display = 'none';
+    document.getElementById('select-cliente-etapa').value = '';
+}
+
+// ============================================================
+//  AÇÕES DOS CLIENTES
+// ============================================================
+async function moverCliente(telefone, destino) {
+    const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
+    if (!confirm(`Mover ${telefone} para ${destinoNome}?`)) return;
+    try {
+        const response = await fetch('/api/painel/mover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone, destino })
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast(`✅ ${telefone} movido para ${destinoNome}!`, 'success');
+            await carregarDados();
+        } else {
+            showToast(`❌ ${result.message}`, 'error');
         }
+    } catch (error) {
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
 
-        // ============================================================
-        //  INICIALIZAÇÃO
-        //  ============================================================
-        // Carregar dados iniciais
-        carregarDados();
-        
-        // Atualizar automaticamente a cada 30 segundos
-        setInterval(carregarDados, 30000);
-        
-        // Carregar clientes para timeline na aba de etapas
-        setTimeout(carregarClientesParaTimeline, 1000);
-        
-        console.log('✅ Painel GetVisa com Timeline carregado!');
-    </script>
+async function finalizarCliente(telefone) {
+    if (!confirm(`Finalizar processo de ${telefone}?`)) return;
+    showToast(`✅ Cliente finalizado!`, 'success');
+    await carregarDados();
+}
+
+async function moverSelecionados(destino) {
+    const selecionados = document.querySelectorAll('.selecionar-item:checked');
+    if (selecionados.length === 0) { showToast('⚠️ Selecione pelo menos um contato', 'info'); return; }
+    const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
+    if (!confirm(`Mover ${selecionados.length} contato(s) para ${destinoNome}?`)) return;
+    const telefones = Array.from(selecionados).map(el => el.dataset.telefone);
+    try {
+        const response = await fetch('/api/painel/mover-varios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefones, destino })
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast(`✅ ${result.movidos} contato(s) movidos!`, 'success');
+            await carregarDados();
+        } else {
+            showToast(`❌ ${result.message}`, 'error');
+        }
+    } catch (error) {
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
+
+function selecionarTodos(checked) {
+    document.querySelectorAll('.selecionar-item').forEach(el => el.checked = checked);
+}
+
+function desmarcarTodos() {
+    document.querySelectorAll('.selecionar-item').forEach(el => el.checked = false);
+}
+
+function filtrarTabela(tipo) {
+    const filtro = document.getElementById(`buscar-${tipo}`).value.toLowerCase();
+    const container = document.getElementById(`tabela-${tipo}`);
+    const linhas = container.querySelectorAll('tbody tr');
+    linhas.forEach(linha => {
+        linha.style.display = linha.textContent.toLowerCase().includes(filtro) ? '' : 'none';
+    });
+}
+
+// ============================================================
+//  TOAST
+// ============================================================
+function showToast(mensagem, tipo = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = mensagem;
+    toast.className = `toast ${tipo}`;
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ============================================================
+//  INICIALIZAÇÃO
+// ============================================================
+carregarDados();
+setInterval(carregarDados, 30000);
+setTimeout(carregarClientesParaTimeline, 1000);
+console.log('✅ Painel GetVisa com Timeline carregado!');
+</script>
+
 </body>
 </html>
