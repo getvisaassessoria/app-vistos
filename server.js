@@ -1073,25 +1073,25 @@ app.post('/api/submit-ds160', async (req, res) => {
       //  ============================================================
       let formularioId = null;
       try {
-        const { data: formulario, error: insertError } = await supabase
-          .from('formulario_ds160')
-          .insert({
-            nome: nome,                          // ← padronizado
-            email_principal: emailCliente,
-            telefone: telefoneCliente,           // ← padronizado
-            numero_passaporte: data['text-38'] || null,
-            cpf: data['text-86'] || null,
-            protocolo: data['protocolo'] || null,
-            consulado_preferido: data['consulado_cidade'] || null,
-            proposito_viagem: data['radio-28'] || null,
-            data_chegada_prevista: data['text-21'] || null,
-            form_data: data,
-            status: 'recebido',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
+       const { data: formulario, error: insertError } = await supabase
+    .from('formulario_ds160')
+    .insert({
+        nome_completo: nome,                 // ✅ coluna correta
+        email_principal: emailCliente,
+        telefone_principal: telefoneCliente, // ✅ coluna correta
+        numero_passaporte: data['text-38'] || null,
+        cpf: data['text-86'] || null,
+        protocolo: data['protocolo'] || null,
+        consulado_preferido: data['consulado_cidade'] || null,
+        proposito_viagem: data['radio-28'] || null,
+        data_chegada_prevista: data['text-21'] || null,
+        form_data: data,
+        status: 'recebido',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
         
         if (insertError) {
           console.error('❌ Erro ao salvar formulário DS-160:', insertError);
