@@ -803,6 +803,16 @@ function abrirModalEtapas() {
     carregarEtapasModal();
 }
 
+// ============================================================
+//  TORNAR FUNÇÕES GLOBAIS (para os onclick dos cards)
+// ============================================================
+window.abrirModalClientes = abrirModalClientes;
+window.abrirModalProcessos = abrirModalProcessos;
+window.abrirModalAgendamentos = abrirModalAgendamentos;
+window.abrirModalEtapas = abrirModalEtapas;
+window.abrirModal = abrirModal;
+window.fecharModal = fecharModal;
+
 // Carregar clientes no modal
 async function carregarClientesModal() {
     const body = document.getElementById('modal-clientes-body');
