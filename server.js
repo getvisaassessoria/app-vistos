@@ -1045,47 +1045,65 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
     }
 });
 
-// GET - Próximos agendamentos (versão via compromissos)
+// GET - Próximos agendamentos (versão direta via compromissos)
 app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     try {
-        // 1. Buscar agendamentos com status 'agendado'
-        const { data: agendamentos, error } = await supabase
-            .from('agendamentos')
-            .select('*')
-            .eq('status', 'agendado')
-            .order('data_hora', { ascending: true })
+        // Buscar compromissos futuros com cliente
+        const { data: compromissos, error } = await supabase
+            .from('compromissos')
+            .select(`
+                id,
+                cliente,
+                atividade,
+                data,
+                hora,
+                local,
+                cliente_id
+            `)
+            .gte('data', new Date().toISOString().split('T')[0])
+            .order('data', { ascending: true })
+            .order('hora', { ascending: true })
             .limit(10);
 
         if (error) throw error;
 
-        // 2. Para cada agendamento, buscar o cliente via compromissos
-        const resultado = [];
-        
-        for (const item of agendamentos) {
-            let cliente_nome = 'N/A';
+        // Buscar nomes dos clientes
+        const clienteIds = compromissos
+            .filter(c => c.cliente_id)
+            .map(c => c.cliente_id);
+
+        let clientesMap = {};
+        if (clienteIds.length > 0) {
+            const { data: clientes } = await supabase
+                .from('clientes')
+                .select('id, nome_completo')
+                .in('id', clienteIds);
+
+            if (clientes) {
+                clientes.forEach(c => {
+                    clientesMap[c.id] = c.nome_completo;
+                });
+            }
+        }
+
+        // Montar resultado
+        const resultado = compromissos.map(item => {
+            let cliente_nome = item.cliente || 'N/A';
             
-            // Buscar a solicitação
-            if (item.solicitacao_id) {
-                const { data: solicitacao } = await supabase
-                    .from('solicitacoes')
-                    .select('dados')
-                    .eq('id', item.solicitacao_id)
-                    .single();
-                
-                if (solicitacao && solicitacao.dados && solicitacao.dados.cliente) {
-                    cliente_nome = solicitacao.dados.cliente;
-                }
+            // Se tiver cliente_id, usar o nome da tabela clientes
+            if (item.cliente_id && clientesMap[item.cliente_id]) {
+                cliente_nome = clientesMap[item.cliente_id];
             }
             
-            resultado.push({
+            return {
                 id: item.id,
-                tipo: item.tipo,
-                data_hora: item.data_hora,
+                tipo: item.atividade,
+                data_hora: `${item.data}T${item.hora}:00`,
                 local: item.local,
-                status: item.status,
+                status: 'agendado',
                 cliente_nome: cliente_nome
-            });
-        }
+            };
+        });
 
         res.json({ success: true, agendamentos: resultado });
 
