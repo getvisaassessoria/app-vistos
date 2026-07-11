@@ -474,6 +474,91 @@
             .timeline-actions input { width: 100%; }
             .barra-label { width: 100px; font-size: 11px; }
         }
+
+        /* ===== MODAIS ===== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.modal-overlay.show {
+    display: flex;
+}
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 800px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    animation: modalIn 0.3s ease;
+}
+@keyframes modalIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 16px 16px 0 0;
+}
+.modal-header h3 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 18px;
+}
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: color 0.2s;
+    padding: 0 10px;
+}
+.modal-close:hover {
+    color: #ef4444;
+}
+.modal-body {
+    padding: 20px 25px;
+    overflow-y: auto;
+    flex: 1;
+}
+.modal-body table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.modal-body th {
+    text-align: left;
+    padding: 10px 15px;
+    background: #f1f5f9;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #475569;
+}
+.modal-body td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 14px;
+}
+.modal-body tr:hover {
+    background: #f8fafc;
+}
+
     </style>
 </head>
 <body>
@@ -693,6 +778,155 @@ function mudarAba(aba) {
     else if (aba === 'amigos') renderAmigos();
     else if (aba === 'etapas') carregarClientesParaTimeline();
     else if (aba === 'dashboard') carregarDashboard();
+}
+
+// ============================================================
+//  FUNÇÕES DOS MODAIS DO DASHBOARD
+// ============================================================
+
+function abrirModal(modalId) {
+    document.getElementById(modalId).classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function fecharModal(event, modalId) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById(modalId).classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+// Carregar clientes no modal
+async function carregarClientesModal() {
+    const body = document.getElementById('modal-clientes-body');
+    body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+    
+    try {
+        const response = await fetch('/api/clientes/listar');
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.message);
+        
+        let html = '<table><thead><tr><th>Nome</th><th>Email</th><th>Telefone</th></tr></thead><tbody>';
+        
+        data.clientes.forEach(c => {
+            html += `
+                <tr>
+                    <td>${c.nome_completo || 'N/A'}</td>
+                    <td>${c.email || 'N/A'}</td>
+                    <td>${c.telefone || 'N/A'}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table>';
+        body.innerHTML = html;
+        
+    } catch (error) {
+        body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
+    }
+}
+
+// Carregar processos ativos no modal
+async function carregarProcessosModal() {
+    const body = document.getElementById('modal-processos-body');
+    body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+    
+    try {
+        const response = await fetch('/api/clientes/ativos');
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.message);
+        
+        let html = '<table><thead><tr><th>Telefone</th><th>Nome</th><th>Status</th><th>Início</th></tr></thead><tbody>';
+        
+        data.ativos.forEach(c => {
+            const inicio = c.criado_em ? new Date(c.criado_em).toLocaleDateString('pt-BR') : '-';
+            html += `
+                <tr>
+                    <td>${c.telefone || 'N/A'}</td>
+                    <td>${c.nome || 'N/A'}</td>
+                    <td><span class="badge-status">${c.status || 'em_processo'}</span></td>
+                    <td>${inicio}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table>';
+        body.innerHTML = html;
+        
+    } catch (error) {
+        body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
+    }
+}
+
+// Carregar agendamentos no modal
+async function carregarAgendamentosModal() {
+    const body = document.getElementById('modal-agendamentos-body');
+    body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+    
+    try {
+        const response = await fetch('/api/agendamentos/listar');
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.message);
+        
+        let html = '<table><thead><tr><th>Cliente</th><th>Tipo</th><th>Data/Hora</th><th>Local</th><th>Status</th></tr></thead><tbody>';
+        
+        data.agendamentos.forEach(a => {
+            const dataHora = new Date(a.data_hora).toLocaleString('pt-BR');
+            const statusMap = {
+                'agendado': '🟡 Agendado',
+                'realizado': '✅ Realizado',
+                'cancelado': '❌ Cancelado'
+            };
+            html += `
+                <tr>
+                    <td>${a.cliente_nome || 'N/A'}</td>
+                    <td>${a.tipo || 'N/A'}</td>
+                    <td>${dataHora}</td>
+                    <td>${a.local || 'N/A'}</td>
+                    <td>${statusMap[a.status] || a.status}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table>';
+        body.innerHTML = html;
+        
+    } catch (error) {
+        body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
+    }
+}
+
+// Carregar etapas no modal
+async function carregarEtapasModal() {
+    const body = document.getElementById('modal-etapas-body');
+    body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+    
+    try {
+        const response = await fetch('/api/etapas/estatisticas');
+        const data = await response.json();
+        
+        if (data.erro) throw new Error(data.erro);
+        
+        let html = '<table><thead><tr><th>Etapa</th><th>Quantidade</th><th>Porcentagem</th></tr></thead><tbody>';
+        
+        data.distribuicao.forEach(e => {
+            html += `
+                <tr>
+                    <td>${e.label || e.etapa}</td>
+                    <td><strong>${e.quantidade}</strong></td>
+                    <td>${e.porcentagem}%</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table>';
+        body.innerHTML = html;
+        
+    } catch (error) {
+        body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
+    }
 }
 
 // ============================================================
@@ -1256,6 +1490,64 @@ setInterval(carregarDados, 30000);
 setTimeout(carregarClientesParaTimeline, 1000);
 console.log('✅ Painel GetVisa com Timeline e Dashboard carregado!');
 </script>
+
+<!-- ============================================================
+     MODAIS DO DASHBOARD
+     ============================================================ -->
+
+<!-- Modal de Clientes -->
+<div class="modal-overlay" id="modal-clientes" onclick="fecharModal(event, 'modal-clientes')">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>👥 Lista de Clientes</h3>
+            <button class="modal-close" onclick="fecharModal(null, 'modal-clientes')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-clientes-body">
+            <div class="loading">🔄 Carregando...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Processos Ativos -->
+<div class="modal-overlay" id="modal-processos" onclick="fecharModal(event, 'modal-processos')">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>🟢 Processos Ativos</h3>
+            <button class="modal-close" onclick="fecharModal(null, 'modal-processos')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-processos-body">
+            <div class="loading">🔄 Carregando...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Agendamentos -->
+<div class="modal-overlay" id="modal-agendamentos" onclick="fecharModal(event, 'modal-agendamentos')">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📅 Todos os Agendamentos</h3>
+            <button class="modal-close" onclick="fecharModal(null, 'modal-agendamentos')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-agendamentos-body">
+            <div class="loading">🔄 Carregando...</div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Modal de Etapas -->
+<div class="modal-overlay" id="modal-etapas" onclick="fecharModal(event, 'modal-etapas')">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📊 Etapas em Andamento</h3>
+            <button class="modal-close" onclick="fecharModal(null, 'modal-etapas')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-etapas-body">
+            <div class="loading">🔄 Carregando...</div>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
