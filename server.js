@@ -450,9 +450,20 @@ app.get('/api/painel/pendentes', async (req, res) => {
 app.get('/api/clientes/ativos', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('clientes_ativos').select('telefone, nome, status').order('criado_em', { ascending: false });
-    if (error) return res.status(500).json({ success: false, message: error.message });
-    res.json({ success: true, ativos: data || [] });
+      .from('clientes_ativos')
+      .select('telefone, nome')  // ✅ removido status
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      console.error('❌ Erro ao buscar ativos:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    res.json({
+      success: true,
+      ativos: data || []
+    });
+
   } catch (error) {
     console.error('❌ Erro ao buscar ativos:', error);
     res.status(500).json({ success: false, message: error.message });
