@@ -470,6 +470,32 @@ app.get('/api/clientes/ativos', async (req, res) => {
   }
 });
 
+// ============================================================
+// ROTA - LISTAR TODOS OS CLIENTES
+// ============================================================
+app.get('/api/clientes/listar', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('clientes')
+            .select('*')
+            .order('nome_completo', { ascending: true });
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            clientes: data || []
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao listar clientes:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
 app.post('/api/painel/mover', async (req, res) => {
   try {
     const { telefone, destino } = req.body;
