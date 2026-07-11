@@ -496,6 +496,73 @@ app.get('/api/clientes/listar', async (req, res) => {
     }
 });
 
+// ============================================================
+// ROTA - LISTAR TODOS OS AGENDAMENTOS
+// ============================================================
+app.get('/api/agendamentos/listar', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('agendamentos')
+            .select('*')
+            .order('data_hora', { ascending: false });
+
+        if (error) throw error;
+
+        // Buscar os nomes dos clientes para cada agendamento
+        const agendamentosComCliente = await Promise.all(
+            (data || []).map(async (item) => {
+                let cliente_nome = 'N/A';
+                
+                if (item.solicitacao_id) {
+                    // Buscar a solicitação
+                    const { data: solicitacao } = await supabase
+                        .from('solicitacoes')
+                        .select('cliente_id, dados')
+                        .eq('id', item.solicitacao_id)
+                        .single();
+                    
+                    if (solicitacao) {
+                        // Buscar o cliente pelo cliente_id
+                        if (solicitacao.cliente_id) {
+                            const { data: cliente } = await supabase
+                                .from('clientes')
+                                .select('nome_completo')
+                                .eq('id', solicitacao.cliente_id)
+                                .single();
+                            
+                            if (cliente) {
+                                cliente_nome = cliente.nome_completo || 'N/A';
+                            }
+                        }
+                        
+                        // Fallback: usar dados da solicitação
+                        if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
+                            cliente_nome = solicitacao.dados.cliente;
+                        }
+                    }
+                }
+                
+                return {
+                    ...item,
+                    cliente_nome: cliente_nome
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            agendamentos: agendamentosComCliente || []
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao listar agendamentos:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
 app.post('/api/painel/mover', async (req, res) => {
   try {
     const { telefone, destino } = req.body;
