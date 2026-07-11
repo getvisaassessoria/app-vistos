@@ -497,78 +497,62 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (CORRIGIDA)
-// ============================================================
-// ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (VERSÃO SIMPLES)
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (VERSÃO DIRETA)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        // 1. Buscar todos os agendamentos
-        const { data: agendamentos, error } = await supabase
+        // Buscar agendamentos com os dados diretamente via SQL
+        const { data, error } = await supabase
             .from('agendamentos')
             .select('*')
             .order('data_hora', { ascending: false });
 
         if (error) throw error;
 
-        // 2. Buscar todas as solicitações
-        const solicitacaoIds = agendamentos
-            .filter(a => a.solicitacao_id)
-            .map(a => a.solicitacao_id);
-
-        let solicitacoesMap = {};
-        if (solicitacaoIds.length > 0) {
-            const { data: solicitacoes } = await supabase
-                .from('solicitacoes')
-                .select('id, cliente_id, dados')
-                .in('id', solicitacaoIds);
-
-            if (solicitacoes) {
-                solicitacoes.forEach(s => {
-                    solicitacoesMap[s.id] = s;
-                });
-            }
-        }
-
-        // 3. Buscar todos os clientes
-        const { data: clientes } = await supabase
-            .from('clientes')
-            .select('id, nome_completo');
-
-        const clientesMap = {};
-        if (clientes) {
-            clientes.forEach(c => {
-                clientesMap[c.id] = c.nome_completo;
-            });
-        }
-
-        // 4. Montar resultado com nomes
-        const resultado = agendamentos.map(item => {
+        // Agora vamos buscar os nomes manualmente
+        const resultado = [];
+        
+        for (const item of data) {
             let cliente_nome = 'N/A';
             
-            const solicitacao = item.solicitacao_id ? solicitacoesMap[item.solicitacao_id] : null;
-            
-            if (solicitacao) {
-                // Tentar pelo cliente_id da solicitação
-                if (solicitacao.cliente_id && clientesMap[solicitacao.cliente_id]) {
-                    cliente_nome = clientesMap[solicitacao.cliente_id];
-                }
-                // Fallback: usar dados da solicitação
-                else if (solicitacao.dados && solicitacao.dados.cliente) {
-                    cliente_nome = solicitacao.dados.cliente;
+            // Se tiver solicitacao_id, buscar a solicitação
+            if (item.solicitacao_id) {
+                const { data: solicitacao } = await supabase
+                    .from('solicitacoes')
+                    .select('cliente_id, dados')
+                    .eq('id', item.solicitacao_id)
+                    .single();
+                
+                if (solicitacao) {
+                    // Se tiver cliente_id, buscar o cliente
+                    if (solicitacao.cliente_id) {
+                        const { data: cliente } = await supabase
+                            .from('clientes')
+                            .select('nome_completo')
+                            .eq('id', solicitacao.cliente_id)
+                            .single();
+                        
+                        if (cliente && cliente.nome_completo) {
+                            cliente_nome = cliente.nome_completo;
+                        }
+                    }
+                    
+                    // Se ainda não tem nome, tentar pegar dos dados
+                    if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
+                        cliente_nome = solicitacao.dados.cliente;
+                    }
                 }
             }
             
-            return {
+            resultado.push({
                 id: item.id,
                 tipo: item.tipo,
                 data_hora: item.data_hora,
                 local: item.local,
                 status: item.status,
                 cliente_nome: cliente_nome
-            };
-        });
+            });
+        }
 
         res.json({
             success: true,
