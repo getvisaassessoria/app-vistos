@@ -497,62 +497,56 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (VERSÃO DIRETA)
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (COM PROMISE.ALL)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        // Buscar agendamentos com os dados diretamente via SQL
-        const { data, error } = await supabase
+        const { data: agendamentos, error } = await supabase
             .from('agendamentos')
             .select('*')
             .order('data_hora', { ascending: false });
 
         if (error) throw error;
 
-        // Agora vamos buscar os nomes manualmente
-        const resultado = [];
-        
-        for (const item of data) {
-            let cliente_nome = 'N/A';
-            
-            // Se tiver solicitacao_id, buscar a solicitação
-            if (item.solicitacao_id) {
-                const { data: solicitacao } = await supabase
-                    .from('solicitacoes')
-                    .select('cliente_id, dados')
-                    .eq('id', item.solicitacao_id)
-                    .single();
+        // Buscar todos os dados em paralelo
+        const resultado = await Promise.all(
+            agendamentos.map(async (item) => {
+                let cliente_nome = 'N/A';
                 
-                if (solicitacao) {
-                    // Se tiver cliente_id, buscar o cliente
-                    if (solicitacao.cliente_id) {
-                        const { data: cliente } = await supabase
-                            .from('clientes')
-                            .select('nome_completo')
-                            .eq('id', solicitacao.cliente_id)
+                if (item.solicitacao_id) {
+                    try {
+                        const { data: solicitacao } = await supabase
+                            .from('solicitacoes')
+                            .select('cliente_id, dados')
+                            .eq('id', item.solicitacao_id)
                             .single();
                         
-                        if (cliente && cliente.nome_completo) {
-                            cliente_nome = cliente.nome_completo;
+                        if (solicitacao && solicitacao.cliente_id) {
+                            const { data: cliente } = await supabase
+                                .from('clientes')
+                                .select('nome_completo')
+                                .eq('id', solicitacao.cliente_id)
+                                .single();
+                            
+                            if (cliente && cliente.nome_completo) {
+                                cliente_nome = cliente.nome_completo;
+                            }
                         }
-                    }
-                    
-                    // Se ainda não tem nome, tentar pegar dos dados
-                    if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
-                        cliente_nome = solicitacao.dados.cliente;
+                    } catch (e) {
+                        // Se der erro, mantém N/A
                     }
                 }
-            }
-            
-            resultado.push({
-                id: item.id,
-                tipo: item.tipo,
-                data_hora: item.data_hora,
-                local: item.local,
-                status: item.status,
-                cliente_nome: cliente_nome
-            });
-        }
+                
+                return {
+                    id: item.id,
+                    tipo: item.tipo,
+                    data_hora: item.data_hora,
+                    local: item.local,
+                    status: item.status,
+                    cliente_nome: cliente_nome
+                };
+            })
+        );
 
         res.json({
             success: true,
