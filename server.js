@@ -1045,11 +1045,10 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
     }
 });
 
-// GET - Próximos agendamentos
-// GET - Próximos agendamentos (versão simples)
+// GET - Próximos agendamentos (versão via compromissos)
 app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     try {
-        // Buscar agendamentos com status 'agendado'
+        // 1. Buscar agendamentos com status 'agendado'
         const { data: agendamentos, error } = await supabase
             .from('agendamentos')
             .select('*')
@@ -1059,52 +1058,36 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
 
         if (error) throw error;
 
-        // Adicionar nome do cliente (buscar de forma separada)
-        const agendamentosComCliente = await Promise.all(
-            agendamentos.map(async (item) => {
-                let cliente_nome = 'N/A';
+        // 2. Para cada agendamento, buscar o cliente via compromissos
+        const resultado = [];
+        
+        for (const item of agendamentos) {
+            let cliente_nome = 'N/A';
+            
+            // Buscar a solicitação
+            if (item.solicitacao_id) {
+                const { data: solicitacao } = await supabase
+                    .from('solicitacoes')
+                    .select('dados')
+                    .eq('id', item.solicitacao_id)
+                    .single();
                 
-                if (item.solicitacao_id) {
-                    // Buscar a solicitação
-                    const { data: solicitacao } = await supabase
-                        .from('solicitacoes')
-                        .select('dados, cliente_id')
-                        .eq('id', item.solicitacao_id)
-                        .single();
-                    
-                    if (solicitacao) {
-                        // Buscar o cliente
-                        if (solicitacao.cliente_id) {
-                            const { data: cliente } = await supabase
-                                .from('clientes')
-                                .select('nome_completo')
-                                .eq('id', solicitacao.cliente_id)
-                                .single();
-                            
-                            if (cliente) {
-                                cliente_nome = cliente.nome_completo;
-                            }
-                        }
-                        
-                        // Fallback: usar dados da solicitação
-                        if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
-                            cliente_nome = solicitacao.dados.cliente;
-                        }
-                    }
+                if (solicitacao && solicitacao.dados && solicitacao.dados.cliente) {
+                    cliente_nome = solicitacao.dados.cliente;
                 }
-                
-                return {
-                    id: item.id,
-                    tipo: item.tipo,
-                    data_hora: item.data_hora,
-                    local: item.local,
-                    status: item.status,
-                    cliente_nome: cliente_nome
-                };
-            })
-        );
+            }
+            
+            resultado.push({
+                id: item.id,
+                tipo: item.tipo,
+                data_hora: item.data_hora,
+                local: item.local,
+                status: item.status,
+                cliente_nome: cliente_nome
+            });
+        }
 
-        res.json({ success: true, agendamentos: agendamentosComCliente });
+        res.json({ success: true, agendamentos: resultado });
 
     } catch (error) {
         console.error('❌ Erro ao buscar próximos agendamentos:', error);
