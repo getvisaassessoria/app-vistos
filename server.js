@@ -497,56 +497,69 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (COM PROMISE.ALL)
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (USANDO COMPROMISSOS)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        const { data: agendamentos, error } = await supabase
-            .from('agendamentos')
-            .select('*')
-            .order('data_hora', { ascending: false });
+        // Buscar da tabela compromissos (que tem os nomes dos clientes)
+        const { data: compromissos, error } = await supabase
+            .from('compromissos')
+            .select(`
+                id,
+                cliente,
+                atividade,
+                data,
+                hora,
+                local,
+                concluido,
+                cliente_id
+            `)
+            .order('data', { ascending: false });
 
         if (error) throw error;
 
-        // Buscar todos os dados em paralelo
-        const resultado = await Promise.all(
-            agendamentos.map(async (item) => {
-                let cliente_nome = 'N/A';
-                
-                if (item.solicitacao_id) {
-                    try {
-                        const { data: solicitacao } = await supabase
-                            .from('solicitacoes')
-                            .select('cliente_id, dados')
-                            .eq('id', item.solicitacao_id)
-                            .single();
-                        
-                        if (solicitacao && solicitacao.cliente_id) {
-                            const { data: cliente } = await supabase
-                                .from('clientes')
-                                .select('nome_completo')
-                                .eq('id', solicitacao.cliente_id)
-                                .single();
-                            
-                            if (cliente && cliente.nome_completo) {
-                                cliente_nome = cliente.nome_completo;
-                            }
-                        }
-                    } catch (e) {
-                        // Se der erro, mantém N/A
-                    }
-                }
-                
-                return {
-                    id: item.id,
-                    tipo: item.tipo,
-                    data_hora: item.data_hora,
-                    local: item.local,
-                    status: item.status,
-                    cliente_nome: cliente_nome
-                };
-            })
-        );
+        // Buscar nomes dos clientes da tabela clientes
+        const clienteIds = compromissos
+            .filter(c => c.cliente_id)
+            .map(c => c.cliente_id);
+
+        let clientesMap = {};
+        if (clienteIds.length > 0) {
+            const { data: clientes } = await supabase
+                .from('clientes')
+                .select('id, nome_completo')
+                .in('id', clienteIds);
+
+            if (clientes) {
+                clientes.forEach(c => {
+                    clientesMap[c.id] = c.nome_completo;
+                });
+            }
+        }
+
+        // Formatar resultado
+        const resultado = compromissos.map(item => {
+            let cliente_nome = item.cliente || 'N/A';
+            
+            if (item.cliente_id && clientesMap[item.cliente_id]) {
+                cliente_nome = clientesMap[item.cliente_id];
+            }
+            
+            // Mapear status
+            let status = 'agendado';
+            if (item.concluido === 1) {
+                status = 'realizado';
+            }
+            
+            return {
+                id: item.id,
+                tipo: item.atividade,
+                data_hora: `${item.data}T${item.hora}:00`,
+                local: item.local,
+                status: status,
+                cliente_nome: cliente_nome
+            };
+        });
 
         res.json({
             success: true,
