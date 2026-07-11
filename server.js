@@ -1046,54 +1046,47 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
 });
 
 // GET - Próximos agendamentos
-// GET - Próximos agendamentos (versão corrigida)
+// GET - Próximos agendamentos (versão simples)
 app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     try {
         // Buscar agendamentos com status 'agendado'
         const { data: agendamentos, error } = await supabase
             .from('agendamentos')
-            .select(`
-                id,
-                tipo,
-                data_hora,
-                local,
-                status,
-                solicitacao_id
-            `)
+            .select('*')
             .eq('status', 'agendado')
             .order('data_hora', { ascending: true })
             .limit(10);
 
         if (error) throw error;
 
-        // Para cada agendamento, buscar o cliente via solicitação
+        // Adicionar nome do cliente (buscar de forma separada)
         const agendamentosComCliente = await Promise.all(
             agendamentos.map(async (item) => {
                 let cliente_nome = 'N/A';
                 
                 if (item.solicitacao_id) {
                     // Buscar a solicitação
-                    const { data: solicitacao, error: err1 } = await supabase
+                    const { data: solicitacao } = await supabase
                         .from('solicitacoes')
                         .select('dados, cliente_id')
                         .eq('id', item.solicitacao_id)
                         .single();
                     
-                    if (solicitacao && !err1) {
-                        // Tentar buscar o cliente pelo cliente_id
+                    if (solicitacao) {
+                        // Buscar o cliente
                         if (solicitacao.cliente_id) {
-                            const { data: cliente, error: err2 } = await supabase
+                            const { data: cliente } = await supabase
                                 .from('clientes')
                                 .select('nome_completo')
                                 .eq('id', solicitacao.cliente_id)
                                 .single();
                             
-                            if (cliente && !err2) {
+                            if (cliente) {
                                 cliente_nome = cliente.nome_completo;
                             }
                         }
                         
-                        // Se não encontrou pelo cliente_id, tentar pelos dados
+                        // Fallback: usar dados da solicitação
                         if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
                             cliente_nome = solicitacao.dados.cliente;
                         }
@@ -1101,7 +1094,11 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
                 }
                 
                 return {
-                    ...item,
+                    id: item.id,
+                    tipo: item.tipo,
+                    data_hora: item.data_hora,
+                    local: item.local,
+                    status: item.status,
                     cliente_nome: cliente_nome
                 };
             })
