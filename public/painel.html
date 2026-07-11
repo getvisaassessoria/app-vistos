@@ -345,6 +345,7 @@
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             text-align: center;
+            cursor: pointer;
             transition: transform 0.2s;
         }
         .dashboard-stats .stat-card:hover {
@@ -476,105 +477,100 @@
         }
 
         /* ===== MODAIS ===== */
-.modal-overlay {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 2000;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-}
-.modal-overlay.show {
-    display: flex;
-}
-.modal-content {
-    background: white;
-    border-radius: 16px;
-    max-width: 800px;
-    width: 100%;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    animation: modalIn 0.3s ease;
-}
-@keyframes modalIn {
-    from { transform: scale(0.9); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 25px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
-    border-radius: 16px 16px 0 0;
-}
-.modal-header h3 {
-    margin: 0;
-    color: #1e293b;
-    font-size: 18px;
-}
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #94a3b8;
-    transition: color 0.2s;
-    padding: 0 10px;
-}
-.modal-close:hover {
-    color: #ef4444;
-}
-.modal-body {
-    padding: 20px 25px;
-    overflow-y: auto;
-    flex: 1;
-}
-.modal-body table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.modal-body th {
-    text-align: left;
-    padding: 10px 15px;
-    background: #f1f5f9;
-    font-size: 12px;
-    text-transform: uppercase;
-    color: #475569;
-}
-.modal-body td {
-    padding: 10px 15px;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 14px;
-}
-.modal-body tr:hover {
-    background: #f8fafc;
-}
-
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 16px 16px 0 0;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: #1e293b;
+            font-size: 18px;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #94a3b8;
+            transition: color 0.2s;
+            padding: 0 10px;
+        }
+        .modal-close:hover {
+            color: #ef4444;
+        }
+        .modal-body {
+            padding: 20px 25px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-body table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .modal-body th {
+            text-align: left;
+            padding: 10px 15px;
+            background: #f1f5f9;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #475569;
+        }
+        .modal-body td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+        }
+        .modal-body tr:hover {
+            background: #f8fafc;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- ============================================================
-         HEADER
-         ============================================================ -->
+    <!-- HEADER -->
     <div class="header">
         <h1>📋 Painel GetVisa</h1>
         <div class="badge">🔄 <span id="ultima-atualizacao">-</span></div>
     </div>
 
-    <!-- ============================================================
-         STATS
-         ============================================================ -->
+    <!-- STATS -->
     <div class="stats">
         <div class="stat-card pendentes" onclick="mudarAba('pendentes')">
             <div class="number" id="total-pendentes">0</div>
@@ -594,9 +590,7 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         TABS
-         ============================================================ -->
+    <!-- TABS -->
     <div class="tabs">
         <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
         <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
@@ -605,9 +599,7 @@
         <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
     </div>
 
-    <!-- ============================================================
-         TAB: PENDENTES
-         ============================================================ -->
+    <!-- TAB: PENDENTES -->
     <div class="tab-content active" id="tab-pendentes">
         <div class="table-container">
             <div class="table-header">
@@ -628,9 +620,7 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         TAB: EM PROCESSO
-         ============================================================ -->
+    <!-- TAB: EM PROCESSO -->
     <div class="tab-content" id="tab-ativos">
         <div class="table-container">
             <div class="table-header">
@@ -644,9 +634,7 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         TAB: AMIGOS
-         ============================================================ -->
+    <!-- TAB: AMIGOS -->
     <div class="tab-content" id="tab-amigos">
         <div class="table-container">
             <div class="table-header">
@@ -660,9 +648,7 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         TAB: ETAPAS (TIMELINE)
-         ============================================================ -->
+    <!-- TAB: ETAPAS (TIMELINE) -->
     <div class="tab-content" id="tab-etapas">
         <div class="table-container">
             <div class="table-header">
@@ -688,27 +674,25 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         TAB: DASHBOARD
-         ============================================================ -->
+    <!-- TAB: DASHBOARD -->
     <div class="tab-content" id="tab-dashboard">
         <div class="dashboard-stats">
-            <div class="stat-card">
+            <div class="stat-card" onclick="abrirModalClientes()">
                 <div class="stat-icon">👥</div>
                 <div class="stat-number" id="dash-total-clientes">0</div>
                 <div class="stat-label">Total de Clientes</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="abrirModalProcessos()">
                 <div class="stat-icon">🟢</div>
                 <div class="stat-number" id="dash-processos-ativos">0</div>
                 <div class="stat-label">Processos Ativos</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="abrirModalAgendamentos()">
                 <div class="stat-icon">📅</div>
                 <div class="stat-number" id="dash-total-agendamentos">0</div>
                 <div class="stat-label">Agendamentos</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="abrirModalEtapas()">
                 <div class="stat-icon">📊</div>
                 <div class="stat-number" id="dash-total-etapas">0</div>
                 <div class="stat-label">Etapas em Andamento</div>
@@ -733,9 +717,7 @@
     </div>
 </div>
 
-<!-- ============================================================
-     TOAST
-     ============================================================ -->
+<!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <!-- ============================================================
@@ -785,19 +767,46 @@ function mudarAba(aba) {
 // ============================================================
 
 function abrirModal(modalId) {
-    document.getElementById(modalId).classList.add('show');
-    document.body.style.overflow = 'hidden';
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
 }
 
 function fecharModal(event, modalId) {
     if (event && event.target !== event.currentTarget) return;
-    document.getElementById(modalId).classList.remove('show');
-    document.body.style.overflow = '';
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+}
+
+function abrirModalClientes() {
+    abrirModal('modal-clientes');
+    carregarClientesModal();
+}
+
+function abrirModalProcessos() {
+    abrirModal('modal-processos');
+    carregarProcessosModal();
+}
+
+function abrirModalAgendamentos() {
+    abrirModal('modal-agendamentos');
+    carregarAgendamentosModal();
+}
+
+function abrirModalEtapas() {
+    abrirModal('modal-etapas');
+    carregarEtapasModal();
 }
 
 // Carregar clientes no modal
 async function carregarClientesModal() {
     const body = document.getElementById('modal-clientes-body');
+    if (!body) return;
     body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
     
     try {
@@ -808,7 +817,7 @@ async function carregarClientesModal() {
         
         let html = '<table><thead><tr><th>Nome</th><th>Email</th><th>Telefone</th></tr></thead><tbody>';
         
-        data.clientes.forEach(c => {
+        (data.clientes || []).forEach(c => {
             html += `
                 <tr>
                     <td>${c.nome_completo || 'N/A'}</td>
@@ -829,6 +838,7 @@ async function carregarClientesModal() {
 // Carregar processos ativos no modal
 async function carregarProcessosModal() {
     const body = document.getElementById('modal-processos-body');
+    if (!body) return;
     body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
     
     try {
@@ -839,7 +849,7 @@ async function carregarProcessosModal() {
         
         let html = '<table><thead><tr><th>Telefone</th><th>Nome</th><th>Status</th><th>Início</th></tr></thead><tbody>';
         
-        data.ativos.forEach(c => {
+        (data.ativos || []).forEach(c => {
             const inicio = c.criado_em ? new Date(c.criado_em).toLocaleDateString('pt-BR') : '-';
             html += `
                 <tr>
@@ -862,6 +872,7 @@ async function carregarProcessosModal() {
 // Carregar agendamentos no modal
 async function carregarAgendamentosModal() {
     const body = document.getElementById('modal-agendamentos-body');
+    if (!body) return;
     body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
     
     try {
@@ -872,7 +883,7 @@ async function carregarAgendamentosModal() {
         
         let html = '<table><thead><tr><th>Cliente</th><th>Tipo</th><th>Data/Hora</th><th>Local</th><th>Status</th></tr></thead><tbody>';
         
-        data.agendamentos.forEach(a => {
+        (data.agendamentos || []).forEach(a => {
             const dataHora = new Date(a.data_hora).toLocaleString('pt-BR');
             const statusMap = {
                 'agendado': '🟡 Agendado',
@@ -901,6 +912,7 @@ async function carregarAgendamentosModal() {
 // Carregar etapas no modal
 async function carregarEtapasModal() {
     const body = document.getElementById('modal-etapas-body');
+    if (!body) return;
     body.innerHTML = '<div class="loading">🔄 Carregando...</div>';
     
     try {
@@ -911,7 +923,7 @@ async function carregarEtapasModal() {
         
         let html = '<table><thead><tr><th>Etapa</th><th>Quantidade</th><th>Porcentagem</th></tr></thead><tbody>';
         
-        data.distribuicao.forEach(e => {
+        (data.distribuicao || []).forEach(e => {
             html += `
                 <tr>
                     <td>${e.label || e.etapa}</td>
@@ -1482,7 +1494,7 @@ function showToast(mensagem, tipo = 'info') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-/// ============================================================
+// ============================================================
 //  INICIALIZAÇÃO
 // ============================================================
 carregarDados();
@@ -1533,8 +1545,6 @@ console.log('✅ Painel GetVisa com Timeline e Dashboard carregado!');
         </div>
     </div>
 </div>
-
-
 
 <!-- Modal de Etapas -->
 <div class="modal-overlay" id="modal-etapas" onclick="fecharModal(event, 'modal-etapas')">
