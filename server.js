@@ -497,7 +497,7 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (USANDO COMPROMISSOS)
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (USANDO CAMPO CLIENTE)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
@@ -509,26 +509,10 @@ app.get('/api/agendamentos/listar', async (req, res) => {
 
         if (error) throw error;
 
-        // Buscar todos os clientes para mapear os nomes
-        const { data: clientes } = await supabase
-            .from('clientes')
-            .select('id, nome_completo');
-
-        const clientesMap = {};
-        if (clientes) {
-            clientes.forEach(c => {
-                clientesMap[c.id] = c.nome_completo;
-            });
-        }
-
-        // Formatar resultado
+        // Formatar resultado - usar o campo 'cliente' diretamente
         const resultado = compromissos.map(item => {
-            // Tentar pegar o nome do cliente
+            // Usar o campo 'cliente' que já existe na tabela
             let cliente_nome = item.cliente || 'N/A';
-            
-            if (item.cliente_id && clientesMap[item.cliente_id]) {
-                cliente_nome = clientesMap[item.cliente_id];
-            }
             
             // Mapear status
             let status = 'agendado';
