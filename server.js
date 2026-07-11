@@ -497,38 +497,25 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS (USANDO CAMPO CLIENTE)
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (VERSÃO MAIS SIMPLES)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        // Buscar diretamente da tabela compromissos
         const { data: compromissos, error } = await supabase
             .from('compromissos')
-            .select('*')
+            .select('id, cliente, atividade, data, hora, local, concluido')
             .order('data', { ascending: false });
 
         if (error) throw error;
 
-        // Formatar resultado - usar o campo 'cliente' diretamente
-        const resultado = compromissos.map(item => {
-            // Usar o campo 'cliente' que já existe na tabela
-            let cliente_nome = item.cliente || 'N/A';
-            
-            // Mapear status
-            let status = 'agendado';
-            if (item.concluido === 1 || item.concluido === true) {
-                status = 'realizado';
-            }
-            
-            return {
-                id: item.id,
-                tipo: item.atividade || 'N/A',
-                data_hora: item.data && item.hora ? `${item.data}T${item.hora}:00` : null,
-                local: item.local || 'N/A',
-                status: status,
-                cliente_nome: cliente_nome
-            };
-        });
+        const resultado = compromissos.map(item => ({
+            id: item.id,
+            tipo: item.atividade || 'N/A',
+            data_hora: item.data && item.hora ? `${item.data}T${item.hora}:00` : null,
+            local: item.local || 'N/A',
+            status: item.concluido === 1 ? 'realizado' : 'agendado',
+            cliente_nome: item.cliente || 'N/A'
+        }));
 
         res.json({
             success: true,
