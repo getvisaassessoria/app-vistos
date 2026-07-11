@@ -499,43 +499,64 @@ app.get('/api/clientes/listar', async (req, res) => {
 // ============================================================
 // ROTA - LISTAR TODOS OS AGENDAMENTOS (CORRIGIDA)
 // ============================================================
+// ============================================================
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (VERSÃO SIMPLES)
+// ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        // Buscar agendamentos com os relacionamentos
+        // 1. Buscar todos os agendamentos
         const { data: agendamentos, error } = await supabase
             .from('agendamentos')
-            .select(`
-                id,
-                tipo,
-                data_hora,
-                local,
-                status,
-                solicitacao_id,
-                solicitacoes (
-                    cliente_id,
-                    dados,
-                    clientes (
-                        nome_completo
-                    )
-                )
-            `)
+            .select('*')
             .order('data_hora', { ascending: false });
 
         if (error) throw error;
 
-        // Formatar o resultado
+        // 2. Buscar todas as solicitações
+        const solicitacaoIds = agendamentos
+            .filter(a => a.solicitacao_id)
+            .map(a => a.solicitacao_id);
+
+        let solicitacoesMap = {};
+        if (solicitacaoIds.length > 0) {
+            const { data: solicitacoes } = await supabase
+                .from('solicitacoes')
+                .select('id, cliente_id, dados')
+                .in('id', solicitacaoIds);
+
+            if (solicitacoes) {
+                solicitacoes.forEach(s => {
+                    solicitacoesMap[s.id] = s;
+                });
+            }
+        }
+
+        // 3. Buscar todos os clientes
+        const { data: clientes } = await supabase
+            .from('clientes')
+            .select('id, nome_completo');
+
+        const clientesMap = {};
+        if (clientes) {
+            clientes.forEach(c => {
+                clientesMap[c.id] = c.nome_completo;
+            });
+        }
+
+        // 4. Montar resultado com nomes
         const resultado = agendamentos.map(item => {
             let cliente_nome = 'N/A';
             
-            // Tentar pegar o nome do cliente via relacionamento
-            if (item.solicitacoes) {
-                // Via clientes (relacionamento direto)
-                if (item.solicitacoes.clientes && item.solicitacoes.clientes.nome_completo) {
-                    cliente_nome = item.solicitacoes.clientes.nome_completo;
+            const solicitacao = item.solicitacao_id ? solicitacoesMap[item.solicitacao_id] : null;
+            
+            if (solicitacao) {
+                // Tentar pelo cliente_id da solicitação
+                if (solicitacao.cliente_id && clientesMap[solicitacao.cliente_id]) {
+                    cliente_nome = clientesMap[solicitacao.cliente_id];
                 }
-                // Via dados da solicitação (fallback)
-                else if (item.solicitacoes.dados && item.solicitacoes.dados.cliente) {
-                    cliente_nome = item.solicitacoes.dados.cliente;
+                // Fallback: usar dados da solicitação
+                else if (solicitacao.dados && solicitacao.dados.cliente) {
+                    cliente_nome = solicitacao.dados.cliente;
                 }
             }
             
