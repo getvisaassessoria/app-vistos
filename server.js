@@ -501,44 +501,29 @@ app.get('/api/clientes/listar', async (req, res) => {
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        // Buscar da tabela compromissos (que tem os nomes dos clientes)
+        // Buscar diretamente da tabela compromissos
         const { data: compromissos, error } = await supabase
             .from('compromissos')
-            .select(`
-                id,
-                cliente,
-                atividade,
-                data,
-                hora,
-                local,
-                concluido,
-                cliente_id
-            `)
+            .select('*')
             .order('data', { ascending: false });
 
         if (error) throw error;
 
-        // Buscar nomes dos clientes da tabela clientes
-        const clienteIds = compromissos
-            .filter(c => c.cliente_id)
-            .map(c => c.cliente_id);
+        // Buscar todos os clientes para mapear os nomes
+        const { data: clientes } = await supabase
+            .from('clientes')
+            .select('id, nome_completo');
 
-        let clientesMap = {};
-        if (clienteIds.length > 0) {
-            const { data: clientes } = await supabase
-                .from('clientes')
-                .select('id, nome_completo')
-                .in('id', clienteIds);
-
-            if (clientes) {
-                clientes.forEach(c => {
-                    clientesMap[c.id] = c.nome_completo;
-                });
-            }
+        const clientesMap = {};
+        if (clientes) {
+            clientes.forEach(c => {
+                clientesMap[c.id] = c.nome_completo;
+            });
         }
 
         // Formatar resultado
         const resultado = compromissos.map(item => {
+            // Tentar pegar o nome do cliente
             let cliente_nome = item.cliente || 'N/A';
             
             if (item.cliente_id && clientesMap[item.cliente_id]) {
@@ -547,15 +532,15 @@ app.get('/api/agendamentos/listar', async (req, res) => {
             
             // Mapear status
             let status = 'agendado';
-            if (item.concluido === 1) {
+            if (item.concluido === 1 || item.concluido === true) {
                 status = 'realizado';
             }
             
             return {
                 id: item.id,
-                tipo: item.atividade,
-                data_hora: `${item.data}T${item.hora}:00`,
-                local: item.local,
+                tipo: item.atividade || 'N/A',
+                data_hora: item.data && item.hora ? `${item.data}T${item.hora}:00` : null,
+                local: item.local || 'N/A',
                 status: status,
                 cliente_nome: cliente_nome
             };
