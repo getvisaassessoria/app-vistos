@@ -1046,9 +1046,11 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
 });
 
 // GET - Próximos agendamentos
+// GET - Próximos agendamentos (versão corrigida)
 app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     try {
-        const { data, error } = await supabase
+        // Buscar agendamentos com status 'agendado'
+        const { data: agendamentos, error } = await supabase
             .from('agendamentos')
             .select(`
                 id,
@@ -1056,11 +1058,7 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
                 data_hora,
                 local,
                 status,
-                solicitacoes (
-                    dados,
-                    cliente_id,
-                    clientes (nome_completo)
-                )
+                solicitacao_id
             `)
             .eq('status', 'agendado')
             .order('data_hora', { ascending: true })
@@ -1068,23 +1066,48 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
 
         if (error) throw error;
 
-        // Formatando os dados
-        const agendamentos = data.map(item => {
-            let cliente_nome = 'N/A';
-            if (item.solicitacoes) {
-                if (item.solicitacoes.clientes) {
-                    cliente_nome = item.solicitacoes.clientes.nome_completo || 'N/A';
-                } else if (item.solicitacoes.dados && item.solicitacoes.dados.cliente) {
-                    cliente_nome = item.solicitacoes.dados.cliente;
+        // Para cada agendamento, buscar o cliente via solicitação
+        const agendamentosComCliente = await Promise.all(
+            agendamentos.map(async (item) => {
+                let cliente_nome = 'N/A';
+                
+                if (item.solicitacao_id) {
+                    // Buscar a solicitação
+                    const { data: solicitacao, error: err1 } = await supabase
+                        .from('solicitacoes')
+                        .select('dados, cliente_id')
+                        .eq('id', item.solicitacao_id)
+                        .single();
+                    
+                    if (solicitacao && !err1) {
+                        // Tentar buscar o cliente pelo cliente_id
+                        if (solicitacao.cliente_id) {
+                            const { data: cliente, error: err2 } = await supabase
+                                .from('clientes')
+                                .select('nome_completo')
+                                .eq('id', solicitacao.cliente_id)
+                                .single();
+                            
+                            if (cliente && !err2) {
+                                cliente_nome = cliente.nome_completo;
+                            }
+                        }
+                        
+                        // Se não encontrou pelo cliente_id, tentar pelos dados
+                        if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
+                            cliente_nome = solicitacao.dados.cliente;
+                        }
+                    }
                 }
-            }
-            return {
-                ...item,
-                cliente_nome: cliente_nome
-            };
-        });
+                
+                return {
+                    ...item,
+                    cliente_nome: cliente_nome
+                };
+            })
+        );
 
-        res.json({ success: true, agendamentos });
+        res.json({ success: true, agendamentos: agendamentosComCliente });
 
     } catch (error) {
         console.error('❌ Erro ao buscar próximos agendamentos:', error);
