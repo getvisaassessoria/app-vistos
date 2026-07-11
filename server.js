@@ -977,6 +977,122 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 });
 
 // ============================================================
+// ROTAS DO DASHBOARD
+// ============================================================
+
+// GET - Estatísticas do Dashboard
+app.get('/api/dashboard/estatisticas', async (req, res) => {
+    try {
+        // Total de clientes
+        const { count: total_clientes, error: err1 } = await supabase
+            .from('clientes')
+            .select('*', { count: 'exact', head: true });
+
+        // Total de ativos
+        const { count: total_ativos, error: err2 } = await supabase
+            .from('clientes_ativos')
+            .select('*', { count: 'exact', head: true });
+
+        // Total de agendamentos
+        const { count: total_agendamentos, error: err3 } = await supabase
+            .from('agendamentos')
+            .select('*', { count: 'exact', head: true });
+
+        // Total de etapas
+        const { count: total_etapas, error: err4 } = await supabase
+            .from('etapas_processo')
+            .select('*', { count: 'exact', head: true });
+
+        // Agendamentos por status
+        const { data: agendamentosData, error: err5 } = await supabase
+            .from('agendamentos')
+            .select('status');
+
+        const agendamentos_por_status = {};
+        if (agendamentosData) {
+            agendamentosData.forEach(a => {
+                agendamentos_por_status[a.status] = (agendamentos_por_status[a.status] || 0) + 1;
+            });
+        }
+
+        // Etapas por status
+        const { data: etapasData, error: err6 } = await supabase
+            .from('etapas_processo')
+            .select('etapa_atual');
+
+        const etapas_por_status = {};
+        if (etapasData) {
+            etapasData.forEach(e => {
+                etapas_por_status[e.etapa_atual] = (etapas_por_status[e.etapa_atual] || 0) + 1;
+            });
+        }
+
+        res.json({
+            success: true,
+            estatisticas: {
+                total_clientes: total_clientes || 0,
+                total_ativos: total_ativos || 0,
+                total_agendamentos: total_agendamentos || 0,
+                total_etapas: total_etapas || 0,
+                agendamentos_por_status: agendamentos_por_status,
+                etapas_por_status: etapas_por_status
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar estatísticas:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Próximos agendamentos
+app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('agendamentos')
+            .select(`
+                id,
+                tipo,
+                data_hora,
+                local,
+                status,
+                solicitacoes (
+                    dados,
+                    cliente_id,
+                    clientes (nome_completo)
+                )
+            `)
+            .eq('status', 'agendado')
+            .order('data_hora', { ascending: true })
+            .limit(10);
+
+        if (error) throw error;
+
+        // Formatando os dados
+        const agendamentos = data.map(item => {
+            let cliente_nome = 'N/A';
+            if (item.solicitacoes) {
+                if (item.solicitacoes.clientes) {
+                    cliente_nome = item.solicitacoes.clientes.nome_completo || 'N/A';
+                } else if (item.solicitacoes.dados && item.solicitacoes.dados.cliente) {
+                    cliente_nome = item.solicitacoes.dados.cliente;
+                }
+            }
+            return {
+                ...item,
+                cliente_nome: cliente_nome
+            };
+        });
+
+        res.json({ success: true, agendamentos });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar próximos agendamentos:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================================
 //  INICIALIZAÇÃO
 // ============================================================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
