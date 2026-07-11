@@ -497,61 +497,61 @@ app.get('/api/clientes/listar', async (req, res) => {
 });
 
 // ============================================================
-// ROTA - LISTAR TODOS OS AGENDAMENTOS
+// ROTA - LISTAR TODOS OS AGENDAMENTOS (CORRIGIDA)
 // ============================================================
 app.get('/api/agendamentos/listar', async (req, res) => {
     try {
-        const { data, error } = await supabase
+        // Buscar agendamentos com os relacionamentos
+        const { data: agendamentos, error } = await supabase
             .from('agendamentos')
-            .select('*')
+            .select(`
+                id,
+                tipo,
+                data_hora,
+                local,
+                status,
+                solicitacao_id,
+                solicitacoes (
+                    cliente_id,
+                    dados,
+                    clientes (
+                        nome_completo
+                    )
+                )
+            `)
             .order('data_hora', { ascending: false });
 
         if (error) throw error;
 
-        // Buscar os nomes dos clientes para cada agendamento
-        const agendamentosComCliente = await Promise.all(
-            (data || []).map(async (item) => {
-                let cliente_nome = 'N/A';
-                
-                if (item.solicitacao_id) {
-                    // Buscar a solicitação
-                    const { data: solicitacao } = await supabase
-                        .from('solicitacoes')
-                        .select('cliente_id, dados')
-                        .eq('id', item.solicitacao_id)
-                        .single();
-                    
-                    if (solicitacao) {
-                        // Buscar o cliente pelo cliente_id
-                        if (solicitacao.cliente_id) {
-                            const { data: cliente } = await supabase
-                                .from('clientes')
-                                .select('nome_completo')
-                                .eq('id', solicitacao.cliente_id)
-                                .single();
-                            
-                            if (cliente) {
-                                cliente_nome = cliente.nome_completo || 'N/A';
-                            }
-                        }
-                        
-                        // Fallback: usar dados da solicitação
-                        if (cliente_nome === 'N/A' && solicitacao.dados && solicitacao.dados.cliente) {
-                            cliente_nome = solicitacao.dados.cliente;
-                        }
-                    }
+        // Formatar o resultado
+        const resultado = agendamentos.map(item => {
+            let cliente_nome = 'N/A';
+            
+            // Tentar pegar o nome do cliente via relacionamento
+            if (item.solicitacoes) {
+                // Via clientes (relacionamento direto)
+                if (item.solicitacoes.clientes && item.solicitacoes.clientes.nome_completo) {
+                    cliente_nome = item.solicitacoes.clientes.nome_completo;
                 }
-                
-                return {
-                    ...item,
-                    cliente_nome: cliente_nome
-                };
-            })
-        );
+                // Via dados da solicitação (fallback)
+                else if (item.solicitacoes.dados && item.solicitacoes.dados.cliente) {
+                    cliente_nome = item.solicitacoes.dados.cliente;
+                }
+            }
+            
+            return {
+                id: item.id,
+                tipo: item.tipo,
+                data_hora: item.data_hora,
+                local: item.local,
+                status: item.status,
+                cliente_nome: cliente_nome
+            };
+        });
 
         res.json({
             success: true,
-            agendamentos: agendamentosComCliente || []
+            agendamentos: resultado
         });
 
     } catch (error) {
