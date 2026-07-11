@@ -1076,9 +1076,9 @@ app.post('/api/submit-ds160', async (req, res) => {
        const { data: formulario, error: insertError } = await supabase
     .from('formulario_ds160')
     .insert({
-        nome_completo: nome,                 // ✅ coluna correta
+        nome: nome,                          // ✅ nome (padronizado)
         email_principal: emailCliente,
-        telefone_principal: telefoneCliente, // ✅ coluna correta
+        telefone: telefoneCliente,           // ✅ telefone (padronizado)
         numero_passaporte: data['text-38'] || null,
         cpf: data['text-86'] || null,
         protocolo: data['protocolo'] || null,
