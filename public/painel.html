@@ -332,6 +332,109 @@
             font-size: 14px;
         }
 
+        /* ===== DASHBOARD ===== */
+        .dashboard-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .dashboard-stats .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .dashboard-stats .stat-card:hover {
+            transform: translateY(-3px);
+        }
+        .dashboard-stats .stat-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .dashboard-stats .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #003366;
+        }
+        .dashboard-stats .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .dashboard-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .chart-container h4 {
+            margin-bottom: 15px;
+            color: #1e293b;
+            font-size: 16px;
+        }
+        .dashboard-table {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .dashboard-table h4 {
+            margin-bottom: 15px;
+            color: #1e293b;
+            font-size: 16px;
+        }
+        .barra-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .barra-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .barra-label {
+            width: 200px;
+            font-size: 13px;
+            color: #333;
+            text-align: right;
+        }
+        .barra-holder {
+            flex: 1;
+            height: 24px;
+            background: #f1f5f9;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+        .barra-fill {
+            height: 100%;
+            border-radius: 12px;
+            transition: width 0.8s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 12px;
+            color: white;
+            font-weight: 600;
+        }
+        .barra-valor {
+            min-width: 40px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
         /* ===== TOAST ===== */
         .toast {
             position: fixed;
@@ -359,6 +462,8 @@
         /* ===== RESPONSIVO ===== */
         @media (max-width: 768px) {
             .stats { grid-template-columns: 1fr 1fr; }
+            .dashboard-stats { grid-template-columns: 1fr 1fr; }
+            .dashboard-charts { grid-template-columns: 1fr; }
             .table-header { flex-direction: column; }
             .table-header input { width: 100%; }
             .table-header select { width: 100%; }
@@ -367,6 +472,7 @@
             .tabs { flex-direction: column; }
             .timeline-actions { flex-direction: column; }
             .timeline-actions input { width: 100%; }
+            .barra-label { width: 100px; font-size: 11px; }
         }
     </style>
 </head>
@@ -411,6 +517,7 @@
         <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
         <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
         <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
+        <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
     </div>
 
     <!-- ============================================================
@@ -495,6 +602,50 @@
             </div>
         </div>
     </div>
+
+    <!-- ============================================================
+         TAB: DASHBOARD
+         ============================================================ -->
+    <div class="tab-content" id="tab-dashboard">
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-number" id="dash-total-clientes">0</div>
+                <div class="stat-label">Total de Clientes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🟢</div>
+                <div class="stat-number" id="dash-processos-ativos">0</div>
+                <div class="stat-label">Processos Ativos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-number" id="dash-total-agendamentos">0</div>
+                <div class="stat-label">Agendamentos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-number" id="dash-total-etapas">0</div>
+                <div class="stat-label">Etapas em Andamento</div>
+            </div>
+        </div>
+        <div class="dashboard-charts">
+            <div class="chart-container">
+                <h4>📊 Distribuição de Etapas</h4>
+                <div id="chart-etapas"></div>
+            </div>
+            <div class="chart-container">
+                <h4>📅 Agendamentos por Tipo</h4>
+                <div id="chart-agendamentos"></div>
+            </div>
+        </div>
+        <div class="dashboard-table">
+            <h4>📅 Próximos Agendamentos</h4>
+            <div id="dash-proximos-agendamentos">
+                <div class="loading">🔄 Carregando...</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- ============================================================
@@ -541,6 +692,7 @@ function mudarAba(aba) {
     else if (aba === 'ativos') renderAtivos();
     else if (aba === 'amigos') renderAmigos();
     else if (aba === 'etapas') carregarClientesParaTimeline();
+    else if (aba === 'dashboard') carregarDashboard();
 }
 
 // ============================================================
@@ -916,6 +1068,176 @@ function filtrarTabela(tipo) {
 }
 
 // ============================================================
+//  DASHBOARD
+// ============================================================
+async function carregarDashboard() {
+    try {
+        const response = await fetch('/api/dashboard/estatisticas');
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.message || 'Erro ao carregar dashboard');
+        }
+        
+        document.getElementById('dash-total-clientes').textContent = data.estatisticas.total_clientes || 0;
+        document.getElementById('dash-processos-ativos').textContent = data.estatisticas.total_ativos || 0;
+        document.getElementById('dash-total-agendamentos').textContent = data.estatisticas.total_agendamentos || 0;
+        document.getElementById('dash-total-etapas').textContent = data.estatisticas.total_etapas || 0;
+        
+        renderGraficoEtapas(data.estatisticas.etapas_por_status);
+        renderGraficoAgendamentos(data.estatisticas.agendamentos_por_status);
+        
+        await carregarProximosAgendamentos();
+        
+    } catch (error) {
+        console.error('❌ Erro ao carregar dashboard:', error);
+        document.getElementById('dash-proximos-agendamentos').innerHTML = 
+            `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
+    }
+}
+
+function renderGraficoEtapas(dados) {
+    const container = document.getElementById('chart-etapas');
+    if (!dados || Object.keys(dados).length === 0) {
+        container.innerHTML = '<div class="empty">Nenhuma etapa em andamento</div>';
+        return;
+    }
+    const cores = {
+        'formulario_enviado': '#3498db',
+        'analise_correcoes': '#f39c12',
+        'boleto_emitido': '#e67e22',
+        'boleto_pago': '#27ae60',
+        'agendamento_realizado': '#2980b9',
+        'treinamento_realizado': '#8e44ad',
+        'entrevista_realizada': '#2c3e50',
+        'passaporte_retornado': '#2ecc71'
+    };
+    const labels = {
+        'formulario_enviado': '📝 Formulário Enviado',
+        'analise_correcoes': '🔍 Análise e Correções',
+        'boleto_emitido': '💰 Boleto Emitido',
+        'boleto_pago': '✅ Boleto Pago',
+        'agendamento_realizado': '📅 Agendamento Realizado',
+        'treinamento_realizado': '🎯 Treinamento Concluído',
+        'entrevista_realizada': '🎤 Entrevista Realizada',
+        'passaporte_retornado': '📫 Passaporte Retornado'
+    };
+    const total = Object.values(dados).reduce((a, b) => a + b, 0);
+    let html = '<div class="barra-container">';
+    for (const [etapa, quantidade] of Object.entries(dados)) {
+        const porcentagem = total > 0 ? (quantidade / total * 100).toFixed(1) : 0;
+        const cor = cores[etapa] || '#6c757d';
+        const label = labels[etapa] || etapa;
+        html += `
+            <div class="barra-item">
+                <span class="barra-label">${label}</span>
+                <div class="barra-holder">
+                    <div class="barra-fill" style="width: ${porcentagem}%; background: ${cor};">
+                        ${porcentagem}%
+                    </div>
+                </div>
+                <span class="barra-valor">${quantidade}</span>
+            </div>
+        `;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderGraficoAgendamentos(dados) {
+    const container = document.getElementById('chart-agendamentos');
+    if (!dados || Object.keys(dados).length === 0) {
+        container.innerHTML = '<div class="empty">Nenhum agendamento</div>';
+        return;
+    }
+    const cores = {
+        'casv': '#3498db',
+        'consulado': '#2ecc71',
+        'treinamento': '#f39c12',
+        'agendado': '#f59e0b',
+        'realizado': '#10b981',
+        'cancelado': '#ef4444'
+    };
+    const labels = {
+        'casv': '🏛️ CASV',
+        'consulado': '🎤 Consulado',
+        'treinamento': '📚 Treinamento',
+        'agendado': '🟡 Agendado',
+        'realizado': '✅ Realizado',
+        'cancelado': '❌ Cancelado'
+    };
+    const total = Object.values(dados).reduce((a, b) => a + b, 0);
+    let html = '<div class="barra-container">';
+    for (const [tipo, quantidade] of Object.entries(dados)) {
+        const porcentagem = total > 0 ? (quantidade / total * 100).toFixed(1) : 0;
+        const cor = cores[tipo] || '#6c757d';
+        const label = labels[tipo] || tipo;
+        html += `
+            <div class="barra-item">
+                <span class="barra-label">${label}</span>
+                <div class="barra-holder">
+                    <div class="barra-fill" style="width: ${porcentagem}%; background: ${cor};">
+                        ${porcentagem}%
+                    </div>
+                </div>
+                <span class="barra-valor">${quantidade}</span>
+            </div>
+        `;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function carregarProximosAgendamentos() {
+    const container = document.getElementById('dash-proximos-agendamentos');
+    try {
+        const response = await fetch('/api/dashboard/proximos-agendamentos');
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Erro ao carregar');
+        const agendamentos = data.agendamentos || [];
+        if (agendamentos.length === 0) {
+            container.innerHTML = '<div class="empty">📅 Nenhum agendamento futuro</div>';
+            return;
+        }
+        let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Tipo</th>
+                        <th>Data/Hora</th>
+                        <th>Local</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        agendamentos.forEach(item => {
+            const dataHora = new Date(item.data_hora).toLocaleString('pt-BR');
+            const statusMap = {
+                'agendado': '🟡 Agendado',
+                'realizado': '✅ Realizado',
+                'cancelado': '❌ Cancelado'
+            };
+            html += `
+                <tr>
+                    <td>${item.cliente_nome || 'N/A'}</td>
+                    <td>${item.tipo}</td>
+                    <td>${dataHora}</td>
+                    <td>${item.local || 'N/A'}</td>
+                    <td>${statusMap[item.status] || item.status}</td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('❌ Erro ao carregar agendamentos:', error);
+        container.innerHTML = `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
+    }
+}
+
+// ============================================================
 //  TOAST
 // ============================================================
 function showToast(mensagem, tipo = 'info') {
@@ -932,7 +1254,7 @@ function showToast(mensagem, tipo = 'info') {
 carregarDados();
 setInterval(carregarDados, 30000);
 setTimeout(carregarClientesParaTimeline, 1000);
-console.log('✅ Painel GetVisa com Timeline carregado!');
+console.log('✅ Painel GetVisa com Timeline e Dashboard carregado!');
 </script>
 
 </body>
