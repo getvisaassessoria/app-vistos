@@ -1186,22 +1186,20 @@ if (telefoneCliente) {
         }
 
         // 3. Se não existir, CRIAR O CLIENTE PRIMEIRO
-        if (!clienteExistente) {
-            const { error: insertError } = await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: telefoneLimpo,
-                    nome: nome
-                });
+if (!clienteExistente) {
+    const { error: insertError } = await supabase
+        .from('clientes_ativos')
+        .insert({
+            telefone: telefoneLimpo,  // ← usar sem formatação
+            nome: nome
+        });
 
-            if (insertError) {
-                console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
-            } else {
-                console.log(`✅ Cliente ${telefoneLimpo} criado em ATIVOS`);
-            }
-        } else {
-            console.log(`ℹ️ Cliente ${telefoneLimpo} já existe em ATIVOS`);
-        }
+    if (insertError) {
+        console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
+    } else {
+        console.log(`✅ Cliente ${telefoneLimpo} criado em ATIVOS`);
+    }
+}
 
         // 4. AGORA criar a etapa (depois que o cliente foi criado)
         // Aguardar um momento para garantir que o cliente foi salvo
