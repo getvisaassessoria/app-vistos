@@ -1104,64 +1104,64 @@ app.post('/api/submit-ds160', async (req, res) => {
       }
 
       // ============================================================
-      //  🔄 ATUALIZAR CLIENTE (se existir)
-      //  ============================================================
-      if (telefoneCliente) {
-        try {
-          // Busca se o cliente existe em clientes_novos
-          const { data: clienteNovo } = await supabase
+//  🔄 CRIAR CLIENTE EM clientes_ativos (DIRETO)
+//  ============================================================
+if (telefoneCliente) {
+    try {
+        // 1. Verificar se já existe em clientes_ativos
+        const { data: clienteExistente, error: err1 } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneCliente)
+            .maybeSingle();
+
+        if (err1) {
+            console.error('❌ Erro ao verificar cliente:', err1);
+        } else if (!clienteExistente) {
+            // 2. Criar em clientes_ativos
+            const { error: insertError } = await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: telefoneCliente,
+                    nome: nome,
+                    email: emailCliente,
+                    status: 'em_processo',
+                    criado_em: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                });
+
+            if (insertError) {
+                console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
+            } else {
+                console.log(`✅ Cliente ${telefoneCliente} criado em ATIVOS`);
+                
+                // 3. Criar etapa inicial
+                await criarEtapaInicial(telefoneCliente);
+                console.log(`✅ Etapa criada para ${telefoneCliente}`);
+            }
+        } else {
+            console.log(`ℹ️ Cliente ${telefoneCliente} já existe em ATIVOS`);
+        }
+
+        // 4. Remover de clientes_novos (se existir)
+        const { data: clienteNovo } = await supabase
             .from('clientes_novos')
             .select('*')
             .eq('telefone', telefoneCliente)
             .maybeSingle();
 
-          if (clienteNovo) {
-            // Move para clientes_ativos (já enviou DS-160, está em processo)
+        if (clienteNovo) {
             await supabase
-              .from('clientes_ativos')
-              .insert({
-                telefone: clienteNovo.telefone,
-                nome: clienteNovo.nome || nome,
-                email: emailCliente,
-                status: 'em_processo',
-                criado_em: clienteNovo.data_contato,
-                atualizado_em: new Date().toISOString()
-              });
-
-            await supabase
-              .from('clientes_novos')
-              .delete()
-              .eq('telefone', telefoneCliente);
-
-            console.log(`✅ Cliente ${telefoneCliente} movido para ATIVOS (enviou DS-160)`);
-          } else {
-            // Verifica se já está em clientes_ativos
-            const { data: clienteAtivo } = await supabase
-              .from('clientes_ativos')
-              .select('*')
-              .eq('telefone', telefoneCliente)
-              .maybeSingle();
-
-            if (!clienteAtivo) {
-              // Cria direto em clientes_ativos
-              await supabase
-                .from('clientes_ativos')
-                .insert({
-                  telefone: telefoneCliente,
-                  nome: nome,
-                  email: emailCliente,
-                  status: 'em_processo',
-                  criado_em: new Date().toISOString(),
-                  atualizado_em: new Date().toISOString()
-                });
-              console.log(`✅ Cliente ${telefoneCliente} criado em ATIVOS (enviou DS-160)`);
-            }
-          }
-        } catch (err) {
-          console.error('⚠️ Erro ao atualizar cliente:', err.message);
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', telefoneCliente);
+            console.log(`✅ Cliente ${telefoneCliente} removido de NOVOS`);
         }
-      }
 
+    } catch (err) {
+        console.error('⚠️ Erro ao processar cliente:', err.message);
+    }
+}
       // ============================================================
       //  📧 ENVIAR E-MAIL
       //  ============================================================
