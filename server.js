@@ -349,13 +349,19 @@ async function criarEtapaInicial(telefone) {
       .from('clientes_ativos').select('telefone, nome, criado_em').eq('telefone', telefone).single();
     if (clienteError) throw clienteError;
     const novaEtapa = {
-      cliente_telefone: telefone,
-      etapa_atual: 'formulario_enviado',
-      data_inicio: cliente.criado_em || new Date().toISOString(),
-      data_atualizacao: new Date().toISOString(),
-      data_formulario_enviado: new Date().toISOString(),
-      historico: [{ etapa: 'formulario_enviado', data: new Date().toISOString(), nota: 'Início do processo', observacao: 'Cliente movido para clientes_ativos' }]
-    };
+    cliente_telefone: telefone,
+    etapa_atual: 'formulario_enviado',
+    data_inicio: cliente.criado_em || new Date().toISOString(),
+    data_atualizacao: new Date().toISOString(),
+    historico: [
+        {
+            etapa: 'formulario_enviado',
+            data: new Date().toISOString(),
+            nota: 'Início do processo',
+            observacao: 'Cliente movido para clientes_ativos'
+        }
+    ]
+};
     const { data, error } = await supabase.from('etapas_processo').insert(novaEtapa).select().single();
     if (error) throw error;
     console.log(`✅ Etapa inicial criada para: ${telefone}`);
