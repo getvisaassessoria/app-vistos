@@ -2510,7 +2510,183 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     }
 });
 
-/// ============================================================
+// ============================================================
+//  PORTAL DO CLIENTE - ROTAS
+// ============================================================
+
+// Variável temporária para armazenar códigos (em produção, usar Redis ou banco)
+const codigosTemp = {};
+
+// Enviar código de verificação
+app.post('/api/portal/enviar-codigo', async (req, res) => {
+  try {
+    const { telefone } = req.body;
+    const telefoneLimpo = limparTelefone(telefone);
+    
+    if (!telefoneLimpo) {
+      return res.status(400).json({ success: false, message: 'Telefone inválido' });
+    }
+    
+    // Verificar se o cliente existe
+    const { data: cliente, error } = await supabase
+      .from('clientes_ativos')
+      .select('telefone, nome')
+      .eq('telefone', formatarTelefone(telefoneLimpo))
+      .maybeSingle();
+    
+    if (!cliente) {
+      // Verificar em clientes_novos
+      const { data: novo } = await supabase
+        .from('clientes_novos')
+        .select('telefone, nome')
+        .eq('telefone', formatarTelefone(telefoneLimpo))
+        .maybeSingle();
+      
+      if (!novo) {
+        return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
+      }
+    }
+    
+    // Gerar código de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Salvar código (em produção, usar Redis ou tabela)
+    codigosTemp[telefoneLimpo] = {
+      codigo,
+      criado_em: Date.now()
+    };
+    
+    // Enviar WhatsApp
+    const mensagem = `🔐 *Código de acesso GetVisa*\n\nOlá! Você solicitou acesso ao Portal do Cliente.\n\nSeu código é: *${codigo}*\n\nDigite no portal para acessar seu processo.\n\n⏰ Este código é válido por 5 minutos.`;
+    
+    await enviarWhatsApp(telefoneLimpo, mensagem);
+    
+    console.log(`📨 Código enviado para ${telefoneLimpo}: ${codigo}`);
+    
+    res.json({ success: true, message: 'Código enviado' });
+    
+  } catch (error) {
+    console.error('❌ Erro ao enviar código:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Verificar código
+app.post('/api/portal/verificar', async (req, res) => {
+  try {
+    const { telefone, codigo } = req.body;
+    const telefoneLimpo = limparTelefone(telefone);
+    
+    if (!telefoneLimpo || !codigo) {
+      return res.status(400).json({ success: false, message: 'Dados incompletos' });
+    }
+    
+    // Verificar código
+    const registro = codigosTemp[telefoneLimpo];
+    if (!registro) {
+      return res.status(401).json({ success: false, message: 'Código expirado' });
+    }
+    
+    if (registro.codigo !== codigo) {
+      return res.status(401).json({ success: false, message: 'Código inválido' });
+    }
+    
+    // Verificar expiração (5 minutos)
+    if (Date.now() - registro.criado_em > 300000) {
+      delete codigosTemp[telefoneLimpo];
+      return res.status(401).json({ success: false, message: 'Código expirado' });
+    }
+    
+    // Buscar dados do cliente
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
+    const { data: cliente, error: err1 } = await supabase
+      .from('clientes_ativos')
+      .select('*')
+      .eq('telefone', telefoneFormatado)
+      .maybeSingle();
+    
+    // Se não encontrou em ativos, buscar em novos
+    let clienteData = cliente;
+    if (!cliente) {
+      const { data: novo } = await supabase
+        .from('clientes_novos')
+        .select('*')
+        .eq('telefone', telefoneFormatado)
+        .maybeSingle();
+      clienteData = novo;
+    }
+    
+    if (!clienteData) {
+      return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
+    }
+    
+    // Buscar etapa
+    const { data: etapa } = await supabase
+      .from('etapas_processo')
+      .select('*')
+      .eq('cliente_telefone', telefoneFormatado)
+      .maybeSingle();
+    
+    // Buscar agendamentos (compromissos)
+    const { data: agendamentos } = await supabase
+      .from('compromissos')
+      .select('*')
+      .eq('cliente', clienteData.nome)
+      .order('data', { ascending: true })
+      .limit(10);
+    
+    // Remover código usado
+    delete codigosTemp[telefoneLimpo];
+    
+    res.json({
+      success: true,
+      cliente: clienteData,
+      etapa: etapa,
+      agendamentos: agendamentos || []
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao verificar:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Baixar DS-160
+app.get('/api/portal/ds160/:telefone', async (req, res) => {
+  try {
+    const { telefone } = req.params;
+    const telefoneLimpo = limparTelefone(telefone);
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
+    // Buscar formulário mais recente do cliente
+    const { data: formulario, error } = await supabase
+      .from('formulario_ds160')
+      .select('*')
+      .eq('telefone', telefoneFormatado)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (!formulario) {
+      return res.status(404).send('Formulário não encontrado');
+    }
+    
+    // Gerar PDF
+    const pdfBuffer = await gerarPDF_DS160(formulario.form_data || {});
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=DS160_${formulario.nome || 'cliente'}.pdf`);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('❌ Erro ao baixar DS-160:', error);
+    res.status(500).send('Erro ao gerar PDF');
+  }
+});
+
+
+/// /============================================================
 //  INICIALIZAÇÃO
 // ============================================================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
