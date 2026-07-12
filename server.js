@@ -1185,12 +1185,12 @@ if (telefoneCliente) {
             console.error('❌ Erro ao verificar cliente:', err1);
         }
 
-        // 3. Se não existir, CRIAR O CLIENTE PRIMEIRO
+       // 3. Se não existir, CRIAR O CLIENTE PRIMEIRO (com telefone SEM formatação)
 if (!clienteExistente) {
     const { error: insertError } = await supabase
         .from('clientes_ativos')
         .insert({
-            telefone: telefoneLimpo,  // ← usar sem formatação
+            telefone: telefoneLimpo,  // ← SEM formatação (ex: 21955555555)
             nome: nome
         });
 
@@ -1201,35 +1201,23 @@ if (!clienteExistente) {
     }
 }
 
-        // 4. AGORA criar a etapa (depois que o cliente foi criado)
-        // Aguardar um momento para garantir que o cliente foi salvo
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const { data: etapa, error: etapaError } = await supabase
-            .from('etapas_processo')
-            .insert({
-                cliente_telefone: telefoneLimpo,
-                etapa_atual: 'formulario_enviado',
-                data_inicio: new Date().toISOString(),
-                data_atualizacao: new Date().toISOString(),
-                historico: [
-                    {
-                        etapa: 'formulario_enviado',
-                        data: new Date().toISOString(),
-                        nota: 'Início do processo',
-                        observacao: 'Cliente criado via formulário DS-160'
-                    }
-                ]
-            })
-            .select()
-            .single();
-
-        if (etapaError) {
-            console.error('❌ Erro ao criar etapa:', etapaError);
-        } else {
-            console.log(`✅ Etapa criada para ${telefoneLimpo}`);
-        }
-
+// 4. Criar etapa com o mesmo telefone SEM formatação
+const { data: etapa, error: etapaError } = await supabase
+    .from('etapas_processo')
+    .insert({
+        cliente_telefone: telefoneLimpo,  // ← SEM formatação
+        etapa_atual: 'formulario_enviado',
+        data_inicio: new Date().toISOString(),
+        data_atualizacao: new Date().toISOString(),
+        historico: [
+            {
+                etapa: 'formulario_enviado',
+                data: new Date().toISOString(),
+                nota: 'Início do processo',
+                observacao: 'Cliente criado via formulário DS-160'
+            }
+        ]
+    })
         // 5. Remover de clientes_novos (se existir)
         const { data: clienteNovo } = await supabase
             .from('clientes_novos')
