@@ -72,6 +72,25 @@ function limparTelefone(telefone) {
 }
 
 // ============================================================
+//  FUNÇÃO PARA FORMATAR TELEFONE
+// ============================================================
+function formatarTelefone(telefone) {
+    if (!telefone) return null;
+    const numeros = telefone.toString().replace(/\D/g, '');
+    if (numeros.length === 11) {
+        return '(' + numeros.substring(0, 2) + ') ' + 
+               numeros.substring(2, 7) + '-' + 
+               numeros.substring(7, 11);
+    }
+    if (numeros.length === 10) {
+        return '(' + numeros.substring(0, 2) + ') ' + 
+               numeros.substring(2, 6) + '-' + 
+               numeros.substring(6, 10);
+    }
+    return telefone;
+}
+
+// ============================================================
 //  FUNÇÃO AUXILIAR PARA COMPATIBILIDADE
 // ============================================================
 function getFormData(data, campoNovo, campoAntigo, padrao) {
@@ -1201,11 +1220,11 @@ if (!clienteExistente) {
     }
 }
 
-// 4. Criar etapa com o mesmo telefone SEM formatação
+// 4. AGORA criar a etapa (com o mesmo formato do cliente)
 const { data: etapa, error: etapaError } = await supabase
     .from('etapas_processo')
     .insert({
-        cliente_telefone: telefoneLimpo,  // ← SEM formatação
+        cliente_telefone: formatarTelefone(telefoneLimpo),  // ← usar formatado
         etapa_atual: 'formulario_enviado',
         data_inicio: new Date().toISOString(),
         data_atualizacao: new Date().toISOString(),
