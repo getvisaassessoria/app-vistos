@@ -1103,7 +1103,7 @@ app.post('/api/submit-ds160', async (req, res) => {
         console.error('⚠️ Erro ao salvar no Supabase:', err.message);
       }
 
-      // ============================================================
+    // ============================================================
 //  🔄 CRIAR CLIENTE EM clientes_ativos (DIRETO)
 //  ============================================================
 if (telefoneCliente) {
@@ -1118,16 +1118,12 @@ if (telefoneCliente) {
         if (err1) {
             console.error('❌ Erro ao verificar cliente:', err1);
         } else if (!clienteExistente) {
-            // 2. Criar em clientes_ativos
+            // 2. Criar em clientes_ativos (apenas campos que existem)
             const { error: insertError } = await supabase
                 .from('clientes_ativos')
                 .insert({
                     telefone: telefoneCliente,
-                    nome: nome,
-                    email: emailCliente,
-                    status: 'em_processo',
-                    criado_em: new Date().toISOString(),
-                    atualizado_em: new Date().toISOString()
+                    nome: nome
                 });
 
             if (insertError) {
