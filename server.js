@@ -1116,7 +1116,7 @@ app.post('/api/submit-ds160', async (req, res) => {
     try {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
-      const telefoneCliente = data['text-77'] || null;
+      const telefoneCliente = limparTelefone(data['text-77'] || data['telefone'] || null);
 
       // ============================================================
       //  📝 SALVAR NA TABELA formulario_ds160 (PADRÃO: nome, telefone)
@@ -1154,54 +1154,85 @@ app.post('/api/submit-ds160', async (req, res) => {
       }
 
     // ============================================================
-//  🔄 CRIAR CLIENTE EM clientes_ativos (DIRETO)
+//  🔄 CRIAR CLIENTE E ETAPA (NA ORDEM CORRETA)
 //  ============================================================
 if (telefoneCliente) {
     try {
-        // 1. Verificar se já existe em clientes_ativos
+        // 1. Limpar o telefone
+        const telefoneLimpo = limparTelefone(telefoneCliente);
+        console.log(`📱 Telefone limpo: ${telefoneLimpo}`);
+
+        // 2. Verificar se o cliente já existe em clientes_ativos
         const { data: clienteExistente, error: err1 } = await supabase
             .from('clientes_ativos')
             .select('*')
-            .eq('telefone', telefoneCliente)
+            .eq('telefone', telefoneLimpo)
             .maybeSingle();
 
         if (err1) {
             console.error('❌ Erro ao verificar cliente:', err1);
-        } else if (!clienteExistente) {
-            // 2. Criar em clientes_ativos (apenas campos que existem)
+        }
+
+        // 3. Se não existir, CRIAR O CLIENTE PRIMEIRO
+        if (!clienteExistente) {
             const { error: insertError } = await supabase
                 .from('clientes_ativos')
                 .insert({
-                    telefone: telefoneCliente,
+                    telefone: telefoneLimpo,
                     nome: nome
                 });
 
             if (insertError) {
                 console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
             } else {
-                console.log(`✅ Cliente ${telefoneCliente} criado em ATIVOS`);
-                
-                // 3. Criar etapa inicial
-                await criarEtapaInicial(telefoneCliente);
-                console.log(`✅ Etapa criada para ${telefoneCliente}`);
+                console.log(`✅ Cliente ${telefoneLimpo} criado em ATIVOS`);
             }
         } else {
-            console.log(`ℹ️ Cliente ${telefoneCliente} já existe em ATIVOS`);
+            console.log(`ℹ️ Cliente ${telefoneLimpo} já existe em ATIVOS`);
         }
 
-        // 4. Remover de clientes_novos (se existir)
+        // 4. AGORA criar a etapa (depois que o cliente foi criado)
+        // Aguardar um momento para garantir que o cliente foi salvo
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { data: etapa, error: etapaError } = await supabase
+            .from('etapas_processo')
+            .insert({
+                cliente_telefone: telefoneLimpo,
+                etapa_atual: 'formulario_enviado',
+                data_inicio: new Date().toISOString(),
+                data_atualizacao: new Date().toISOString(),
+                historico: [
+                    {
+                        etapa: 'formulario_enviado',
+                        data: new Date().toISOString(),
+                        nota: 'Início do processo',
+                        observacao: 'Cliente criado via formulário DS-160'
+                    }
+                ]
+            })
+            .select()
+            .single();
+
+        if (etapaError) {
+            console.error('❌ Erro ao criar etapa:', etapaError);
+        } else {
+            console.log(`✅ Etapa criada para ${telefoneLimpo}`);
+        }
+
+        // 5. Remover de clientes_novos (se existir)
         const { data: clienteNovo } = await supabase
             .from('clientes_novos')
             .select('*')
-            .eq('telefone', telefoneCliente)
+            .eq('telefone', telefoneLimpo)
             .maybeSingle();
 
         if (clienteNovo) {
             await supabase
                 .from('clientes_novos')
                 .delete()
-                .eq('telefone', telefoneCliente);
-            console.log(`✅ Cliente ${telefoneCliente} removido de NOVOS`);
+                .eq('telefone', telefoneLimpo);
+            console.log(`✅ Cliente ${telefoneLimpo} removido de NOVOS`);
         }
 
     } catch (err) {
