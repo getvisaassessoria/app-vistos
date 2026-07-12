@@ -719,45 +719,113 @@ app.get('/api/etapas/cliente/:telefone', async (req, res) => {
 app.post('/api/etapas/avancar', async (req, res) => {
   try {
     const { telefone, nota, observacao } = req.body;
+    
+    // Limpar e formatar o telefone
     const telefoneLimpo = telefone.replace(/\D/g, '');
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
+    console.log(`📱 Avançando etapa para: ${telefoneFormatado}`);
+    
     if (!FEATURES.SISTEMA_ETAPAS.ativo) {
       return res.status(503).json({ erro: 'Sistema de etapas está temporariamente desativado' });
     }
+    
+    // Buscar etapa atual (usando telefone formatado)
     const { data: etapaAtual, error: buscaError } = await supabase
-      .from('etapas_processo').select('*').eq('cliente_telefone', telefoneLimpo).single();
-    if (buscaError) {
-      if (buscaError.code === 'PGRST116') {
-        const novaEtapa = await criarEtapaInicial(telefoneLimpo);
-        if (novaEtapa) return res.json({ sucesso: true, mensagem: 'Etapa inicial criada', etapa_atual: novaEtapa.etapa_atual });
+      .from('etapas_processo')
+      .select('*')
+      .eq('cliente_telefone', telefoneFormatado)
+      .maybeSingle();
+    
+    // Se não encontrou com formato, tentar com telefone limpo
+    if (!etapaAtual) {
+      const { data: etapaLimpo, error: errLimpo } = await supabase
+        .from('etapas_processo')
+        .select('*')
+        .eq('cliente_telefone', telefoneLimpo)
+        .maybeSingle();
+      
+      if (etapaLimpo) {
+        // Atualizar para o formato correto
+        await supabase
+          .from('etapas_processo')
+          .update({ cliente_telefone: telefoneFormatado })
+          .eq('cliente_telefone', telefoneLimpo);
+        
+        const { data: etapaCorrigida, error: errCorrigida } = await supabase
+          .from('etapas_processo')
+          .select('*')
+          .eq('cliente_telefone', telefoneFormatado)
+          .maybeSingle();
+        
+        if (etapaCorrigida) {
+          return processarAvanco(res, etapaCorrigida, nota, observacao, telefoneFormatado);
+        }
       }
-      throw buscaError;
+      
+      return res.status(404).json({ erro: 'Cliente não encontrado em etapas_processo' });
     }
-    const etapaId = etapaAtual.etapa_atual;
-    const proximaEtapa = ETAPAS[etapaId]?.next;
-    if (!proximaEtapa) return res.status(400).json({ erro: 'Cliente já está na última etapa' });
-    const historicoAtualizado = [
-      ...(etapaAtual.historico || []),
-      { etapa: etapaId, data: new Date().toISOString(), nota: nota || 'Avanço manual', observacao: observacao || 'Avançado pelo painel administrativo' }
-    ];
-    const dadosAtualizacao = {
-      etapa_atual: proximaEtapa,
-      data_atualizacao: new Date().toISOString(),
-      historico: historicoAtualizado,
-      [`data_${proximaEtapa}`]: new Date().toISOString()
-    };
-    const { data: updated, error: updateError } = await supabase
-      .from('etapas_processo').update(dadosAtualizacao).eq('cliente_telefone', telefoneLimpo).select().single();
-    if (updateError) throw updateError;
-    if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
-      await notificarClienteEtapa(telefoneLimpo, proximaEtapa);
-    }
-    console.log(`📊 Cliente ${telefoneLimpo} avançou para: ${proximaEtapa}`);
-    res.json({ sucesso: true, etapa_anterior: etapaId, etapa_atual: proximaEtapa, dados: updated });
+    
+    // Processar o avanço
+    return processarAvanco(res, etapaAtual, nota, observacao, telefoneFormatado);
+    
   } catch (error) {
     console.error('Erro ao avançar etapa:', error);
     res.status(500).json({ erro: 'Erro ao avançar etapa', detalhe: error.message });
   }
 });
+
+// Função auxiliar para processar o avanço
+async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
+  const etapaId = etapaAtual.etapa_atual;
+  const proximaEtapa = ETAPAS[etapaId]?.next;
+  
+  if (!proximaEtapa) {
+    return res.status(400).json({ erro: 'Cliente já está na última etapa' });
+  }
+  
+  const historicoAtualizado = [
+    ...(etapaAtual.historico || []),
+    {
+      etapa: etapaId,
+      data: new Date().toISOString(),
+      nota: nota || 'Avanço manual',
+      observacao: observacao || 'Avançado pelo painel administrativo'
+    }
+  ];
+  
+  const dadosAtualizacao = {
+    etapa_atual: proximaEtapa,
+    data_atualizacao: new Date().toISOString(),
+    historico: historicoAtualizado
+  };
+  
+  // Adicionar data da nova etapa
+  const campoData = `data_${proximaEtapa}`;
+  dadosAtualizacao[campoData] = new Date().toISOString();
+  
+  const { data: updated, error: updateError } = await supabase
+    .from('etapas_processo')
+    .update(dadosAtualizacao)
+    .eq('cliente_telefone', telefone)
+    .select()
+    .single();
+  
+  if (updateError) throw updateError;
+  
+  if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+    await notificarClienteEtapa(telefone, proximaEtapa);
+  }
+  
+  console.log(`📊 Cliente ${telefone} avançou para: ${proximaEtapa}`);
+  
+  res.json({
+    sucesso: true,
+    etapa_anterior: etapaId,
+    etapa_atual: proximaEtapa,
+    dados: updated
+  });
+}
 
 app.get('/api/etapas/historico/:telefone', async (req, res) => {
   try {
