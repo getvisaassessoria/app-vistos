@@ -676,16 +676,40 @@ app.post('/api/painel/mover-varios', async (req, res) => {
 // ============================================================
 app.get('/api/etapas/cliente/:telefone', async (req, res) => {
   try {
+    // 1. Limpar o telefone recebido
     const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+    
+    // 2. Buscar a etapa com o telefone formatado (padrão do banco)
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
     const { data, error } = await supabase
-      .from('etapas_processo').select('*').eq('cliente_telefone', telefoneLimpo).single();
-    if (error && error.code !== 'PGRST116') throw error;
+      .from('etapas_processo')
+      .select('*')
+      .eq('cliente_telefone', telefoneFormatado)
+      .maybeSingle();  // ← usar maybeSingle() para evitar erro PGRST116
+    
+    // 3. Se não encontrou, tentar buscar com o telefone limpo (fallback)
     if (!data) {
-      const novaEtapa = await criarEtapaInicial(telefoneLimpo);
+      const { data: dataLimpo, error: errorLimpo } = await supabase
+        .from('etapas_processo')
+        .select('*')
+        .eq('cliente_telefone', telefoneLimpo)
+        .maybeSingle();
+      
+      if (dataLimpo) {
+        return res.json(dataLimpo);
+      }
+    }
+    
+    // 4. Se ainda não encontrou, criar uma nova etapa
+    if (!data) {
+      const novaEtapa = await criarEtapaInicial(telefoneFormatado);
       if (novaEtapa) return res.json(novaEtapa);
       return res.status(404).json({ erro: 'Cliente não encontrado' });
     }
+    
     res.json(data);
+    
   } catch (error) {
     console.error('Erro ao buscar etapa:', error);
     res.status(500).json({ erro: 'Erro ao buscar etapa do cliente' });
