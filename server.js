@@ -60,6 +60,18 @@ const FEATURES = {
 };
 
 // ============================================================
+//  FUNÇÃO PARA LIMPAR TELEFONE
+// ============================================================
+function limparTelefone(telefone) {
+    if (!telefone) return null;
+    const limpo = telefone.toString().replace(/\D/g, '');
+    if (limpo.startsWith('55')) {
+        return limpo.substring(2);
+    }
+    return limpo;
+}
+
+// ============================================================
 //  FUNÇÃO AUXILIAR PARA COMPATIBILIDADE
 // ============================================================
 function getFormData(data, campoNovo, campoAntigo, padrao) {
