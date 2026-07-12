@@ -1220,11 +1220,11 @@ if (!clienteExistente) {
     }
 }
 
-// 4. AGORA criar a etapa (com o mesmo formato do cliente)
+// 4. AGORA criar a etapa (depois que o cliente foi criado)
 const { data: etapa, error: etapaError } = await supabase
     .from('etapas_processo')
     .insert({
-        cliente_telefone: formatarTelefone(telefoneLimpo),  // ← usar formatado
+        cliente_telefone: formatarTelefone(telefoneLimpo),  // ← USAR FORMATADO
         etapa_atual: 'formulario_enviado',
         data_inicio: new Date().toISOString(),
         data_atualizacao: new Date().toISOString(),
