@@ -2714,15 +2714,16 @@ app.get('/api/documentos/cliente/:telefone', async (req, res) => {
 
 // Upload de documento (admin)
 // Upload de documento (admin) - SEM VERIFICAÇÃO
+// Upload de documento (admin)
 app.post('/api/documentos/upload', async (req, res) => {
   try {
     const { cliente_telefone, tipo, nome, descricao, base64, nome_arquivo } = req.body;
     
-    // Verificação DESABILITADA para teste
-    // const apiKey = req.headers['x-api-key'];
-    // if (!apiKey || apiKey !== ADMIN_API_KEY) {
-    //   return res.status(403).json({ success: false, message: 'Acesso negado' });
-    // }
+    // Verificar API Key
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== ADMIN_API_KEY) {
+      return res.status(403).json({ success: false, message: 'Acesso negado' });
+    }
     
     const telefoneFormatado = formatarTelefone(limparTelefone(cliente_telefone));
     
@@ -2733,18 +2734,21 @@ app.post('/api/documentos/upload', async (req, res) => {
     const buffer = Buffer.from(base64, 'base64');
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('documents-clients')
+      .from('documents-clients')  // ← NOME CORRETO
       .upload(caminho, buffer, {
         contentType: 'application/pdf',
         cacheControl: '3600'
       });
     
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error('❌ Erro no upload:', uploadError);
+      return res.status(500).json({ success: false, message: uploadError.message });
+    }
     
     // Obter URL pública
     const { data: urlData } = supabase
       .storage
-      .from('documents-clients')
+      .from('documents-clients')  // ← NOME CORRETO
       .getPublicUrl(caminho);
     
     // Salvar no banco
