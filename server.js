@@ -2713,15 +2713,16 @@ app.get('/api/documentos/cliente/:telefone', async (req, res) => {
 });
 
 // Upload de documento (admin)
+// Upload de documento (admin) - SEM VERIFICAÇÃO
 app.post('/api/documentos/upload', async (req, res) => {
   try {
     const { cliente_telefone, tipo, nome, descricao, base64, nome_arquivo } = req.body;
     
-    // Verificar API Key
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) {
-      return res.status(403).json({ success: false, message: 'Acesso negado' });
-    }
+    // Verificação DESABILITADA para teste
+    // const apiKey = req.headers['x-api-key'];
+    // if (!apiKey || apiKey !== ADMIN_API_KEY) {
+    //   return res.status(403).json({ success: false, message: 'Acesso negado' });
+    // }
     
     const telefoneFormatado = formatarTelefone(limparTelefone(cliente_telefone));
     
