@@ -2376,6 +2376,9 @@ async function gerarPDF_VistoNegado(data, nome, emailCliente, score, classificac
 // ============================================================
 //  ROTA SIMULADOR 5 ETAPAS
 // ============================================================
+// ============================================================
+//  ROTA SIMULADOR 5 ETAPAS (CORRIGIDA)
+// ============================================================
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
   
@@ -2409,6 +2412,73 @@ app.post('/api/submit-simulador', async (req, res) => {
       }
       
       if (telefoneCliente) {
+        // ============================================================
+        //  🔄 MOVER CLIENTE PARA "EM PROCESSO" AUTOMATICAMENTE
+        //  ============================================================
+        try {
+          const telefoneLimpo = limparTelefone(telefoneCliente);
+          const telefoneFormatado = formatarTelefone(telefoneLimpo);
+          
+          // 1. Verificar se o cliente já existe em clientes_ativos
+          const { data: clienteAtivo } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneFormatado)
+            .maybeSingle();
+          
+          if (!clienteAtivo) {
+            // 2. Buscar em clientes_novos
+            const { data: clienteNovo } = await supabase
+              .from('clientes_novos')
+              .select('*')
+              .eq('telefone', telefoneFormatado)
+              .maybeSingle();
+            
+            if (clienteNovo) {
+              // 3. Mover para clientes_ativos
+              await supabase
+                .from('clientes_ativos')
+                .insert({
+                  telefone: clienteNovo.telefone,
+                  nome: clienteNovo.nome || nome,
+                  email: emailCliente,
+                  status: 'em_processo',
+                  criado_em: clienteNovo.data_contato,
+                  atualizado_em: new Date().toISOString()
+                });
+              
+              await supabase
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', telefoneFormatado);
+              
+              console.log(`✅ Cliente ${telefoneFormatado} movido para ATIVOS (simulador)`);
+            } else {
+              // 4. Criar diretamente em clientes_ativos
+              await supabase
+                .from('clientes_ativos')
+                .insert({
+                  telefone: telefoneFormatado,
+                  nome: nome,
+                  email: emailCliente,
+                  status: 'em_processo',
+                  criado_em: new Date().toISOString(),
+                  atualizado_em: new Date().toISOString()
+                });
+              console.log(`✅ Cliente ${telefoneFormatado} criado em ATIVOS (simulador)`);
+            }
+            
+            // 5. Criar etapa inicial
+            await criarEtapaInicial(telefoneFormatado);
+            console.log(`✅ Etapa criada para ${telefoneFormatado}`);
+          }
+        } catch (err) {
+          console.error('⚠️ Erro ao mover cliente para ativos:', err.message);
+        }
+        
+        // ============================================================
+        //  📝 SALVAR LEAD
+        //  ============================================================
         const { error } = await supabase
           .from('leads_simulador')
           .insert({
@@ -2423,15 +2493,18 @@ app.post('/api/submit-simulador', async (req, res) => {
           });
         
         if (error) {
-          console.error('❌ Erro ao salvar:', error);
+          console.error('❌ Erro ao salvar lead:', error);
         } else {
           console.log(`✅ Lead salvo: ${nome} - ${telefoneCliente}`);
           
           const primeiroNome = nome.split(' ')[0];
           const primeiraViagem = historicoViagens === 'Nunca viajei para fora do Brasil';
           
-          let mensagem = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e vou te acompanhar.\n\n`;
-          mensagem += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
+          // ============================================================
+          //  📱 MENSAGEM PARA O CLIENTE (SEM MENU)
+          //  ============================================================
+          let mensagem = `👋 Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
+          mensagem += `✅ *Recebemos sua avaliação!* Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
           mensagem += `📊 *Seus dados:*\n`;
           mensagem += `• Situação: ${situacaoProfissional}\n`;
           mensagem += `• Renda: ${renda}\n`;
@@ -2442,9 +2515,8 @@ app.post('/api/submit-simulador', async (req, res) => {
             mensagem += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra.\n\n`;
           }
           
-          mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
-          mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160.\n\n`;
-          mensagem += `💬 *Me pergunte o que quiser!*`;
+          mensagem += `📞 *Um dos nossos especialistas entrará em contato muito breve para dar continuidade ao seu processo.*\n\n`;
+          mensagem += `💬 *Enquanto isso, estou aqui para tirar qualquer dúvida!*`;
           
           await enviarWhatsApp(telefoneCliente, mensagem);
         }
