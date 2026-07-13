@@ -1015,6 +1015,137 @@ function getRespostaIntencao(intent, service = null) {
 }
 
 // ============================================================
+//  DETECTAR AVALIAÇÃO E MOVER PARA ATIVOS
+// ============================================================
+async function detectarAvaliacaoEAcionar(messageText, cleanPhone) {
+    try {
+        // Padrões da mensagem de avaliação
+        const padroes = [
+            'classificação *Perfil',
+            'Meus dados:',
+            'Perfil:',
+            'Renda:',
+            'Histórico:',
+            'Motivo:',
+            'Quero iniciar meu processo'
+        ];
+        
+        // Verificar se a mensagem contém os padrões
+        const contemPadrao = padroes.some(p => messageText.includes(p));
+        
+        if (!contemPadrao) {
+            console.log('📝 Mensagem não é uma avaliação');
+            return false;
+        }
+        
+        console.log('🔍 Mensagem de avaliação detectada!');
+        
+        // Extrair dados da mensagem
+        const nomeMatch = messageText.match(/Nome:\s*(.+)/);
+        const telefoneMatch = messageText.match(/WhatsApp:\s*(.+)/);
+        const emailMatch = messageText.match(/Email:\s*(.+)/);
+        const perfilMatch = messageText.match(/Perfil:\s*(.+)/);
+        const rendaMatch = messageText.match(/Renda:\s*(.+)/);
+        const historicoMatch = messageText.match(/Histórico:\s*(.+)/);
+        const motivoMatch = messageText.match(/Motivo:\s*(.+)/);
+        const classificacaoMatch = messageText.match(/classificação\s*([^*]+)/);
+        
+        const nome = nomeMatch ? nomeMatch[1].trim() : 'Cliente';
+        const telefoneExtraido = telefoneMatch ? limparTelefone(telefoneMatch[1].trim()) : cleanPhone;
+        const email = emailMatch ? emailMatch[1].trim() : null;
+        
+        const telefoneFormatado = formatarTelefone(telefoneExtraido);
+        
+        console.log(`📱 Telefone extraído: ${telefoneFormatado}`);
+        
+        // Verificar se o cliente já existe em clientes_ativos
+        const { data: clienteAtivo } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneFormatado)
+            .maybeSingle();
+        
+        if (clienteAtivo) {
+            console.log(`ℹ️ Cliente ${telefoneFormatado} já está em ATIVOS`);
+            return true;
+        }
+        
+        // Buscar em clientes_novos
+        const { data: clienteNovo } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefoneFormatado)
+            .maybeSingle();
+        
+        if (clienteNovo) {
+            // Mover para clientes_ativos
+            await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: clienteNovo.telefone,
+                    nome: clienteNovo.nome || nome,
+                    email: email,
+                    status: 'em_processo',
+                    criado_em: clienteNovo.data_contato,
+                    atualizado_em: new Date().toISOString()
+                });
+            
+            await supabase
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', telefoneFormatado);
+            
+            console.log(`✅ Cliente ${telefoneFormatado} movido para ATIVOS (avaliação)`);
+        } else {
+            // Criar diretamente em clientes_ativos
+            await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: telefoneFormatado,
+                    nome: nome,
+                    email: email,
+                    status: 'em_processo',
+                    criado_em: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                });
+            console.log(`✅ Cliente ${telefoneFormatado} criado em ATIVOS (avaliação)`);
+        }
+        
+        // Criar etapa inicial
+        await criarEtapaInicial(telefoneFormatado);
+        console.log(`✅ Etapa criada para ${telefoneFormatado}`);
+        
+        // Enviar mensagem personalizada
+        const primeiroNome = nome.split(' ')[0] || 'Cliente';
+        const classificacao = classificacaoMatch ? classificacaoMatch[1].trim() : 'Perfil';
+        const perfil = perfilMatch ? perfilMatch[1].trim() : 'N/A';
+        const renda = rendaMatch ? rendaMatch[1].trim() : 'N/A';
+        const historico = historicoMatch ? historicoMatch[1].trim() : 'N/A';
+        const motivo = motivoMatch ? motivoMatch[1].trim() : 'N/A';
+        
+        let mensagem = `👋 Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
+        mensagem += `✅ *Recebemos sua avaliação!* Seu perfil foi classificado como *${classificacao}*.\n\n`;
+        mensagem += `📊 *Seus dados:*\n`;
+        mensagem += `• Situação: ${perfil}\n`;
+        mensagem += `• Renda: ${renda}\n`;
+        mensagem += `• Histórico: ${historico}\n`;
+        mensagem += `• Motivo: ${motivo}\n\n`;
+        mensagem += `📞 *Um dos nossos especialistas entrará em contato muito breve para dar continuidade ao seu processo.*\n\n`;
+        mensagem += `💬 *Enquanto isso, estou aqui para tirar qualquer dúvida!*`;
+        
+        await enviarWhatsApp(telefoneFormatado, mensagem);
+        console.log(`📨 Mensagem personalizada enviada para ${telefoneFormatado}`);
+        
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Erro ao processar avaliação:', error);
+        return false;
+    }
+}
+
+
+// ============================================================
 //  FUNÇÕES DE MENU
 // ============================================================
 async function getMenuPrincipal() {
@@ -1089,6 +1220,14 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
     if (cleanPhone.length < 10) { console.log(`⚠️ Telefone inválido: ${cleanPhone}`); return; }
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
+
+    // Verificar se é uma mensagem de avaliação
+const avaliacaoProcessada = await detectarAvaliacaoEAcionar(messageText, cleanPhone);
+if (avaliacaoProcessada) {
+    console.log('✅ Avaliação processada, menu não será mostrado');
+    return;
+}
+
 
     let cliente = await buscarCliente(cleanPhone);
     if (!cliente) cliente = await cadastrarCliente(cleanPhone);
