@@ -2685,6 +2685,144 @@ app.get('/api/portal/ds160/:telefone', async (req, res) => {
   }
 });
 
+// ============================================================
+//  DOCUMENTOS - ROTAS
+// ============================================================
+
+// Listar documentos de um cliente
+app.get('/api/documentos/cliente/:telefone', async (req, res) => {
+  try {
+    const { telefone } = req.params;
+    const telefoneFormatado = formatarTelefone(limparTelefone(telefone));
+    
+    const { data, error } = await supabase
+      .from('documentos_cliente')
+      .select('*')
+      .eq('cliente_telefone', telefoneFormatado)
+      .eq('ativo', true)
+      .order('data_upload', { ascending: false });
+    
+    if (error) throw error;
+    
+    res.json({ success: true, documentos: data || [] });
+    
+  } catch (error) {
+    console.error('❌ Erro ao listar documentos:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Upload de documento (admin)
+app.post('/api/documentos/upload', async (req, res) => {
+  try {
+    const { cliente_telefone, tipo, nome, descricao, base64, nome_arquivo } = req.body;
+    
+    // Verificar API Key
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== ADMIN_API_KEY) {
+      return res.status(403).json({ success: false, message: 'Acesso negado' });
+    }
+    
+    const telefoneFormatado = formatarTelefone(limparTelefone(cliente_telefone));
+    
+    // Criar caminho no storage
+    const caminho = `${telefoneFormatado}/${tipo}_${Date.now()}.pdf`;
+    
+    // Fazer upload para o Supabase Storage
+    const buffer = Buffer.from(base64, 'base64');
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from('documentos-clientes')
+      .upload(caminho, buffer, {
+        contentType: 'application/pdf',
+        cacheControl: '3600'
+      });
+    
+    if (uploadError) throw uploadError;
+    
+    // Obter URL pública
+    const { data: urlData } = supabase
+      .storage
+      .from('documentos-clientes')
+      .getPublicUrl(caminho);
+    
+    // Salvar no banco
+    const { data, error } = await supabase
+      .from('documentos_cliente')
+      .insert({
+        cliente_telefone: telefoneFormatado,
+        tipo: tipo,
+        nome: nome || nome_arquivo || 'documento',
+        descricao: descricao || '',
+        url: urlData.publicUrl,
+        nome_arquivo: nome_arquivo || nome || 'documento.pdf',
+        tamanho: buffer.length,
+        tipo_arquivo: 'application/pdf'
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    console.log(`✅ Documento enviado para ${telefoneFormatado}: ${tipo}`);
+    
+    res.json({ success: true, documento: data });
+    
+  } catch (error) {
+    console.error('❌ Erro ao fazer upload:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Remover documento (admin)
+app.delete('/api/documentos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verificar API Key
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== ADMIN_API_KEY) {
+      return res.status(403).json({ success: false, message: 'Acesso negado' });
+    }
+    
+    // Buscar documento
+    const { data: documento, error: findError } = await supabase
+      .from('documentos_cliente')
+      .select('url')
+      .eq('id', id)
+      .single();
+    
+    if (findError) throw findError;
+    
+    if (documento) {
+      // Extrair caminho da URL
+      const url = new URL(documento.url);
+      const pathParts = url.pathname.split('/');
+      const path = pathParts.slice(pathParts.indexOf('documentos-clientes') + 1).join('/');
+      
+      // Remover do storage
+      await supabase
+        .storage
+        .from('documentos-clientes')
+        .remove([path]);
+    }
+    
+    // Remover do banco
+    const { error } = await supabase
+      .from('documentos_cliente')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('❌ Erro ao remover documento:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 
 /// /============================================================
 //  INICIALIZAÇÃO
