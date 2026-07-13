@@ -367,43 +367,93 @@ async function enviarNotificacaoParaContatos(telefone, mensagem) {
 // ============================================================
 //  FUNÇÕES DE CLIENTES
 // ============================================================
+// ============================================================
+//  FUNÇÕES DE CLIENTES (CORRIGIDO)
+// ============================================================
 async function buscarCliente(telefone) {
   console.log(`🔍 Buscando cliente ${telefone}...`);
-  const { data: ativo, error: err1 } = await supabase
-    .from('clientes_ativos').select('*').eq('telefone', telefone).maybeSingle();
+  
+  const telefoneLimpo = limparTelefone(telefone);
+  const telefoneFormatado = formatarTelefone(telefone);
+  
+  // 1️⃣ Busca em clientes_ativos (com ambos os formatos)
+  let { data: ativo, error: err1 } = await supabase
+    .from('clientes_ativos')
+    .select('*')
+    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .maybeSingle();
+  
   if (ativo) {
     console.log(`🟢 Cliente ATIVO encontrado: ${telefone}`);
     return { dados: ativo, tipo: 'ativo', tabela: 'clientes_ativos' };
   }
-  const { data: novo, error: err2 } = await supabase
-    .from('clientes_novos').select('*').eq('telefone', telefone).maybeSingle();
+  
+  // 2️⃣ Busca em clientes_novos (com ambos os formatos)
+  let { data: novo, error: err2 } = await supabase
+    .from('clientes_novos')
+    .select('*')
+    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .maybeSingle();
+  
   if (novo) {
     console.log(`🟡 Cliente NOVO encontrado: ${telefone}`);
     return { dados: novo, tipo: 'novo', tabela: 'clientes_novos' };
   }
-  const { data: amigo, error: err3 } = await supabase
-    .from('contatos_amigos').select('*').eq('telefone', telefone).maybeSingle();
+  
+  // 3️⃣ Busca em contatos_amigos (com ambos os formatos)
+  let { data: amigo, error: err3 } = await supabase
+    .from('contatos_amigos')
+    .select('*')
+    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .maybeSingle();
+  
   if (amigo) {
     console.log(`🤝 Contato AMIGO encontrado: ${telefone}`);
     return { dados: amigo, tipo: 'amigo', tabela: 'contatos_amigos' };
   }
+  
   console.log(`📝 Cliente ${telefone} NÃO encontrado`);
   return null;
 }
 
+// ============================================================
+//  CADASTRAR CLIENTE (CORRIGIDO)
+// ============================================================
 async function cadastrarCliente(telefone, nome = null) {
   console.log(`📝 Cadastrando ${telefone} como NOVO...`);
+  
+  // Garantir que o telefone está formatado
+  const telefoneFormatado = formatarTelefone(telefone);
+  
+  // Verificar se já existe (com formato)
+  const { data: existente } = await supabase
+    .from('clientes_novos')
+    .select('telefone')
+    .eq('telefone', telefoneFormatado)
+    .maybeSingle();
+  
+  if (existente) {
+    console.log(`⚠️ Cliente ${telefoneFormatado} já existe em clientes_novos`);
+    return { dados: existente, tipo: 'novo', tabela: 'clientes_novos' };
+  }
+  
   const dadosCliente = {
-    telefone: telefone,
+    telefone: telefoneFormatado,
     nome: nome || `Cliente_${telefone}`,
     data_contato: new Date().toISOString()
   };
+  
   const { data, error } = await supabase
-    .from('clientes_novos').insert(dadosCliente).select().single();
+    .from('clientes_novos')
+    .insert(dadosCliente)
+    .select()
+    .single();
+  
   if (error) {
     console.error('❌ Erro ao cadastrar cliente:', error);
     return null;
   }
+  
   console.log(`✅ Cliente ${telefone} cadastrado como NOVO`);
   return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
