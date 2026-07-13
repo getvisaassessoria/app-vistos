@@ -1045,11 +1045,13 @@ function renderAtivos() {
                 <td><span class="badge-status">${item.status || 'em_processo'}</span></td>
                 <td class="data-hora">${data}</td>
                 <td>
-                    <div class="acoes">
-                        <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${item.telefone}')">📊 Timeline</button>
-                        <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${item.telefone}')">✅ Finalizar</button>
-                    </div>
-                </td>
+            <div class="acoes">
+                <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${item.telefone}')">📊 Timeline</button>
+                <button class="btn btn-warning btn-sm" onclick="moverParaAmigo('${item.telefone}')">🤝 Amigo</button>
+                <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${item.telefone}')">✅ Finalizar</button>
+            </div>
+        </td>
+
             </tr>
         `;
     });
@@ -1080,6 +1082,49 @@ function renderAmigos() {
     });
     html += `</tbody></table>`;
     container.innerHTML = html;
+}
+
+// ============================================================
+//  MOVER PARA AMIGO (DIRETO DE ATIVOS)
+// ============================================================
+async function moverParaAmigo(telefone) {
+    if (!confirm(`Mover ${telefone} para AMIGO? (Não receberá mais mensagens do bot)`)) return;
+    
+    try {
+        // 1. Buscar dados do cliente em ativos
+        const response = await fetch(`/api/clientes/buscar/${telefone}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast('❌ Cliente não encontrado', 'error');
+            return;
+        }
+        
+        const cliente = data.cliente;
+        
+        // 2. Inserir em contatos_amigos
+        await fetch('/api/contatos/mover-para-amigo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telefone: cliente.telefone,
+                nome: cliente.nome
+            })
+        });
+        
+        // 3. Remover de clientes_ativos
+        await fetch('/api/contatos/remover-ativo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone: cliente.telefone })
+        });
+        
+        showToast(`✅ ${telefone} movido para AMIGO!`, 'success');
+        carregarDados(); // Recarregar a tabela
+        
+    } catch (error) {
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
 }
 
 // ============================================================

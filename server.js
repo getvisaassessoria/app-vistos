@@ -2959,6 +2959,97 @@ app.post('/api/teste/notificacao', async (req, res) => {
     }
 });
 
+// ============================================================
+//  ROTAS PARA MOVER PARA AMIGO
+// ============================================================
+
+// Buscar cliente por telefone
+app.get('/api/clientes/buscar/:telefone', async (req, res) => {
+    try {
+        const { telefone } = req.params;
+        
+        // Buscar em clientes_ativos
+        const { data: ativo, error: err1 } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (ativo) {
+            return res.json({ success: true, cliente: ativo, origem: 'ativos' });
+        }
+        
+        // Buscar em clientes_novos
+        const { data: novo, error: err2 } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (novo) {
+            return res.json({ success: true, cliente: novo, origem: 'novos' });
+        }
+        
+        res.status(404).json({ success: false, message: 'Cliente não encontrado' });
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar cliente:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Mover para amigo
+app.post('/api/contatos/mover-para-amigo', async (req, res) => {
+    try {
+        const { telefone, nome } = req.body;
+        
+        const { error } = await supabase
+            .from('contatos_amigos')
+            .insert({
+                telefone: telefone,
+                nome: nome,
+                criado_em: new Date().toISOString()
+            });
+        
+        if (error) throw error;
+        
+        res.json({ success: true });
+        
+    } catch (error) {
+        console.error('❌ Erro ao mover para amigo:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Remover de ativos
+app.post('/api/contatos/remover-ativo', async (req, res) => {
+    try {
+        const { telefone } = req.body;
+        
+        // Remover de clientes_ativos
+        const { error: err1 } = await supabase
+            .from('clientes_ativos')
+            .delete()
+            .eq('telefone', telefone);
+        
+        if (err1) throw err1;
+        
+        // Remover de etapas_processo
+        const { error: err2 } = await supabase
+            .from('etapas_processo')
+            .delete()
+            .eq('cliente_telefone', telefone);
+        
+        if (err2) throw err2;
+        
+        res.json({ success: true });
+        
+    } catch (error) {
+        console.error('❌ Erro ao remover de ativos:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 /// /============================================================
 //  INICIALIZAÇÃO
 // ============================================================
