@@ -328,6 +328,43 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
+//  ENVIAR NOTIFICAÇÃO PARA TODOS OS CONTATOS
+// ============================================================
+async function enviarNotificacaoParaContatos(telefone, mensagem) {
+    try {
+        // 1. Enviar para o telefone principal
+        const enviadoPrincipal = await enviarWhatsApp(telefone, mensagem);
+        console.log(`📱 Notificação enviada para principal: ${telefone} (${enviadoPrincipal ? '✅' : '❌'})`);
+        
+        // 2. Buscar contatos
+        const { data: contatos, error } = await supabase
+            .from('contatos_notificacao')
+            .select('contato_telefone')
+            .eq('cliente_telefone', telefone)
+            .eq('ativo', true);
+        
+        if (error) {
+            console.error('❌ Erro ao buscar contatos:', error);
+            return false;
+        }
+        
+        // 3. Enviar para cada contato
+        if (contatos && contatos.length > 0) {
+            for (const contato of contatos) {
+                const enviado = await enviarWhatsApp(contato.contato_telefone, mensagem);
+                console.log(`📱 Notificação enviada para contato: ${contato.contato_telefone} (${enviado ? '✅' : '❌'})`);
+            }
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Erro ao enviar notificações:', error);
+        return false;
+    }
+}
+
+// ============================================================
 //  FUNÇÕES DE CLIENTES
 // ============================================================
 async function buscarCliente(telefone) {
@@ -459,7 +496,7 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
     const { data: cliente } = await supabase.from('clientes_ativos').select('nome').eq('telefone', telefone).single();
     const nomeCliente = cliente?.nome || 'Cliente';
     const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
-    await enviarWhatsApp(telefone, mensagem);
+    await enviarNotificacaoParaContatos(telefoneCliente, mensagem);
     console.log(`📨 Notificação enviada para ${telefone}: ${novaEtapa}`);
   } catch (error) {
     console.error('Erro ao notificar cliente:', error);
@@ -2828,6 +2865,79 @@ app.delete('/api/documentos/:id', async (req, res) => {
   }
 });
 
+// ============================================================
+// ADICIONAR CONTATO DE NOTIFICAÇÃO
+// ============================================================
+app.post('/api/contatos/adicionar', async (req, res) => {
+    try {
+        const { cliente_telefone, contato_telefone, contato_nome, tipo, responsavel } = req.body;
+        
+        // Verificar se o cliente existe
+        const { data: cliente, error: err1 } = await supabase
+            .from('clientes_ativos')
+            .select('telefone')
+            .eq('telefone', cliente_telefone)
+            .single();
+        
+        if (!cliente) {
+            return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
+        }
+        
+        // Se for responsável, remover responsável anterior
+        if (responsavel) {
+            await supabase
+                .from('contatos_notificacao')
+                .update({ responsavel: false })
+                .eq('cliente_telefone', cliente_telefone);
+        }
+        
+        // Adicionar contato
+        const { data, error } = await supabase
+            .from('contatos_notificacao')
+            .insert({
+                cliente_telefone: cliente_telefone,
+                contato_telefone: contato_telefone,
+                contato_nome: contato_nome,
+                tipo: tipo || 'responsavel',
+                responsavel: responsavel || false
+            })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        res.json({ success: true, contato: data });
+        
+    } catch (error) {
+        console.error('❌ Erro ao adicionar contato:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================================
+// BUSCAR CONTATOS DE NOTIFICAÇÃO
+// ============================================================
+app.get('/api/contatos/cliente/:telefone', async (req, res) => {
+    try {
+        const { telefone } = req.params;
+        const telefoneFormatado = formatarTelefone(limparTelefone(telefone));
+        
+        const { data, error } = await supabase
+            .from('contatos_notificacao')
+            .select('*')
+            .eq('cliente_telefone', telefoneFormatado)
+            .eq('ativo', true)
+            .order('responsavel', { ascending: false });
+        
+        if (error) throw error;
+        
+        res.json({ success: true, contatos: data || [] });
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar contatos:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 /// /============================================================
 //  INICIALIZAÇÃO
