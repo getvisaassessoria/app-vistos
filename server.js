@@ -438,10 +438,10 @@ async function cadastrarCliente(telefone, nome = null) {
   }
   
   const dadosCliente = {
-    telefone: telefoneFormatado,
+    telefone: telefoneFormatado,  // ← telefone formatado ((21) 98523-4917)
     nome: nome || `Cliente_${telefone}`,
     data_contato: new Date().toISOString()
-  };
+};
   
   const { data, error } = await supabase
     .from('clientes_novos')
