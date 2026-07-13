@@ -364,48 +364,74 @@ async function enviarNotificacaoParaContatos(telefone, mensagem) {
     }
 }
 
-// ============================================================
-//  FUNÇÕES DE CLIENTES
-// ============================================================
-// ============================================================
+/// ============================================================
 //  FUNÇÕES DE CLIENTES (CORRIGIDO)
 // ============================================================
 async function buscarCliente(telefone) {
   console.log(`🔍 Buscando cliente ${telefone}...`);
   
   const telefoneLimpo = limparTelefone(telefone);
-  const telefoneFormatado = formatarTelefone(telefone);
+  const telefoneFormatado = formatarTelefone(telefoneLimpo);
   
-  // 1️⃣ Busca em clientes_ativos (com ambos os formatos)
+  console.log(`📱 Buscando com: limpo=${telefoneLimpo}, formatado=${telefoneFormatado}`);
+  
+  // 1️⃣ Busca em clientes_ativos (tentando os dois formatos)
   let { data: ativo, error: err1 } = await supabase
     .from('clientes_ativos')
     .select('*')
-    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .eq('telefone', telefoneFormatado)
     .maybeSingle();
+  
+  if (!ativo && !err1) {
+    const { data: ativoLimpo } = await supabase
+      .from('clientes_ativos')
+      .select('*')
+      .eq('telefone', telefoneLimpo)
+      .maybeSingle();
+    ativo = ativoLimpo;
+  }
   
   if (ativo) {
     console.log(`🟢 Cliente ATIVO encontrado: ${telefone}`);
     return { dados: ativo, tipo: 'ativo', tabela: 'clientes_ativos' };
   }
   
-  // 2️⃣ Busca em clientes_novos (com ambos os formatos)
+  // 2️⃣ Busca em clientes_novos
   let { data: novo, error: err2 } = await supabase
     .from('clientes_novos')
     .select('*')
-    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .eq('telefone', telefoneFormatado)
     .maybeSingle();
+  
+  if (!novo && !err2) {
+    const { data: novoLimpo } = await supabase
+      .from('clientes_novos')
+      .select('*')
+      .eq('telefone', telefoneLimpo)
+      .maybeSingle();
+    novo = novoLimpo;
+  }
   
   if (novo) {
     console.log(`🟡 Cliente NOVO encontrado: ${telefone}`);
     return { dados: novo, tipo: 'novo', tabela: 'clientes_novos' };
   }
   
-  // 3️⃣ Busca em contatos_amigos (com ambos os formatos)
+  // 3️⃣ Busca em contatos_amigos
   let { data: amigo, error: err3 } = await supabase
     .from('contatos_amigos')
     .select('*')
-    .or(`telefone.eq.${telefoneLimpo},telefone.eq.${telefoneFormatado}`)
+    .eq('telefone', telefoneFormatado)
     .maybeSingle();
+  
+  if (!amigo && !err3) {
+    const { data: amigoLimpo } = await supabase
+      .from('contatos_amigos')
+      .select('*')
+      .eq('telefone', telefoneLimpo)
+      .maybeSingle();
+    amigo = amigoLimpo;
+  }
   
   if (amigo) {
     console.log(`🤝 Contato AMIGO encontrado: ${telefone}`);
