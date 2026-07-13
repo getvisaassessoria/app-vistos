@@ -2939,6 +2939,30 @@ app.get('/api/contatos/cliente/:telefone', async (req, res) => {
     }
 });
 
+// ============================================================
+//  ROTA DE TESTE - NOTIFICAÇÃO
+// ============================================================
+app.post('/api/teste/notificacao', async (req, res) => {
+    try {
+        const { telefone, mensagem } = req.body;
+        
+        console.log(`🧪 Teste de notificação para: ${telefone}`);
+        console.log(`📝 Mensagem: ${mensagem}`);
+        
+        const resultado = await enviarNotificacaoParaContatos(telefone, mensagem);
+        
+        res.json({ 
+            success: true, 
+            enviado: resultado,
+            mensagem: 'Notificação enviada para todos os contatos'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro no teste:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 /// /============================================================
 //  INICIALIZAÇÃO
 // ============================================================
