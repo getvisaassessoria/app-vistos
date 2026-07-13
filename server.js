@@ -2734,7 +2734,7 @@ app.post('/api/documentos/upload', async (req, res) => {
     const buffer = Buffer.from(base64, 'base64');
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('documents-clients')  // ← NOME CORRETO
+      .from('documentos-clientes')  // ← NOME CORRETO
       .upload(caminho, buffer, {
         contentType: 'application/pdf',
         cacheControl: '3600'
@@ -2748,7 +2748,7 @@ app.post('/api/documentos/upload', async (req, res) => {
     // Obter URL pública
     const { data: urlData } = supabase
       .storage
-      .from('documents-clients')  // ← NOME CORRETO
+      .from('documentos-clientes')  // ← NOME CORRETO
       .getPublicUrl(caminho);
     
     // Salvar no banco
@@ -2808,7 +2808,7 @@ app.delete('/api/documentos/:id', async (req, res) => {
       // Remover do storage
       await supabase
         .storage
-        .from('documents-clients')
+        .from('documentos-clientes')
         .remove([path]);
     }
     
