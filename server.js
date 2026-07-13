@@ -408,53 +408,49 @@ async function cadastrarCliente(telefone, nome = null) {
   return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
 
-// ============================================================
-//  SISTEMA DE ETAPAS - FUNÇÕES (CORRIGIDO)
-// ============================================================
 async function criarEtapaInicial(telefone) {
   try {
     // Garantir que o telefone está formatado
     const telefoneFormatado = formatarTelefone(telefone);
     
-    // Verificar se o cliente existe em clientes_ativos com o telefone formatado
+    // Verificar se o cliente existe em clientes_ativos
     const { data: cliente, error: clienteError } = await supabase
       .from('clientes_ativos')
       .select('telefone, nome, criado_em')
       .eq('telefone', telefoneFormatado)
       .maybeSingle();
     
-    // Se não encontrou com formato, tentar com telefone limpo
     if (!cliente) {
-      const telefoneLimpo = limparTelefone(telefone);
-      const { data: clienteLimpo, error: errLimpo } = await supabase
-        .from('clientes_ativos')
-        .select('telefone, nome, criado_em')
-        .eq('telefone', telefoneLimpo)
-        .maybeSingle();
-      
-      if (clienteLimpo) {
-        // Atualizar o cliente para o formato correto
-        await supabase
-          .from('clientes_ativos')
-          .update({ telefone: telefoneFormatado })
-          .eq('telefone', telefoneLimpo);
-        
-        const { data: clienteAtualizado, error: errAtualizado } = await supabase
-          .from('clientes_ativos')
-          .select('telefone, nome, criado_em')
-          .eq('telefone', telefoneFormatado)
-          .maybeSingle();
-        
-        if (clienteAtualizado) {
-          return criarEtapaComCliente(res, clienteAtualizado, telefoneFormatado);
-        }
-      }
-      
       console.log(`⚠️ Cliente ${telefone} não encontrado em clientes_ativos. Etapa NÃO criada.`);
       return null;
     }
     
-    return criarEtapaComCliente(res, cliente, telefoneFormatado);
+    // Criar etapa
+    const novaEtapa = {
+      cliente_telefone: telefoneFormatado,
+      etapa_atual: 'formulario_enviado',
+      data_inicio: cliente.criado_em || new Date().toISOString(),
+      data_atualizacao: new Date().toISOString(),
+      historico: [
+        {
+          etapa: 'formulario_enviado',
+          data: new Date().toISOString(),
+          nota: 'Início do processo',
+          observacao: 'Cliente movido para clientes_ativos'
+        }
+      ]
+    };
+    
+    const { data, error } = await supabase
+      .from('etapas_processo')
+      .insert(novaEtapa)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    console.log(`✅ Etapa inicial criada para: ${telefoneFormatado}`);
+    return data;
     
   } catch (error) {
     console.error('❌ Erro ao criar etapa inicial:', error);
