@@ -1264,32 +1264,24 @@ if (avaliacaoProcessada) {
     }
 
     // Cliente FINALIZADO
-    if (cliente.tipo === 'finalizado') {
-      console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
-      await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:*\nhttps://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
-      return;
-    }
+if (cliente.tipo === 'finalizado') {
+    console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
+    await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:*\nhttps://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
+    return;
+}
 
-    // Cliente AMIGO - SILÊNCIO
-    if (cliente.tipo === 'amigo') {
-      console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
-      return;
-    }
+// Cliente AMIGO - SILÊNCIO TOTAL
+if (cliente.tipo === 'amigo') {
+    console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
+    return;
+}
 
-    // Cliente ATIVO - Mostra etapa
-    if (cliente.tipo === 'ativo') {
-      console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
-      let etapaMsg = '';
-      try {
-        const { data: etapa } = await supabase.from('etapas_processo').select('etapa_atual').eq('cliente_telefone', cleanPhone).single();
-        if (etapa) {
-          const etapaInfo = ETAPAS[etapa.etapa_atual];
-          etapaMsg = `\n📌 *Etapa atual:* ${etapaInfo?.label || etapa.etapa_atual}`;
-        }
-      } catch (err) { console.error('Erro ao buscar etapa:', err); }
-      await sendReply(cleanPhone, `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*${etapaMsg}\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`);
-      return;
-    }
+// Cliente ATIVO - SILÊNCIO (apenas limpa o estado)
+if (cliente.tipo === 'ativo') {
+    console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SILÊNCIO`);
+    userState.delete(cleanPhone);
+    return;
+}
 
     // CLIENTE NOVO - Mostra menu
     console.log(`🟡 Cliente ${cleanPhone} NOVO - Mostrando menu`);
