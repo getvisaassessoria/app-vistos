@@ -328,205 +328,96 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
-//  ENVIAR NOTIFICAÇÃO PARA TODOS OS CONTATOS
-// ============================================================
-async function enviarNotificacaoParaContatos(telefone, mensagem) {
-    try {
-        // 1. Enviar para o telefone principal
-        const enviadoPrincipal = await enviarWhatsApp(telefone, mensagem);
-        console.log(`📱 Notificação enviada para principal: ${telefone} (${enviadoPrincipal ? '✅' : '❌'})`);
-        
-        // 2. Buscar contatos
-        const { data: contatos, error } = await supabase
-            .from('contatos_notificacao')
-            .select('contato_telefone')
-            .eq('cliente_telefone', telefone)
-            .eq('ativo', true);
-        
-        if (error) {
-            console.error('❌ Erro ao buscar contatos:', error);
-            return false;
-        }
-        
-        // 3. Enviar para cada contato
-        if (contatos && contatos.length > 0) {
-            for (const contato of contatos) {
-                const enviado = await enviarWhatsApp(contato.contato_telefone, mensagem);
-                console.log(`📱 Notificação enviada para contato: ${contato.contato_telefone} (${enviado ? '✅' : '❌'})`);
-            }
-        }
-        
-        return true;
-        
-    } catch (error) {
-        console.error('❌ Erro ao enviar notificações:', error);
-        return false;
-    }
-}
-
-/// ============================================================
-//  FUNÇÕES DE CLIENTES (CORRIGIDO)
+//  FUNÇÕES DE CLIENTES
 // ============================================================
 async function buscarCliente(telefone) {
   console.log(`🔍 Buscando cliente ${telefone}...`);
-  
-  const telefoneLimpo = limparTelefone(telefone);
-  const telefoneFormatado = formatarTelefone(telefoneLimpo);
-  
-  console.log(`📱 Buscando com: limpo=${telefoneLimpo}, formatado=${telefoneFormatado}`);
-  
-  // 1️⃣ Busca em clientes_ativos (tentando os dois formatos)
-  let { data: ativo, error: err1 } = await supabase
-    .from('clientes_ativos')
-    .select('*')
-    .eq('telefone', telefoneFormatado)
-    .maybeSingle();
-  
-  if (!ativo && !err1) {
-    const { data: ativoLimpo } = await supabase
-      .from('clientes_ativos')
-      .select('*')
-      .eq('telefone', telefoneLimpo)
-      .maybeSingle();
-    ativo = ativoLimpo;
-  }
-  
+  const { data: ativo, error: err1 } = await supabase
+    .from('clientes_ativos').select('*').eq('telefone', telefone).maybeSingle();
   if (ativo) {
     console.log(`🟢 Cliente ATIVO encontrado: ${telefone}`);
     return { dados: ativo, tipo: 'ativo', tabela: 'clientes_ativos' };
   }
-  
-  // 2️⃣ Busca em clientes_novos
-  let { data: novo, error: err2 } = await supabase
-    .from('clientes_novos')
-    .select('*')
-    .eq('telefone', telefoneFormatado)
-    .maybeSingle();
-  
-  if (!novo && !err2) {
-    const { data: novoLimpo } = await supabase
-      .from('clientes_novos')
-      .select('*')
-      .eq('telefone', telefoneLimpo)
-      .maybeSingle();
-    novo = novoLimpo;
-  }
-  
+  const { data: novo, error: err2 } = await supabase
+    .from('clientes_novos').select('*').eq('telefone', telefone).maybeSingle();
   if (novo) {
     console.log(`🟡 Cliente NOVO encontrado: ${telefone}`);
     return { dados: novo, tipo: 'novo', tabela: 'clientes_novos' };
   }
-  
-  // 3️⃣ Busca em contatos_amigos
-  let { data: amigo, error: err3 } = await supabase
-    .from('contatos_amigos')
-    .select('*')
-    .eq('telefone', telefoneFormatado)
-    .maybeSingle();
-  
-  if (!amigo && !err3) {
-    const { data: amigoLimpo } = await supabase
-      .from('contatos_amigos')
-      .select('*')
-      .eq('telefone', telefoneLimpo)
-      .maybeSingle();
-    amigo = amigoLimpo;
-  }
-  
+  const { data: amigo, error: err3 } = await supabase
+    .from('contatos_amigos').select('*').eq('telefone', telefone).maybeSingle();
   if (amigo) {
     console.log(`🤝 Contato AMIGO encontrado: ${telefone}`);
     return { dados: amigo, tipo: 'amigo', tabela: 'contatos_amigos' };
   }
-  
   console.log(`📝 Cliente ${telefone} NÃO encontrado`);
   return null;
 }
 
-// ============================================================
-//  CADASTRAR CLIENTE (CORRIGIDO)
-// ============================================================
 async function cadastrarCliente(telefone, nome = null) {
   console.log(`📝 Cadastrando ${telefone} como NOVO...`);
-  
-  // Garantir que o telefone está formatado
-  const telefoneFormatado = formatarTelefone(telefone);
-  
-  // Verificar se já existe (com formato)
-  const { data: existente } = await supabase
-    .from('clientes_novos')
-    .select('telefone')
-    .eq('telefone', telefoneFormatado)
-    .maybeSingle();
-  
-  if (existente) {
-    console.log(`⚠️ Cliente ${telefoneFormatado} já existe em clientes_novos`);
-    return { dados: existente, tipo: 'novo', tabela: 'clientes_novos' };
-  }
-  
   const dadosCliente = {
-    telefone: telefoneFormatado,  // ← telefone formatado ((21) 98523-4917)
+    telefone: telefone,
     nome: nome || `Cliente_${telefone}`,
     data_contato: new Date().toISOString()
-};
-  
+  };
   const { data, error } = await supabase
-    .from('clientes_novos')
-    .insert(dadosCliente)
-    .select()
-    .single();
-  
+    .from('clientes_novos').insert(dadosCliente).select().single();
   if (error) {
     console.error('❌ Erro ao cadastrar cliente:', error);
     return null;
   }
-  
   console.log(`✅ Cliente ${telefone} cadastrado como NOVO`);
   return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
 
+// ============================================================
+//  SISTEMA DE ETAPAS - FUNÇÕES (CORRIGIDO)
+// ============================================================
 async function criarEtapaInicial(telefone) {
   try {
     // Garantir que o telefone está formatado
     const telefoneFormatado = formatarTelefone(telefone);
     
-    // Verificar se o cliente existe em clientes_ativos
+    // Verificar se o cliente existe em clientes_ativos com o telefone formatado
     const { data: cliente, error: clienteError } = await supabase
       .from('clientes_ativos')
       .select('telefone, nome, criado_em')
       .eq('telefone', telefoneFormatado)
       .maybeSingle();
     
+    // Se não encontrou com formato, tentar com telefone limpo
     if (!cliente) {
+      const telefoneLimpo = limparTelefone(telefone);
+      const { data: clienteLimpo, error: errLimpo } = await supabase
+        .from('clientes_ativos')
+        .select('telefone, nome, criado_em')
+        .eq('telefone', telefoneLimpo)
+        .maybeSingle();
+      
+      if (clienteLimpo) {
+        // Atualizar o cliente para o formato correto
+        await supabase
+          .from('clientes_ativos')
+          .update({ telefone: telefoneFormatado })
+          .eq('telefone', telefoneLimpo);
+        
+        const { data: clienteAtualizado, error: errAtualizado } = await supabase
+          .from('clientes_ativos')
+          .select('telefone, nome, criado_em')
+          .eq('telefone', telefoneFormatado)
+          .maybeSingle();
+        
+        if (clienteAtualizado) {
+          return criarEtapaComCliente(res, clienteAtualizado, telefoneFormatado);
+        }
+      }
+      
       console.log(`⚠️ Cliente ${telefone} não encontrado em clientes_ativos. Etapa NÃO criada.`);
       return null;
     }
     
-    // Criar etapa
-    const novaEtapa = {
-      cliente_telefone: telefoneFormatado,
-      etapa_atual: 'formulario_enviado',
-      data_inicio: cliente.criado_em || new Date().toISOString(),
-      data_atualizacao: new Date().toISOString(),
-      historico: [
-        {
-          etapa: 'formulario_enviado',
-          data: new Date().toISOString(),
-          nota: 'Início do processo',
-          observacao: 'Cliente movido para clientes_ativos'
-        }
-      ]
-    };
-    
-    const { data, error } = await supabase
-      .from('etapas_processo')
-      .insert(novaEtapa)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    console.log(`✅ Etapa inicial criada para: ${telefoneFormatado}`);
-    return data;
+    return criarEtapaComCliente(res, cliente, telefoneFormatado);
     
   } catch (error) {
     console.error('❌ Erro ao criar etapa inicial:', error);
@@ -568,7 +459,7 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
     const { data: cliente } = await supabase.from('clientes_ativos').select('nome').eq('telefone', telefone).single();
     const nomeCliente = cliente?.nome || 'Cliente';
     const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
-    await enviarNotificacaoParaContatos(telefoneCliente, mensagem);
+    await enviarWhatsApp(telefone, mensagem);
     console.log(`📨 Notificação enviada para ${telefone}: ${novaEtapa}`);
   } catch (error) {
     console.error('Erro ao notificar cliente:', error);
@@ -1041,137 +932,6 @@ function getRespostaIntencao(intent, service = null) {
 }
 
 // ============================================================
-//  DETECTAR AVALIAÇÃO E MOVER PARA ATIVOS
-// ============================================================
-async function detectarAvaliacaoEAcionar(messageText, cleanPhone) {
-    try {
-        // Padrões da mensagem de avaliação
-        const padroes = [
-            'classificação *Perfil',
-            'Meus dados:',
-            'Perfil:',
-            'Renda:',
-            'Histórico:',
-            'Motivo:',
-            'Quero iniciar meu processo'
-        ];
-        
-        // Verificar se a mensagem contém os padrões
-        const contemPadrao = padroes.some(p => messageText.includes(p));
-        
-        if (!contemPadrao) {
-            console.log('📝 Mensagem não é uma avaliação');
-            return false;
-        }
-        
-        console.log('🔍 Mensagem de avaliação detectada!');
-        
-        // Extrair dados da mensagem
-        const nomeMatch = messageText.match(/Nome:\s*(.+)/);
-        const telefoneMatch = messageText.match(/WhatsApp:\s*(.+)/);
-        const emailMatch = messageText.match(/Email:\s*(.+)/);
-        const perfilMatch = messageText.match(/Perfil:\s*(.+)/);
-        const rendaMatch = messageText.match(/Renda:\s*(.+)/);
-        const historicoMatch = messageText.match(/Histórico:\s*(.+)/);
-        const motivoMatch = messageText.match(/Motivo:\s*(.+)/);
-        const classificacaoMatch = messageText.match(/classificação\s*([^*]+)/);
-        
-        const nome = nomeMatch ? nomeMatch[1].trim() : 'Cliente';
-        const telefoneExtraido = telefoneMatch ? limparTelefone(telefoneMatch[1].trim()) : cleanPhone;
-        const email = emailMatch ? emailMatch[1].trim() : null;
-        
-        const telefoneFormatado = formatarTelefone(telefoneExtraido);
-        
-        console.log(`📱 Telefone extraído: ${telefoneFormatado}`);
-        
-        // Verificar se o cliente já existe em clientes_ativos
-        const { data: clienteAtivo } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefoneFormatado)
-            .maybeSingle();
-        
-        if (clienteAtivo) {
-            console.log(`ℹ️ Cliente ${telefoneFormatado} já está em ATIVOS`);
-            return true;
-        }
-        
-        // Buscar em clientes_novos
-        const { data: clienteNovo } = await supabase
-            .from('clientes_novos')
-            .select('*')
-            .eq('telefone', telefoneFormatado)
-            .maybeSingle();
-        
-        if (clienteNovo) {
-            // Mover para clientes_ativos
-            await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: clienteNovo.telefone,
-                    nome: clienteNovo.nome || nome,
-                    email: email,
-                    status: 'em_processo',
-                    criado_em: clienteNovo.data_contato,
-                    atualizado_em: new Date().toISOString()
-                });
-            
-            await supabase
-                .from('clientes_novos')
-                .delete()
-                .eq('telefone', telefoneFormatado);
-            
-            console.log(`✅ Cliente ${telefoneFormatado} movido para ATIVOS (avaliação)`);
-        } else {
-            // Criar diretamente em clientes_ativos
-            await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: telefoneFormatado,
-                    nome: nome,
-                    email: email,
-                    status: 'em_processo',
-                    criado_em: new Date().toISOString(),
-                    atualizado_em: new Date().toISOString()
-                });
-            console.log(`✅ Cliente ${telefoneFormatado} criado em ATIVOS (avaliação)`);
-        }
-        
-        // Criar etapa inicial
-        await criarEtapaInicial(telefoneFormatado);
-        console.log(`✅ Etapa criada para ${telefoneFormatado}`);
-        
-        // Enviar mensagem personalizada
-        const primeiroNome = nome.split(' ')[0] || 'Cliente';
-        const classificacao = classificacaoMatch ? classificacaoMatch[1].trim() : 'Perfil';
-        const perfil = perfilMatch ? perfilMatch[1].trim() : 'N/A';
-        const renda = rendaMatch ? rendaMatch[1].trim() : 'N/A';
-        const historico = historicoMatch ? historicoMatch[1].trim() : 'N/A';
-        const motivo = motivoMatch ? motivoMatch[1].trim() : 'N/A';
-        
-        let mensagem = `👋 Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
-        mensagem += `✅ *Recebemos sua avaliação!* Seu perfil foi classificado como *${classificacao}*.\n\n`;
-        mensagem += `📊 *Seus dados:*\n`;
-        mensagem += `• Situação: ${perfil}\n`;
-        mensagem += `• Renda: ${renda}\n`;
-        mensagem += `• Histórico: ${historico}\n`;
-        mensagem += `• Motivo: ${motivo}\n\n`;
-        mensagem += `📞 *Um dos nossos especialistas entrará em contato muito breve para dar continuidade ao seu processo.*\n\n`;
-        mensagem += `💬 *Enquanto isso, estou aqui para tirar qualquer dúvida!*`;
-        
-        await enviarWhatsApp(telefoneFormatado, mensagem);
-        console.log(`📨 Mensagem personalizada enviada para ${telefoneFormatado}`);
-        
-        return true;
-        
-    } catch (error) {
-        console.error('❌ Erro ao processar avaliação:', error);
-        return false;
-    }
-}
-
-
-// ============================================================
 //  FUNÇÕES DE MENU
 // ============================================================
 async function getMenuPrincipal() {
@@ -1247,14 +1007,6 @@ app.post('/api/webhook/zapi', async (req, res) => {
     if (cleanPhone.length < 10) { console.log(`⚠️ Telefone inválido: ${cleanPhone}`); return; }
     console.log(`📱 Telefone limpo: ${cleanPhone}`);
 
-    // Verificar se é uma mensagem de avaliação
-const avaliacaoProcessada = await detectarAvaliacaoEAcionar(messageText, cleanPhone);
-if (avaliacaoProcessada) {
-    console.log('✅ Avaliação processada, menu não será mostrado');
-    return;
-}
-
-
     let cliente = await buscarCliente(cleanPhone);
     if (!cliente) cliente = await cadastrarCliente(cleanPhone);
     if (!cliente) {
@@ -1264,24 +1016,32 @@ if (avaliacaoProcessada) {
     }
 
     // Cliente FINALIZADO
-if (cliente.tipo === 'finalizado') {
-    console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
-    await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:*\nhttps://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
-    return;
-}
+    if (cliente.tipo === 'finalizado') {
+      console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
+      await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:*\nhttps://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
+      return;
+    }
 
-// Cliente AMIGO - SILÊNCIO TOTAL
-if (cliente.tipo === 'amigo') {
-    console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
-    return;
-}
+    // Cliente AMIGO - SILÊNCIO
+    if (cliente.tipo === 'amigo') {
+      console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
+      return;
+    }
 
-// Cliente ATIVO - SILÊNCIO (apenas limpa o estado)
-if (cliente.tipo === 'ativo') {
-    console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SILÊNCIO`);
-    userState.delete(cleanPhone);
-    return;
-}
+    // Cliente ATIVO - Mostra etapa
+    if (cliente.tipo === 'ativo') {
+      console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
+      let etapaMsg = '';
+      try {
+        const { data: etapa } = await supabase.from('etapas_processo').select('etapa_atual').eq('cliente_telefone', cleanPhone).single();
+        if (etapa) {
+          const etapaInfo = ETAPAS[etapa.etapa_atual];
+          etapaMsg = `\n📌 *Etapa atual:* ${etapaInfo?.label || etapa.etapa_atual}`;
+        }
+      } catch (err) { console.error('Erro ao buscar etapa:', err); }
+      await sendReply(cleanPhone, `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*${etapaMsg}\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`);
+      return;
+    }
 
     // CLIENTE NOVO - Mostra menu
     console.log(`🟡 Cliente ${cleanPhone} NOVO - Mostrando menu`);
@@ -1463,18 +1223,6 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 // ============================================================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
-
-  // ============================================================
-  //  🔍 LOGS DE DIAGNÓSTICO (APENAS LEITURA)
-  //  ============================================================
-  console.log('🔵 ====== DS-160 RECEBIDO ======');
-  console.log('📋 Campos recebidos:', Object.keys(data));
-  console.log('📋 Nome:', data['full_name'] || data['nome'] || 'NÃO ENCONTRADO');
-  console.log('📋 Telefone:', data['text-77'] || data['telefone'] || 'NÃO ENCONTRADO');
-  console.log('📋 Email:', data['email-1'] || data['email'] || 'NÃO ENCONTRADO');
-  console.log('📋 form_data será salvo?', data ? '✅ SIM' : '❌ NÃO');
-  console.log('🔵 =====================================');
-  
   
   if (isSpamData(data)) {
     console.log('🚫 SPAM DS-160 - Dados rejeitados');
@@ -2545,9 +2293,6 @@ async function gerarPDF_VistoNegado(data, nome, emailCliente, score, classificac
 // ============================================================
 //  ROTA SIMULADOR 5 ETAPAS
 // ============================================================
-// ============================================================
-//  ROTA SIMULADOR 5 ETAPAS (CORRIGIDA)
-// ============================================================
 app.post('/api/submit-simulador', async (req, res) => {
   const data = req.body;
   
@@ -2581,73 +2326,6 @@ app.post('/api/submit-simulador', async (req, res) => {
       }
       
       if (telefoneCliente) {
-        // ============================================================
-        //  🔄 MOVER CLIENTE PARA "EM PROCESSO" AUTOMATICAMENTE
-        //  ============================================================
-        try {
-          const telefoneLimpo = limparTelefone(telefoneCliente);
-          const telefoneFormatado = formatarTelefone(telefoneLimpo);
-          
-          // 1. Verificar se o cliente já existe em clientes_ativos
-          const { data: clienteAtivo } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefoneFormatado)
-            .maybeSingle();
-          
-          if (!clienteAtivo) {
-            // 2. Buscar em clientes_novos
-            const { data: clienteNovo } = await supabase
-              .from('clientes_novos')
-              .select('*')
-              .eq('telefone', telefoneFormatado)
-              .maybeSingle();
-            
-            if (clienteNovo) {
-              // 3. Mover para clientes_ativos
-              await supabase
-                .from('clientes_ativos')
-                .insert({
-                  telefone: clienteNovo.telefone,
-                  nome: clienteNovo.nome || nome,
-                  email: emailCliente,
-                  status: 'em_processo',
-                  criado_em: clienteNovo.data_contato,
-                  atualizado_em: new Date().toISOString()
-                });
-              
-              await supabase
-                .from('clientes_novos')
-                .delete()
-                .eq('telefone', telefoneFormatado);
-              
-              console.log(`✅ Cliente ${telefoneFormatado} movido para ATIVOS (simulador)`);
-            } else {
-              // 4. Criar diretamente em clientes_ativos
-              await supabase
-                .from('clientes_ativos')
-                .insert({
-                  telefone: telefoneFormatado,
-                  nome: nome,
-                  email: emailCliente,
-                  status: 'em_processo',
-                  criado_em: new Date().toISOString(),
-                  atualizado_em: new Date().toISOString()
-                });
-              console.log(`✅ Cliente ${telefoneFormatado} criado em ATIVOS (simulador)`);
-            }
-            
-            // 5. Criar etapa inicial
-            await criarEtapaInicial(telefoneFormatado);
-            console.log(`✅ Etapa criada para ${telefoneFormatado}`);
-          }
-        } catch (err) {
-          console.error('⚠️ Erro ao mover cliente para ativos:', err.message);
-        }
-        
-        // ============================================================
-        //  📝 SALVAR LEAD
-        //  ============================================================
         const { error } = await supabase
           .from('leads_simulador')
           .insert({
@@ -2662,18 +2340,15 @@ app.post('/api/submit-simulador', async (req, res) => {
           });
         
         if (error) {
-          console.error('❌ Erro ao salvar lead:', error);
+          console.error('❌ Erro ao salvar:', error);
         } else {
           console.log(`✅ Lead salvo: ${nome} - ${telefoneCliente}`);
           
           const primeiroNome = nome.split(' ')[0];
           const primeiraViagem = historicoViagens === 'Nunca viajei para fora do Brasil';
           
-          // ============================================================
-          //  📱 MENSAGEM PARA O CLIENTE (SEM MENU)
-          //  ============================================================
-          let mensagem = `👋 Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA.\n\n`;
-          mensagem += `✅ *Recebemos sua avaliação!* Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
+          let mensagem = `Olá, ${primeiroNome}! Tudo bem? Meu nome é Moisés, consultor da GETVISA e vou te acompanhar.\n\n`;
+          mensagem += `Recebemos sua avaliação. Seu perfil foi classificado como *${classificacao}* (${score}/100).\n\n`;
           mensagem += `📊 *Seus dados:*\n`;
           mensagem += `• Situação: ${situacaoProfissional}\n`;
           mensagem += `• Renda: ${renda}\n`;
@@ -2684,8 +2359,9 @@ app.post('/api/submit-simulador', async (req, res) => {
             mensagem += `Por ser sua primeira viagem internacional, vamos preparar uma documentação extra.\n\n`;
           }
           
-          mensagem += `📞 *Um dos nossos especialistas entrará em contato muito breve para dar continuidade ao seu processo.*\n\n`;
-          mensagem += `💬 *Enquanto isso, estou aqui para tirar qualquer dúvida!*`;
+          mensagem += `✅ *Podemos dar início ao seu processo?*\n`;
+          mensagem += `Se sua resposta for *SIM*, te envio o link do DS-160.\n\n`;
+          mensagem += `💬 *Me pergunte o que quiser!*`;
           
           await enviarWhatsApp(telefoneCliente, mensagem);
         }
@@ -3009,337 +2685,6 @@ app.get('/api/portal/ds160/:telefone', async (req, res) => {
   }
 });
 
-// ============================================================
-//  DOCUMENTOS - ROTAS
-// ============================================================
-
-// Listar documentos de um cliente
-app.get('/api/documentos/cliente/:telefone', async (req, res) => {
-  try {
-    const { telefone } = req.params;
-    const telefoneFormatado = formatarTelefone(limparTelefone(telefone));
-    
-    const { data, error } = await supabase
-      .from('documentos_cliente')
-      .select('*')
-      .eq('cliente_telefone', telefoneFormatado)
-      .eq('ativo', true)
-      .order('data_upload', { ascending: false });
-    
-    if (error) throw error;
-    
-    res.json({ success: true, documentos: data || [] });
-    
-  } catch (error) {
-    console.error('❌ Erro ao listar documentos:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Upload de documento (admin)
-// Upload de documento (admin) - SEM VERIFICAÇÃO
-// Upload de documento (admin)
-app.post('/api/documentos/upload', async (req, res) => {
-  try {
-    const { cliente_telefone, tipo, nome, descricao, base64, nome_arquivo } = req.body;
-    
-    // Verificar API Key
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) {
-      return res.status(403).json({ success: false, message: 'Acesso negado' });
-    }
-    
-    const telefoneFormatado = formatarTelefone(limparTelefone(cliente_telefone));
-    
-    // Criar caminho no storage
-    const caminho = `${telefoneFormatado}/${tipo}_${Date.now()}.pdf`;
-    
-    // Fazer upload para o Supabase Storage
-    const buffer = Buffer.from(base64, 'base64');
-    const { data: uploadData, error: uploadError } = await supabase
-      .storage
-      .from('documentos-clientes')  // ← NOME CORRETO
-      .upload(caminho, buffer, {
-        contentType: 'application/pdf',
-        cacheControl: '3600'
-      });
-    
-    if (uploadError) {
-      console.error('❌ Erro no upload:', uploadError);
-      return res.status(500).json({ success: false, message: uploadError.message });
-    }
-    
-    // Obter URL pública
-    const { data: urlData } = supabase
-      .storage
-      .from('documentos-clientes')  // ← NOME CORRETO
-      .getPublicUrl(caminho);
-    
-    // Salvar no banco
-    const { data, error } = await supabase
-      .from('documentos_cliente')
-      .insert({
-        cliente_telefone: telefoneFormatado,
-        tipo: tipo,
-        nome: nome || nome_arquivo || 'documento',
-        descricao: descricao || '',
-        url: urlData.publicUrl,
-        nome_arquivo: nome_arquivo || nome || 'documento.pdf',
-        tamanho: buffer.length,
-        tipo_arquivo: 'application/pdf'
-      })
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    console.log(`✅ Documento enviado para ${telefoneFormatado}: ${tipo}`);
-    
-    res.json({ success: true, documento: data });
-    
-  } catch (error) {
-    console.error('❌ Erro ao fazer upload:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Remover documento (admin)
-app.delete('/api/documentos/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Verificar API Key
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) {
-      return res.status(403).json({ success: false, message: 'Acesso negado' });
-    }
-    
-    // Buscar documento
-    const { data: documento, error: findError } = await supabase
-      .from('documentos_cliente')
-      .select('url')
-      .eq('id', id)
-      .single();
-    
-    if (findError) throw findError;
-    
-    if (documento) {
-      // Extrair caminho da URL
-      const url = new URL(documento.url);
-      const pathParts = url.pathname.split('/');
-      const path = pathParts.slice(pathParts.indexOf('documents-clients') + 1).join('/');
-      
-      // Remover do storage
-      await supabase
-        .storage
-        .from('documentos-clientes')
-        .remove([path]);
-    }
-    
-    // Remover do banco
-    const { error } = await supabase
-      .from('documentos_cliente')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
-    
-    res.json({ success: true });
-    
-  } catch (error) {
-    console.error('❌ Erro ao remover documento:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ============================================================
-// ADICIONAR CONTATO DE NOTIFICAÇÃO
-// ============================================================
-app.post('/api/contatos/adicionar', async (req, res) => {
-    try {
-        const { cliente_telefone, contato_telefone, contato_nome, tipo, responsavel } = req.body;
-        
-        // Verificar se o cliente existe
-        const { data: cliente, error: err1 } = await supabase
-            .from('clientes_ativos')
-            .select('telefone')
-            .eq('telefone', cliente_telefone)
-            .single();
-        
-        if (!cliente) {
-            return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
-        }
-        
-        // Se for responsável, remover responsável anterior
-        if (responsavel) {
-            await supabase
-                .from('contatos_notificacao')
-                .update({ responsavel: false })
-                .eq('cliente_telefone', cliente_telefone);
-        }
-        
-        // Adicionar contato
-        const { data, error } = await supabase
-            .from('contatos_notificacao')
-            .insert({
-                cliente_telefone: cliente_telefone,
-                contato_telefone: contato_telefone,
-                contato_nome: contato_nome,
-                tipo: tipo || 'responsavel',
-                responsavel: responsavel || false
-            })
-            .select()
-            .single();
-        
-        if (error) throw error;
-        
-        res.json({ success: true, contato: data });
-        
-    } catch (error) {
-        console.error('❌ Erro ao adicionar contato:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ============================================================
-// BUSCAR CONTATOS DE NOTIFICAÇÃO
-// ============================================================
-app.get('/api/contatos/cliente/:telefone', async (req, res) => {
-    try {
-        const { telefone } = req.params;
-        const telefoneFormatado = formatarTelefone(limparTelefone(telefone));
-        
-        const { data, error } = await supabase
-            .from('contatos_notificacao')
-            .select('*')
-            .eq('cliente_telefone', telefoneFormatado)
-            .eq('ativo', true)
-            .order('responsavel', { ascending: false });
-        
-        if (error) throw error;
-        
-        res.json({ success: true, contatos: data || [] });
-        
-    } catch (error) {
-        console.error('❌ Erro ao buscar contatos:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ============================================================
-//  ROTA DE TESTE - NOTIFICAÇÃO
-// ============================================================
-app.post('/api/teste/notificacao', async (req, res) => {
-    try {
-        const { telefone, mensagem } = req.body;
-        
-        console.log(`🧪 Teste de notificação para: ${telefone}`);
-        console.log(`📝 Mensagem: ${mensagem}`);
-        
-        const resultado = await enviarNotificacaoParaContatos(telefone, mensagem);
-        
-        res.json({ 
-            success: true, 
-            enviado: resultado,
-            mensagem: 'Notificação enviada para todos os contatos'
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro no teste:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ============================================================
-//  ROTAS PARA MOVER PARA AMIGO
-// ============================================================
-
-// Buscar cliente por telefone
-app.get('/api/clientes/buscar/:telefone', async (req, res) => {
-    try {
-        const { telefone } = req.params;
-        
-        // Buscar em clientes_ativos
-        const { data: ativo, error: err1 } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        if (ativo) {
-            return res.json({ success: true, cliente: ativo, origem: 'ativos' });
-        }
-        
-        // Buscar em clientes_novos
-        const { data: novo, error: err2 } = await supabase
-            .from('clientes_novos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        if (novo) {
-            return res.json({ success: true, cliente: novo, origem: 'novos' });
-        }
-        
-        res.status(404).json({ success: false, message: 'Cliente não encontrado' });
-        
-    } catch (error) {
-        console.error('❌ Erro ao buscar cliente:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Mover para amigo
-app.post('/api/contatos/mover-para-amigo', async (req, res) => {
-    try {
-        const { telefone, nome } = req.body;
-        
-        const { error } = await supabase
-            .from('contatos_amigos')
-            .insert({
-                telefone: telefone,
-                nome: nome,
-                criado_em: new Date().toISOString()
-            });
-        
-        if (error) throw error;
-        
-        res.json({ success: true });
-        
-    } catch (error) {
-        console.error('❌ Erro ao mover para amigo:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Remover de ativos
-app.post('/api/contatos/remover-ativo', async (req, res) => {
-    try {
-        const { telefone } = req.body;
-        
-        // Remover de clientes_ativos
-        const { error: err1 } = await supabase
-            .from('clientes_ativos')
-            .delete()
-            .eq('telefone', telefone);
-        
-        if (err1) throw err1;
-        
-        // Remover de etapas_processo
-        const { error: err2 } = await supabase
-            .from('etapas_processo')
-            .delete()
-            .eq('cliente_telefone', telefone);
-        
-        if (err2) throw err2;
-        
-        res.json({ success: true });
-        
-    } catch (error) {
-        console.error('❌ Erro ao remover de ativos:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
 
 /// /============================================================
 //  INICIALIZAÇÃO
