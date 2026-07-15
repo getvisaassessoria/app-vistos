@@ -1463,6 +1463,18 @@ app.delete('/api/compromissos/:id', validateApiKey, async (req, res) => {
 // ============================================================
 app.post('/api/submit-ds160', async (req, res) => {
   const data = req.body;
+
+  // ============================================================
+  //  🔍 LOGS DE DIAGNÓSTICO (APENAS LEITURA)
+  //  ============================================================
+  console.log('🔵 ====== DS-160 RECEBIDO ======');
+  console.log('📋 Campos recebidos:', Object.keys(data));
+  console.log('📋 Nome:', data['full_name'] || data['nome'] || 'NÃO ENCONTRADO');
+  console.log('📋 Telefone:', data['text-77'] || data['telefone'] || 'NÃO ENCONTRADO');
+  console.log('📋 Email:', data['email-1'] || data['email'] || 'NÃO ENCONTRADO');
+  console.log('📋 form_data será salvo?', data ? '✅ SIM' : '❌ NÃO');
+  console.log('🔵 =====================================');
+  
   
   if (isSpamData(data)) {
     console.log('🚫 SPAM DS-160 - Dados rejeitados');
