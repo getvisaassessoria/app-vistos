@@ -9,7 +9,7 @@ const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
-
+ 
 // ============================================================
 //  CONFIGURAÇÕES GERAIS
 // ============================================================
