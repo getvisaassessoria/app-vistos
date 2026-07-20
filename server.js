@@ -1502,19 +1502,22 @@ app.post('/api/submit-ds160', async (req, res) => {
                         .maybeSingle();
 
                     // Criar cliente se não existir
-                    if (!clienteExistente) {
-                        const { error: insertError } = await supabase
-                            .from('clientes_ativos')
-                            .insert({
-                                telefone: telefoneLimpo,
-                                nome: nome
-                            });
+                    // Criar/atualizar cliente em ATIVOS (USANDO UPSERT)
+                    const { error: insertError } = await supabase
+                        .from('clientes_ativos')
+                        .upsert({
+                            telefone: telefoneLimpo,
+                            nome: nome,
+                            atualizado_em: new Date().toISOString()
+                        }, {
+                            onConflict: 'telefone',
+                            ignoreDuplicates: false
+                        });
 
-                        if (insertError) {
-                            console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
-                        } else {
-                            console.log(`✅ Cliente ${telefoneLimpo} criado em ATIVOS`);
-                        }
+                    if (insertError) {
+                        console.error('❌ Erro ao criar/atualizar cliente em ATIVOS:', insertError);
+                    } else {
+                        console.log(`✅ Cliente ${telefoneLimpo} criado/atualizado em ATIVOS`);
                     }
 
                     // Criar etapa
