@@ -960,184 +960,280 @@ function validateApiKey(req, res, next) {
   next();
 }
 
+
 // ============================================================
-//  WEBHOOK Z-API
+//  WEBHOOK Z-API (VERSÃO CORRIGIDA COM LOGS DETALHADOS)
 // ============================================================
 app.post('/api/webhook/zapi', async (req, res) => {
-  console.log('📥 Webhook Z-API recebido');
-  res.status(200).json({ status: 'ok' });
+    // LOG IMEDIATO
+    console.log('📥 ========== WEBHOOK Z-API RECEBIDO ==========');
+    console.log('📥 Timestamp:', new Date().toISOString());
+    console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('📥 Body:', JSON.stringify(req.body, null, 2));
+    
+    // Resposta imediata (Z-API precisa de resposta rápida)
+    res.status(200).json({ 
+        status: 'ok', 
+        received: true,
+        timestamp: new Date().toISOString()
+    });
 
-  try {
-    const body = req.body;
-    if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
-      console.log('👥 Mensagem de grupo ignorada');
-      return;
-    }
-    if (body.fromMe === true) {
-      console.log('🤖 Mensagem do próprio bot ignorada');
-      return;
-    }
-    if (body.isStatusReply === true || body.waitingMessage === true) {
-      console.log('⏳ Mensagem de status/waiting ignorada');
-      return;
-    }
+    // Processamento assíncrono
+    (async () => {
+        try {
+            const body = req.body;
+            
+            // 1. VERIFICAR SE É GRUPO
+            if (body.isGroup === true || body.isGroupMsg === true || body.chatId?.includes('@g.us')) {
+                console.log('👥 Mensagem de grupo ignorada');
+                return;
+            }
+            
+            // 2. VERIFICAR SE É DO PRÓPRIO BOT
+            if (body.fromMe === true) {
+                console.log('🤖 Mensagem do próprio bot ignorada');
+                return;
+            }
+            
+            // 3. VERIFICAR SE É STATUS/WAITING
+            if (body.isStatusReply === true || body.waitingMessage === true) {
+                console.log('⏳ Mensagem de status/waiting ignorada');
+                return;
+            }
 
-    let messageText = '', senderPhone = '';
-    if (body.text) {
-      if (typeof body.text === 'string') messageText = body.text;
-      else if (body.text.message) messageText = body.text.message;
-    }
-    if (!messageText && body.message) {
-      if (typeof body.message === 'string') messageText = body.message;
-      else if (body.message.text) messageText = body.message.text;
-    }
-    if (!messageText && body.content) messageText = body.content;
-    if (!messageText && body.body) messageText = body.body;
-    if (body.phone) senderPhone = body.phone;
-    else if (body.from) senderPhone = body.from;
-    else if (body.sender) senderPhone = body.sender;
-    if (!senderPhone) { console.log('⚠️ Sem telefone do remetente'); return; }
-    if (!messageText || messageText.trim().length === 0) { console.log('⚠️ Mensagem vazia'); return; }
-
-    messageText = messageText.trim();
-    console.log(`📩 Mensagem de ${senderPhone}: ${messageText}`);
-
-    let cleanPhone = senderPhone.toString().replace(/\D/g, '');
-    if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
-    if (cleanPhone.length < 10) { console.log(`⚠️ Telefone inválido: ${cleanPhone}`); return; }
-    console.log(`📱 Telefone limpo: ${cleanPhone}`);
-
-    let cliente = await buscarCliente(cleanPhone);
-    if (!cliente) cliente = await cadastrarCliente(cleanPhone);
-    if (!cliente) {
-      console.error(`❌ Falha ao cadastrar cliente ${cleanPhone}`);
-      await sendReply(cleanPhone, '⚠️ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-      return;
-    }
-
-    // Cliente FINALIZADO
-    if (cliente.tipo === 'finalizado') {
-      console.log(`🏁 Cliente FINALIZADO - Mensagem de agradecimento`);
-      await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${cliente.dados.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(cliente.dados.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:*\nhttps://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
-      return;
-    }
-
-    // Cliente AMIGO - SILÊNCIO
-    if (cliente.tipo === 'amigo') {
-      console.log(`🤝 Cliente ${cleanPhone} é AMIGO - SILÊNCIO TOTAL`);
-      return;
-    }
-
-    // Cliente ATIVO - Mostra etapa
-    if (cliente.tipo === 'ativo') {
-      console.log(`🟢 Cliente ${cleanPhone} EM PROCESSO - SEM MENU`);
-      let etapaMsg = '';
-      try {
-        const { data: etapa } = await supabase.from('etapas_processo').select('etapa_atual').eq('cliente_telefone', cleanPhone).single();
-        if (etapa) {
-          const etapaInfo = ETAPAS[etapa.etapa_atual];
-          etapaMsg = `\n📌 *Etapa atual:* ${etapaInfo?.label || etapa.etapa_atual}`;
+            // 4. EXTRAIR MENSAGEM E TELEFONE - SUPORTE A MÚLTIPLOS FORMATOS
+            let messageText = '';
+            let senderPhone = '';
+            
+            // Tenta extrair mensagem
+            if (body.text) {
+                if (typeof body.text === 'string') messageText = body.text;
+                else if (body.text.message) messageText = body.text.message;
+                else if (body.text.body) messageText = body.text.body;
+            }
+            if (!messageText && body.message) {
+                if (typeof body.message === 'string') messageText = body.message;
+                else if (body.message.text) messageText = body.message.text;
+                else if (body.message.content) messageText = body.message.content;
+                else if (body.message.body) messageText = body.message.body;
+            }
+            if (!messageText && body.content) messageText = body.content;
+            if (!messageText && body.body) messageText = body.body;
+            
+            // Tenta extrair telefone
+            if (body.phone) senderPhone = body.phone;
+            else if (body.from) senderPhone = body.from;
+            else if (body.sender) senderPhone = body.sender;
+            else if (body.wa_id) senderPhone = body.wa_id;
+            else if (body.chatId) senderPhone = body.chatId;
+            
+            console.log(`📩 Mensagem bruta: "${messageText}"`);
+            console.log(`📱 Telefone bruto: "${senderPhone}"`);
+            
+            // 5. VALIDAÇÕES BÁSICAS
+            if (!senderPhone) {
+                console.log('⚠️ Sem telefone do remetente - ignorando');
+                return;
+            }
+            
+            if (!messageText || messageText.trim().length === 0) {
+                console.log('⚠️ Mensagem vazia - ignorando');
+                return;
+            }
+            
+            messageText = messageText.trim();
+            
+            // 6. LIMPAR TELEFONE
+            let cleanPhone = senderPhone.toString().replace(/\D/g, '');
+            if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+            if (cleanPhone.length < 10) {
+                console.log(`⚠️ Telefone inválido (${cleanPhone}): precisa ter 10 ou 11 dígitos`);
+                await sendReply(senderPhone, '⚠️ Desculpe, não conseguimos identificar seu número. Tente novamente.');
+                return;
+            }
+            
+            console.log(`📱 Telefone limpo: ${cleanPhone}`);
+            console.log(`📝 Mensagem: "${messageText}"`);
+            
+            // 7. VERIFICAR SE É AMIGO
+            console.log('🔍 Verificando se é AMIGO...');
+            const { data: amigo, error: errAmigo } = await supabase
+                .from('contatos_amigos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (errAmigo) console.log('⚠️ Erro ao verificar amigo:', errAmigo);
+            
+            if (amigo) {
+                console.log(`🤝 Contato AMIGO encontrado: ${cleanPhone} - SILÊNCIO TOTAL`);
+                return;
+            }
+            
+            // 8. VERIFICAR SE É FINALIZADO
+            console.log('🔍 Verificando se é FINALIZADO...');
+            const { data: finalizado, error: errFinalizado } = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (errFinalizado) console.log('⚠️ Erro ao verificar finalizado:', errFinalizado);
+            
+            if (finalizado) {
+                console.log(`🏁 Cliente FINALIZADO: ${cleanPhone}`);
+                await sendReply(cleanPhone, `🙏 *Muito obrigado por confiar na GetVisa!*\n\nSeu processo foi concluído com sucesso.\n\n📋 *Serviço:* ${finalizado.servico || 'não informado'}\n📅 *Finalizado em:* ${new Date(finalizado.data_finalizacao).toLocaleDateString('pt-BR')}\n\n⭐ *Avalie nosso serviço:* https://getvisa.com.br/avaliacao\n\n💬 *Estamos aqui para você sempre que precisar!* 🙏`);
+                return;
+            }
+            
+            // 9. VERIFICAR SE É ATIVO
+            console.log('🔍 Verificando se é ATIVO...');
+            const { data: ativo, error: errAtivo } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (errAtivo) console.log('⚠️ Erro ao verificar ativo:', errAtivo);
+            
+            if (ativo) {
+                console.log(`🟢 Cliente ATIVO encontrado: ${cleanPhone}`);
+                
+                // Buscar etapa atual
+                let etapaMsg = '';
+                try {
+                    const { data: etapa, error: errEtapa } = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', cleanPhone)
+                        .maybeSingle();
+                    
+                    if (errEtapa) console.log('⚠️ Erro ao buscar etapa:', errEtapa);
+                    
+                    if (etapa) {
+                        const etapaInfo = ETAPAS[etapa.etapa_atual];
+                        etapaMsg = `\n📌 *Etapa atual:* ${etapaInfo?.label || etapa.etapa_atual}`;
+                    }
+                } catch (err) {
+                    console.log('⚠️ Erro ao buscar etapa:', err);
+                }
+                
+                await sendReply(cleanPhone, `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*${etapaMsg}\n\n✅ *Status:* ${ativo.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`);
+                return;
+            }
+            
+            // 10. VERIFICAR SE É NOVO (JÁ CADASTRADO)
+            console.log('🔍 Verificando se é NOVO...');
+            const { data: novo, error: errNovo } = await supabase
+                .from('clientes_novos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (errNovo) console.log('⚠️ Erro ao verificar novo:', errNovo);
+            
+            if (novo) {
+                console.log(`🟡 Cliente NOVO já cadastrado: ${cleanPhone}`);
+                await sendReply(cleanPhone, await getMenuPrincipal());
+                return;
+            }
+            
+            // 11. NOVO CLIENTE - CADASTRAR E ENVIAR MENU
+            console.log(`✅ NOVO CLIENTE DETECTADO: ${cleanPhone}`);
+            
+            // Tentar extrair nome
+            let nomeCliente = body.name || body.sender?.name || body.pushName || 'Cliente';
+            if (nomeCliente === 'Cliente' && messageText.includes('nome')) {
+                // Se a mensagem começa com "meu nome é" ou similar
+                const match = messageText.match(/meu nome é?\s*([a-zA-ZÀ-ÿ\s]+)/i);
+                if (match) nomeCliente = match[1].trim();
+            }
+            
+            console.log(`👤 Nome detectado: "${nomeCliente}"`);
+            
+            // Cadastrar
+            const { data: inserted, error: insertError } = await supabase
+                .from('clientes_novos')
+                .insert({
+                    telefone: cleanPhone,
+                    nome: nomeCliente,
+                    data_contato: new Date().toISOString(),
+                    status: 'pendente'
+                })
+                .select()
+                .single();
+            
+            if (insertError) {
+                console.error('❌ Erro ao cadastrar cliente:', insertError);
+                await sendReply(cleanPhone, '⚠️ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                return;
+            }
+            
+            console.log(`✅ Cliente ${cleanPhone} cadastrado com sucesso!`);
+            
+            // Enviar menu
+            const menu = await getMenuPrincipal();
+            console.log(`📤 Enviando menu para ${cleanPhone}...`);
+            const enviado = await sendReply(cleanPhone, menu);
+            
+            if (enviado) {
+                console.log(`✅ Menu enviado para ${cleanPhone}`);
+            } else {
+                console.log(`⚠️ Falha ao enviar menu para ${cleanPhone}`);
+            }
+            
+        } catch (error) {
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('❌ Mensagem:', error.message);
+            console.error('❌ Stack:', error.stack);
+            
+            // Tentar enviar mensagem de erro para o cliente
+            try {
+                const phone = req.body?.phone || req.body?.from || null;
+                if (phone) {
+                    const cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '⚠️ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve. 🙏');
+                    }
+                }
+            } catch (e) {
+                console.error('❌ Falha ao enviar mensagem de erro:', e);
+            }
         }
-      } catch (err) { console.error('Erro ao buscar etapa:', err); }
-      await sendReply(cleanPhone, `👋 *Olá!*\n\n📋 *Seu processo está em andamento.*${etapaMsg}\n\n✅ *Status:* ${cliente.dados.status || 'em_processo'}\n\n📌 *Digite 0 para o MENU principal* 🚀`);
-      return;
-    }
+    })();
+});
 
-    // CLIENTE NOVO - Mostra menu
-    console.log(`🟡 Cliente ${cleanPhone} NOVO - Mostrando menu`);
-    let state = userState.get(cleanPhone) || { nivel: 'principal', service: null, lastActivity: Date.now() };
-    state.lastActivity = Date.now();
-    userState.set(cleanPhone, state);
-
-    // Comando 0 - Volta ao menu
-    if (messageText === '0') {
-      state.nivel = 'principal';
-      state.service = null;
-      userState.set(cleanPhone, state);
-      await sendReply(cleanPhone, await getMenuPrincipal());
-      return;
+// ============================================================
+//  ENDPOINT DE TESTE MANUAL
+// ============================================================
+app.post('/api/test/webhook-manual', async (req, res) => {
+    console.log('🧪 ========== TESTE MANUAL ==========');
+    console.log('📥 Body:', JSON.stringify(req.body, null, 2));
+    
+    const { phone, message, name } = req.body;
+    
+    if (!phone) {
+        return res.status(400).json({ error: 'Phone é obrigatório' });
     }
-
-    // Saudações
-    const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello'];
-    if (saudacoes.includes(messageText.toLowerCase())) {
-      await sendReply(cleanPhone, await getMenuPrincipal());
-      return;
+    
+    try {
+        const cleanPhone = phone.toString().replace(/\D/g, '');
+        console.log(`📱 Telefone limpo: ${cleanPhone}`);
+        console.log(`📝 Mensagem: "${message || 'Teste'}"`);
+        
+        // Enviar mensagem de teste
+        const resultado = await sendReply(cleanPhone, '🧪 *TESTE MANUAL*\n\nSe você está vendo esta mensagem, o sistema está funcionando!\n\n📋 *Digite 0 para o menu principal* 🚀');
+        
+        res.json({ 
+            success: true, 
+            phone: cleanPhone,
+            message_sent: resultado,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Erro no teste manual:', error);
+        res.status(500).json({ error: error.message });
     }
-
-    // SUBMENU
-    if (state.nivel === 'submenu') {
-      const service = state.service;
-      if (messageText === '7') {
-        await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-        return;
-      }
-      if (messageText === '6') {
-        const links = {
-          'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
-          'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense',
-          'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano',
-          'eta_uk': 'https://getvisa.com.br/simulador-eta-uk',
-          'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
-          'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
-        };
-        const nomes = {
-          'visto_americano': 'VISTO AMERICANO',
-          'visto_canadense': 'VISTO CANADENSE',
-          'visto_australiano': 'VISTO AUSTRALIANO',
-          'eta_uk': 'eTA UK',
-          'eta_canadense': 'eTA CANADENSE',
-          'passaporte': 'PASSAPORTE'
-        };
-        await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${nomes[service] || 'SERVIÇO'}*\n\n🔗 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano'}\n\n⏱️ Leva menos de 2 minutos!\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-        return;
-      }
-      if (messageText === '5') {
-        if (service === 'passaporte') {
-          await sendReply(cleanPhone, `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-        } else {
-          await sendReply(cleanPhone, `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-        }
-        return;
-      }
-      if (['1', '2', '3', '4'].includes(messageText)) {
-        const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
-        let resposta = getRespostaSubmenu(service, opcoesMap[messageText]);
-        resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
-        await sendReply(cleanPhone, resposta);
-        return;
-      }
-      await sendReply(cleanPhone, await getSubmenu(service));
-      return;
-    }
-
-    // MENU PRINCIPAL
-    if (state.nivel === 'principal') {
-      let serviceKey = null;
-      switch (messageText) {
-        case '1': serviceKey = 'visto_americano'; break;
-        case '2': serviceKey = 'visto_canadense'; break;
-        case '3': serviceKey = 'visto_australiano'; break;
-        case '4': serviceKey = 'eta_uk'; break;
-        case '5': serviceKey = 'eta_canadense'; break;
-        case '6': serviceKey = 'passaporte'; break;
-        case '7':
-          await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-          return;
-        default:
-          await sendReply(cleanPhone, await getMenuPrincipal());
-          return;
-      }
-      if (serviceKey) {
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, await getSubmenu(serviceKey));
-      }
-    }
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error.message);
-  }
 });
 
 // ============================================================
