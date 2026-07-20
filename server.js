@@ -9,7 +9,7 @@ const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
- 
+
 // ============================================================
 //  CONFIGURAÇÕES GERAIS
 // ============================================================
@@ -58,37 +58,6 @@ const FEATURES = {
         auto_avancar: true
     }
 };
-
-// ============================================================
-//  FUNÇÃO PARA LIMPAR TELEFONE
-// ============================================================
-function limparTelefone(telefone) {
-    if (!telefone) return null;
-    const limpo = telefone.toString().replace(/\D/g, '');
-    if (limpo.startsWith('55')) {
-        return limpo.substring(2);
-    }
-    return limpo;
-}
-
-// ============================================================
-//  FUNÇÃO PARA FORMATAR TELEFONE
-// ============================================================
-function formatarTelefone(telefone) {
-    if (!telefone) return null;
-    const numeros = telefone.toString().replace(/\D/g, '');
-    if (numeros.length === 11) {
-        return '(' + numeros.substring(0, 2) + ') ' + 
-               numeros.substring(2, 7) + '-' + 
-               numeros.substring(7, 11);
-    }
-    if (numeros.length === 10) {
-        return '(' + numeros.substring(0, 2) + ') ' + 
-               numeros.substring(2, 6) + '-' + 
-               numeros.substring(6, 10);
-    }
-    return telefone;
-}
 
 // ============================================================
 //  FUNÇÃO AUXILIAR PARA COMPATIBILIDADE
@@ -372,86 +341,29 @@ async function cadastrarCliente(telefone, nome = null) {
 }
 
 // ============================================================
-//  SISTEMA DE ETAPAS - FUNÇÕES (CORRIGIDO)
+//  SISTEMA DE ETAPAS - FUNÇÕES
 // ============================================================
 async function criarEtapaInicial(telefone) {
   try {
-    // Garantir que o telefone está formatado
-    const telefoneFormatado = formatarTelefone(telefone);
-    
-    // Verificar se o cliente existe em clientes_ativos com o telefone formatado
     const { data: cliente, error: clienteError } = await supabase
-      .from('clientes_ativos')
-      .select('telefone, nome, criado_em')
-      .eq('telefone', telefoneFormatado)
-      .maybeSingle();
-    
-    // Se não encontrou com formato, tentar com telefone limpo
-    if (!cliente) {
-      const telefoneLimpo = limparTelefone(telefone);
-      const { data: clienteLimpo, error: errLimpo } = await supabase
-        .from('clientes_ativos')
-        .select('telefone, nome, criado_em')
-        .eq('telefone', telefoneLimpo)
-        .maybeSingle();
-      
-      if (clienteLimpo) {
-        // Atualizar o cliente para o formato correto
-        await supabase
-          .from('clientes_ativos')
-          .update({ telefone: telefoneFormatado })
-          .eq('telefone', telefoneLimpo);
-        
-        const { data: clienteAtualizado, error: errAtualizado } = await supabase
-          .from('clientes_ativos')
-          .select('telefone, nome, criado_em')
-          .eq('telefone', telefoneFormatado)
-          .maybeSingle();
-        
-        if (clienteAtualizado) {
-          return criarEtapaComCliente(res, clienteAtualizado, telefoneFormatado);
-        }
-      }
-      
-      console.log(`⚠️ Cliente ${telefone} não encontrado em clientes_ativos. Etapa NÃO criada.`);
-      return null;
-    }
-    
-    return criarEtapaComCliente(res, cliente, telefoneFormatado);
-    
+      .from('clientes_ativos').select('telefone, nome, criado_em').eq('telefone', telefone).single();
+    if (clienteError) throw clienteError;
+    const novaEtapa = {
+      cliente_telefone: telefone,
+      etapa_atual: 'formulario_enviado',
+      data_inicio: cliente.criado_em || new Date().toISOString(),
+      data_atualizacao: new Date().toISOString(),
+      data_formulario_enviado: new Date().toISOString(),
+      historico: [{ etapa: 'formulario_enviado', data: new Date().toISOString(), nota: 'Início do processo', observacao: 'Cliente movido para clientes_ativos' }]
+    };
+    const { data, error } = await supabase.from('etapas_processo').insert(novaEtapa).select().single();
+    if (error) throw error;
+    console.log(`✅ Etapa inicial criada para: ${telefone}`);
+    return data;
   } catch (error) {
-    console.error('❌ Erro ao criar etapa inicial:', error);
+    console.error('Erro ao criar etapa inicial:', error);
     return null;
   }
-}
-
-// Função auxiliar para criar a etapa com o cliente
-async function criarEtapaComCliente(cliente, telefone) {
-  const novaEtapa = {
-    cliente_telefone: telefone,
-    etapa_atual: 'formulario_enviado',
-    data_inicio: cliente.criado_em || new Date().toISOString(),
-    data_atualizacao: new Date().toISOString(),
-    historico: [
-      {
-        etapa: 'formulario_enviado',
-        data: new Date().toISOString(),
-        nota: 'Início do processo',
-        observacao: 'Cliente movido para clientes_ativos'
-      }
-    ]
-  };
-  
-  const { data, error } = await supabase
-    .from('etapas_processo')
-    .insert(novaEtapa)
-    .select()
-    .single();
-  
-  if (error) throw error;
-  
-  console.log(`✅ Etapa inicial criada para: ${telefone}`);
-  return data;
 }
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
@@ -683,40 +595,16 @@ app.post('/api/painel/mover-varios', async (req, res) => {
 // ============================================================
 app.get('/api/etapas/cliente/:telefone', async (req, res) => {
   try {
-    // 1. Limpar o telefone recebido
     const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
-    
-    // 2. Buscar a etapa com o telefone formatado (padrão do banco)
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
-    
     const { data, error } = await supabase
-      .from('etapas_processo')
-      .select('*')
-      .eq('cliente_telefone', telefoneFormatado)
-      .maybeSingle();  // ← usar maybeSingle() para evitar erro PGRST116
-    
-    // 3. Se não encontrou, tentar buscar com o telefone limpo (fallback)
+      .from('etapas_processo').select('*').eq('cliente_telefone', telefoneLimpo).single();
+    if (error && error.code !== 'PGRST116') throw error;
     if (!data) {
-      const { data: dataLimpo, error: errorLimpo } = await supabase
-        .from('etapas_processo')
-        .select('*')
-        .eq('cliente_telefone', telefoneLimpo)
-        .maybeSingle();
-      
-      if (dataLimpo) {
-        return res.json(dataLimpo);
-      }
-    }
-    
-    // 4. Se ainda não encontrou, criar uma nova etapa
-    if (!data) {
-      const novaEtapa = await criarEtapaInicial(telefoneFormatado);
+      const novaEtapa = await criarEtapaInicial(telefoneLimpo);
       if (novaEtapa) return res.json(novaEtapa);
       return res.status(404).json({ erro: 'Cliente não encontrado' });
     }
-    
     res.json(data);
-    
   } catch (error) {
     console.error('Erro ao buscar etapa:', error);
     res.status(500).json({ erro: 'Erro ao buscar etapa do cliente' });
@@ -726,113 +614,45 @@ app.get('/api/etapas/cliente/:telefone', async (req, res) => {
 app.post('/api/etapas/avancar', async (req, res) => {
   try {
     const { telefone, nota, observacao } = req.body;
-    
-    // Limpar e formatar o telefone
     const telefoneLimpo = telefone.replace(/\D/g, '');
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
-    
-    console.log(`📱 Avançando etapa para: ${telefoneFormatado}`);
-    
     if (!FEATURES.SISTEMA_ETAPAS.ativo) {
       return res.status(503).json({ erro: 'Sistema de etapas está temporariamente desativado' });
     }
-    
-    // Buscar etapa atual (usando telefone formatado)
     const { data: etapaAtual, error: buscaError } = await supabase
-      .from('etapas_processo')
-      .select('*')
-      .eq('cliente_telefone', telefoneFormatado)
-      .maybeSingle();
-    
-    // Se não encontrou com formato, tentar com telefone limpo
-    if (!etapaAtual) {
-      const { data: etapaLimpo, error: errLimpo } = await supabase
-        .from('etapas_processo')
-        .select('*')
-        .eq('cliente_telefone', telefoneLimpo)
-        .maybeSingle();
-      
-      if (etapaLimpo) {
-        // Atualizar para o formato correto
-        await supabase
-          .from('etapas_processo')
-          .update({ cliente_telefone: telefoneFormatado })
-          .eq('cliente_telefone', telefoneLimpo);
-        
-        const { data: etapaCorrigida, error: errCorrigida } = await supabase
-          .from('etapas_processo')
-          .select('*')
-          .eq('cliente_telefone', telefoneFormatado)
-          .maybeSingle();
-        
-        if (etapaCorrigida) {
-          return processarAvanco(res, etapaCorrigida, nota, observacao, telefoneFormatado);
-        }
+      .from('etapas_processo').select('*').eq('cliente_telefone', telefoneLimpo).single();
+    if (buscaError) {
+      if (buscaError.code === 'PGRST116') {
+        const novaEtapa = await criarEtapaInicial(telefoneLimpo);
+        if (novaEtapa) return res.json({ sucesso: true, mensagem: 'Etapa inicial criada', etapa_atual: novaEtapa.etapa_atual });
       }
-      
-      return res.status(404).json({ erro: 'Cliente não encontrado em etapas_processo' });
+      throw buscaError;
     }
-    
-    // Processar o avanço
-    return processarAvanco(res, etapaAtual, nota, observacao, telefoneFormatado);
-    
+    const etapaId = etapaAtual.etapa_atual;
+    const proximaEtapa = ETAPAS[etapaId]?.next;
+    if (!proximaEtapa) return res.status(400).json({ erro: 'Cliente já está na última etapa' });
+    const historicoAtualizado = [
+      ...(etapaAtual.historico || []),
+      { etapa: etapaId, data: new Date().toISOString(), nota: nota || 'Avanço manual', observacao: observacao || 'Avançado pelo painel administrativo' }
+    ];
+    const dadosAtualizacao = {
+      etapa_atual: proximaEtapa,
+      data_atualizacao: new Date().toISOString(),
+      historico: historicoAtualizado,
+      [`data_${proximaEtapa}`]: new Date().toISOString()
+    };
+    const { data: updated, error: updateError } = await supabase
+      .from('etapas_processo').update(dadosAtualizacao).eq('cliente_telefone', telefoneLimpo).select().single();
+    if (updateError) throw updateError;
+    if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+      await notificarClienteEtapa(telefoneLimpo, proximaEtapa);
+    }
+    console.log(`📊 Cliente ${telefoneLimpo} avançou para: ${proximaEtapa}`);
+    res.json({ sucesso: true, etapa_anterior: etapaId, etapa_atual: proximaEtapa, dados: updated });
   } catch (error) {
     console.error('Erro ao avançar etapa:', error);
     res.status(500).json({ erro: 'Erro ao avançar etapa', detalhe: error.message });
   }
 });
-
-// Função auxiliar para processar o avanço
-async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
-  const etapaId = etapaAtual.etapa_atual;
-  const proximaEtapa = ETAPAS[etapaId]?.next;
-  
-  if (!proximaEtapa) {
-    return res.status(400).json({ erro: 'Cliente já está na última etapa' });
-  }
-  
-  const historicoAtualizado = [
-    ...(etapaAtual.historico || []),
-    {
-      etapa: etapaId,
-      data: new Date().toISOString(),
-      nota: nota || 'Avanço manual',
-      observacao: observacao || 'Avançado pelo painel administrativo'
-    }
-  ];
-  
-  const dadosAtualizacao = {
-    etapa_atual: proximaEtapa,
-    data_atualizacao: new Date().toISOString(),
-    historico: historicoAtualizado
-  };
-  
-  // Adicionar data da nova etapa
-  const campoData = `data_${proximaEtapa}`;
-  dadosAtualizacao[campoData] = new Date().toISOString();
-  
-  const { data: updated, error: updateError } = await supabase
-    .from('etapas_processo')
-    .update(dadosAtualizacao)
-    .eq('cliente_telefone', telefone)
-    .select()
-    .single();
-  
-  if (updateError) throw updateError;
-  
-  if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
-    await notificarClienteEtapa(telefone, proximaEtapa);
-  }
-  
-  console.log(`📊 Cliente ${telefone} avançou para: ${proximaEtapa}`);
-  
-  res.json({
-    sucesso: true,
-    etapa_anterior: etapaId,
-    etapa_atual: proximaEtapa,
-    dados: updated
-  });
-}
 
 app.get('/api/etapas/historico/:telefone', async (req, res) => {
   try {
@@ -1246,7 +1066,7 @@ app.post('/api/submit-ds160', async (req, res) => {
     try {
       const nome = data['full_name'] || 'Cliente_Sem_Nome';
       const emailCliente = data['email-1'] || null;
-      const telefoneCliente = limparTelefone(data['text-77'] || data['telefone'] || null);
+      const telefoneCliente = data['text-77'] || null;
 
       // ============================================================
       //  📝 SALVAR NA TABELA formulario_ds160 (PADRÃO: nome, telefone)
@@ -1283,78 +1103,65 @@ app.post('/api/submit-ds160', async (req, res) => {
         console.error('⚠️ Erro ao salvar no Supabase:', err.message);
       }
 
-    // ============================================================
-//  🔄 CRIAR CLIENTE E ETAPA (NA ORDEM CORRETA)
-//  ============================================================
-if (telefoneCliente) {
-    try {
-        // 1. Limpar o telefone
-        const telefoneLimpo = limparTelefone(telefoneCliente);
-        console.log(`📱 Telefone limpo: ${telefoneLimpo}`);
-
-        // 2. Verificar se o cliente já existe em clientes_ativos
-        const { data: clienteExistente, error: err1 } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefoneLimpo)
-            .maybeSingle();
-
-        if (err1) {
-            console.error('❌ Erro ao verificar cliente:', err1);
-        }
-
-       // 3. Se não existir, CRIAR O CLIENTE PRIMEIRO (com telefone SEM formatação)
-if (!clienteExistente) {
-    const { error: insertError } = await supabase
-        .from('clientes_ativos')
-        .insert({
-            telefone: telefoneLimpo,  // ← SEM formatação (ex: 21955555555)
-            nome: nome
-        });
-
-    if (insertError) {
-        console.error('❌ Erro ao criar cliente em ATIVOS:', insertError);
-    } else {
-        console.log(`✅ Cliente ${telefoneLimpo} criado em ATIVOS`);
-    }
-}
-
-// 4. AGORA criar a etapa (depois que o cliente foi criado)
-const { data: etapa, error: etapaError } = await supabase
-    .from('etapas_processo')
-    .insert({
-        cliente_telefone: formatarTelefone(telefoneLimpo),  // ← USAR FORMATADO
-        etapa_atual: 'formulario_enviado',
-        data_inicio: new Date().toISOString(),
-        data_atualizacao: new Date().toISOString(),
-        historico: [
-            {
-                etapa: 'formulario_enviado',
-                data: new Date().toISOString(),
-                nota: 'Início do processo',
-                observacao: 'Cliente criado via formulário DS-160'
-            }
-        ]
-    })
-        // 5. Remover de clientes_novos (se existir)
-        const { data: clienteNovo } = await supabase
+      // ============================================================
+      //  🔄 ATUALIZAR CLIENTE (se existir)
+      //  ============================================================
+      if (telefoneCliente) {
+        try {
+          // Busca se o cliente existe em clientes_novos
+          const { data: clienteNovo } = await supabase
             .from('clientes_novos')
             .select('*')
-            .eq('telefone', telefoneLimpo)
+            .eq('telefone', telefoneCliente)
             .maybeSingle();
 
-        if (clienteNovo) {
+          if (clienteNovo) {
+            // Move para clientes_ativos (já enviou DS-160, está em processo)
             await supabase
-                .from('clientes_novos')
-                .delete()
-                .eq('telefone', telefoneLimpo);
-            console.log(`✅ Cliente ${telefoneLimpo} removido de NOVOS`);
-        }
+              .from('clientes_ativos')
+              .insert({
+                telefone: clienteNovo.telefone,
+                nome: clienteNovo.nome || nome,
+                email: emailCliente,
+                status: 'em_processo',
+                criado_em: clienteNovo.data_contato,
+                atualizado_em: new Date().toISOString()
+              });
 
-    } catch (err) {
-        console.error('⚠️ Erro ao processar cliente:', err.message);
-    }
-}
+            await supabase
+              .from('clientes_novos')
+              .delete()
+              .eq('telefone', telefoneCliente);
+
+            console.log(`✅ Cliente ${telefoneCliente} movido para ATIVOS (enviou DS-160)`);
+          } else {
+            // Verifica se já está em clientes_ativos
+            const { data: clienteAtivo } = await supabase
+              .from('clientes_ativos')
+              .select('*')
+              .eq('telefone', telefoneCliente)
+              .maybeSingle();
+
+            if (!clienteAtivo) {
+              // Cria direto em clientes_ativos
+              await supabase
+                .from('clientes_ativos')
+                .insert({
+                  telefone: telefoneCliente,
+                  nome: nome,
+                  email: emailCliente,
+                  status: 'em_processo',
+                  criado_em: new Date().toISOString(),
+                  atualizado_em: new Date().toISOString()
+                });
+              console.log(`✅ Cliente ${telefoneCliente} criado em ATIVOS (enviou DS-160)`);
+            }
+          }
+        } catch (err) {
+          console.error('⚠️ Erro ao atualizar cliente:', err.message);
+        }
+      }
+
       // ============================================================
       //  📧 ENVIAR E-MAIL
       //  ============================================================
@@ -2510,183 +2317,7 @@ app.get('/api/dashboard/proximos-agendamentos', async (req, res) => {
     }
 });
 
-// ============================================================
-//  PORTAL DO CLIENTE - ROTAS
-// ============================================================
-
-// Variável temporária para armazenar códigos (em produção, usar Redis ou banco)
-const codigosTemp = {};
-
-// Enviar código de verificação
-app.post('/api/portal/enviar-codigo', async (req, res) => {
-  try {
-    const { telefone } = req.body;
-    const telefoneLimpo = limparTelefone(telefone);
-    
-    if (!telefoneLimpo) {
-      return res.status(400).json({ success: false, message: 'Telefone inválido' });
-    }
-    
-    // Verificar se o cliente existe
-    const { data: cliente, error } = await supabase
-      .from('clientes_ativos')
-      .select('telefone, nome')
-      .eq('telefone', formatarTelefone(telefoneLimpo))
-      .maybeSingle();
-    
-    if (!cliente) {
-      // Verificar em clientes_novos
-      const { data: novo } = await supabase
-        .from('clientes_novos')
-        .select('telefone, nome')
-        .eq('telefone', formatarTelefone(telefoneLimpo))
-        .maybeSingle();
-      
-      if (!novo) {
-        return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
-      }
-    }
-    
-    // Gerar código de 6 dígitos
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Salvar código (em produção, usar Redis ou tabela)
-    codigosTemp[telefoneLimpo] = {
-      codigo,
-      criado_em: Date.now()
-    };
-    
-    // Enviar WhatsApp
-    const mensagem = `🔐 *Código de acesso GetVisa*\n\nOlá! Você solicitou acesso ao Portal do Cliente.\n\nSeu código é: *${codigo}*\n\nDigite no portal para acessar seu processo.\n\n⏰ Este código é válido por 5 minutos.`;
-    
-    await enviarWhatsApp(telefoneLimpo, mensagem);
-    
-    console.log(`📨 Código enviado para ${telefoneLimpo}: ${codigo}`);
-    
-    res.json({ success: true, message: 'Código enviado' });
-    
-  } catch (error) {
-    console.error('❌ Erro ao enviar código:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Verificar código
-app.post('/api/portal/verificar', async (req, res) => {
-  try {
-    const { telefone, codigo } = req.body;
-    const telefoneLimpo = limparTelefone(telefone);
-    
-    if (!telefoneLimpo || !codigo) {
-      return res.status(400).json({ success: false, message: 'Dados incompletos' });
-    }
-    
-    // Verificar código
-    const registro = codigosTemp[telefoneLimpo];
-    if (!registro) {
-      return res.status(401).json({ success: false, message: 'Código expirado' });
-    }
-    
-    if (registro.codigo !== codigo) {
-      return res.status(401).json({ success: false, message: 'Código inválido' });
-    }
-    
-    // Verificar expiração (5 minutos)
-    if (Date.now() - registro.criado_em > 300000) {
-      delete codigosTemp[telefoneLimpo];
-      return res.status(401).json({ success: false, message: 'Código expirado' });
-    }
-    
-    // Buscar dados do cliente
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
-    
-    const { data: cliente, error: err1 } = await supabase
-      .from('clientes_ativos')
-      .select('*')
-      .eq('telefone', telefoneFormatado)
-      .maybeSingle();
-    
-    // Se não encontrou em ativos, buscar em novos
-    let clienteData = cliente;
-    if (!cliente) {
-      const { data: novo } = await supabase
-        .from('clientes_novos')
-        .select('*')
-        .eq('telefone', telefoneFormatado)
-        .maybeSingle();
-      clienteData = novo;
-    }
-    
-    if (!clienteData) {
-      return res.status(404).json({ success: false, message: 'Cliente não encontrado' });
-    }
-    
-    // Buscar etapa
-    const { data: etapa } = await supabase
-      .from('etapas_processo')
-      .select('*')
-      .eq('cliente_telefone', telefoneFormatado)
-      .maybeSingle();
-    
-    // Buscar agendamentos (compromissos)
-    const { data: agendamentos } = await supabase
-      .from('compromissos')
-      .select('*')
-      .eq('cliente', clienteData.nome)
-      .order('data', { ascending: true })
-      .limit(10);
-    
-    // Remover código usado
-    delete codigosTemp[telefoneLimpo];
-    
-    res.json({
-      success: true,
-      cliente: clienteData,
-      etapa: etapa,
-      agendamentos: agendamentos || []
-    });
-    
-  } catch (error) {
-    console.error('❌ Erro ao verificar:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Baixar DS-160
-app.get('/api/portal/ds160/:telefone', async (req, res) => {
-  try {
-    const { telefone } = req.params;
-    const telefoneLimpo = limparTelefone(telefone);
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
-    
-    // Buscar formulário mais recente do cliente
-    const { data: formulario, error } = await supabase
-      .from('formulario_ds160')
-      .select('*')
-      .eq('telefone', telefoneFormatado)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    
-    if (!formulario) {
-      return res.status(404).send('Formulário não encontrado');
-    }
-    
-    // Gerar PDF
-    const pdfBuffer = await gerarPDF_DS160(formulario.form_data || {});
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=DS160_${formulario.nome || 'cliente'}.pdf`);
-    res.send(pdfBuffer);
-    
-  } catch (error) {
-    console.error('❌ Erro ao baixar DS-160:', error);
-    res.status(500).send('Erro ao gerar PDF');
-  }
-});
-
-
-/// /============================================================
+/// ============================================================
 //  INICIALIZAÇÃO
 // ============================================================
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
