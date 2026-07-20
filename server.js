@@ -819,7 +819,7 @@ app.post('/api/webhook/zapi', async (req, res) => {
                 return;
             }
 
-             // ============================================================
+                         // ============================================================
             // 4. VERIFICAR SE É NOVO (JÁ CADASTRADO) ou CADASTRAR
             // ============================================================
             console.log('🔍 Verificando se é NOVO...');
@@ -861,6 +861,26 @@ app.post('/api/webhook/zapi', async (req, res) => {
 
             // Processar menu após cadastro
             await processarMenu(cleanPhone, messageText, body);
+
+        } catch (error) {
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('❌ Mensagem:', error.message);
+            console.error('❌ Stack:', error.stack);
+
+            try {
+                const phone = req.body?.phone || req.body?.from || null;
+                if (phone) {
+                    const cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '⚠️ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve. 🙏');
+                    }
+                }
+            } catch (e) {
+                console.error('❌ Falha ao enviar mensagem de erro:', e);
+            }
+        }
+    })();
+});
 
 // ============================================================
 //  ENDPOINT DE TESTE MANUAL
