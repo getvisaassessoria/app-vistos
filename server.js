@@ -573,18 +573,23 @@ function validateApiKey(req, res, next) {
 }
 
 // ============================================================
-//  FUNÇÃO PARA PROCESSAR O MENU
+//  FUNÇÃO PARA PROCESSAR O MENU (CORRIGIDA)
 // ============================================================
 async function processarMenu(cleanPhone, messageText, body) {
     console.log(`🔄 Processando menu para ${cleanPhone}: "${messageText}"`);
 
-    let state = userState.get(cleanPhone) || {
-        nivel: 'principal',
-        service: null,
-        lastActivity: Date.now()
-    };
+    // PEGAR OU CRIAR O ESTADO DA CONVERSA
+    let state = userState.get(cleanPhone);
+    if (!state) {
+        state = {
+            nivel: 'principal',
+            service: null,
+            lastActivity: Date.now()
+        };
+        userState.set(cleanPhone, state);
+        console.log(`📌 Novo estado criado para ${cleanPhone}: principal`);
+    }
     state.lastActivity = Date.now();
-    userState.set(cleanPhone, state);
 
     // Comando 0 - Volta ao menu principal
     if (messageText === '0') {
@@ -592,6 +597,7 @@ async function processarMenu(cleanPhone, messageText, body) {
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
+        console.log(`↩️ Voltou ao menu principal`);
         return;
     }
 
@@ -599,14 +605,18 @@ async function processarMenu(cleanPhone, messageText, body) {
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello', 'teste'];
     if (saudacoes.includes(messageText.toLowerCase())) {
         await sendReply(cleanPhone, await getMenuPrincipal());
+        console.log(`👋 Saudação detectada, enviando menu`);
         return;
     }
+
+    console.log(`📊 Estado atual: nivel=${state.nivel}, service=${state.service}`);
 
     // ============================================================
     // SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
         const service = state.service;
+        console.log(`📌 Processando SUBMENU para serviço: ${service}`);
 
         if (messageText === '7') {
             await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
@@ -640,6 +650,7 @@ async function processarMenu(cleanPhone, messageText, body) {
             let resposta = getRespostaSubmenu(service, opcoesMap[messageText]);
             resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
             await sendReply(cleanPhone, resposta);
+            console.log(`📤 Resposta do submenu enviada: ${opcoesMap[messageText]}`);
             return;
         }
 
@@ -651,6 +662,7 @@ async function processarMenu(cleanPhone, messageText, body) {
     // MENU PRINCIPAL
     // ============================================================
     if (state.nivel === 'principal') {
+        console.log(`📌 Processando MENU PRINCIPAL para: "${messageText}"`);
         let serviceKey = null;
         switch (messageText) {
             case '1': serviceKey = 'visto_americano'; break;
@@ -676,6 +688,7 @@ async function processarMenu(cleanPhone, messageText, body) {
             state.nivel = 'submenu';
             state.service = serviceKey;
             userState.set(cleanPhone, state);
+            console.log(`✅ Mudou para SUBMENU: ${serviceKey}`);
             await sendReply(cleanPhone, await getSubmenu(serviceKey));
         }
     }
