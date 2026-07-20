@@ -2781,6 +2781,145 @@ app.get('/api/portal/ds160/:telefone', async (req, res) => {
   }
 });
 
+// ============================================================
+//  SISTEMA DE LOGS EM MEMÓRIA (PARA DEBUG)
+// ============================================================
+
+// Array para armazenar logs em memória
+const logsMemoria = [];
+const MAX_LOGS = 500;
+
+// Função para adicionar log
+function logMemoria(mensagem, dados = null) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        mensagem: mensagem,
+        dados: dados
+    };
+    logsMemoria.push(entry);
+    if (logsMemoria.length > MAX_LOGS) {
+        logsMemoria.splice(0, logsMemoria.length - MAX_LOGS);
+    }
+    // Também loga no console
+    console.log(`[${entry.timestamp}] ${mensagem}`, dados || '');
+}
+
+// ============================================================
+//  ENDPOINT PARA VER LOGS
+// ============================================================
+app.get('/api/logs', (req, res) => {
+    const limite = parseInt(req.query.limite) || 50;
+    const logs = logsMemoria.slice(-limite);
+    
+    res.json({
+        success: true,
+        total: logsMemoria.length,
+        limite: limite,
+        logs: logs
+    });
+});
+
+// ============================================================
+//  ENDPOINT PARA LIMPAR LOGS
+// ============================================================
+app.delete('/api/logs', (req, res) => {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== ADMIN_API_KEY) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    logsMemoria.length = 0;
+    res.json({ success: true, message: 'Logs limpos' });
+});
+
+// ============================================================
+//  ENDPOINT PARA TESTE MANUAL DO WEBHOOK
+// ============================================================
+app.post('/api/test/webhook-manual', async (req, res) => {
+    logMemoria('🧪 TESTE MANUAL INICIADO', req.body);
+    
+    const { phone, message, name } = req.body;
+    
+    if (!phone) {
+        logMemoria('❌ Teste manual: telefone não fornecido');
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Phone é obrigatório' 
+        });
+    }
+    
+    try {
+        const cleanPhone = phone.toString().replace(/\D/g, '');
+        logMemoria(`📱 Teste manual para: ${cleanPhone}`, { message, name });
+        
+        // Enviar mensagem de teste
+        const resultado = await enviarWhatsApp(cleanPhone, '🧪 *TESTE MANUAL*\n\nSe você está vendo esta mensagem, o sistema está funcionando!\n\n📋 *Digite 0 para o menu principal* 🚀');
+        
+        logMemoria(`✅ Teste manual enviado para ${cleanPhone}`, resultado);
+        
+        res.json({ 
+            success: true, 
+            phone: cleanPhone,
+            message_sent: resultado,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        logMemoria('❌ Erro no teste manual', error.message);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// ============================================================
+//  ENDPOINT PARA VERIFICAR STATUS DO SISTEMA
+// ============================================================
+app.get('/api/status', async (req, res) => {
+    const status = {
+        timestamp: new Date().toISOString(),
+        servidor: 'online',
+        supabase: 'desconhecido',
+        zapi: 'desconhecido',
+        logs: logsMemoria.length
+    };
+    
+    // Testar Supabase
+    try {
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .select('count')
+            .limit(1);
+        
+        status.supabase = error ? 'erro' : 'online';
+        if (error) status.supabase_erro = error.message;
+    } catch (e) {
+        status.supabase = 'erro';
+        status.supabase_erro = e.message;
+    }
+    
+    // Testar Z-API
+    try {
+        const instance = process.env.ZAPI_INSTANCE;
+        const token = process.env.ZAPI_TOKEN;
+        
+        if (instance && token) {
+            const response = await fetch(`https://api.z-api.io/instances/${instance}/token/${token}/status`, {
+                method: 'GET'
+            });
+            status.zapi = response.ok ? 'online' : 'offline';
+            status.zapi_status = response.status;
+        } else {
+            status.zapi = 'nao_configurada';
+        }
+    } catch (e) {
+        status.zapi = 'erro';
+        status.zapi_erro = e.message;
+    }
+    
+    res.json(status);
+});
+
 
 /// /============================================================
 //  INICIALIZAÇÃO
