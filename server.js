@@ -119,6 +119,786 @@ const ETAPAS = {
     'passaporte_retornado': { id: 'passaporte_retornado', label: 'Passaporte Retornado', next: null, color: '#2ecc71' }
 };
 
+// ==================== SISTEMA DE ONBOARDING ====================
+
+// Adicionar novo estado para controle de onboarding
+const userState = new Map();
+
+// Configuração do fluxo de onboarding
+const ONBOARDING_STEPS = {
+    SAUDACAO: 'saudacao',
+    AGUARDANDO_NOME: 'aguardando_nome',
+    CONFIRMACAO: 'confirmacao',
+    COMPLETO: 'completo'
+};
+
+// Mensagens do fluxo de boas-vindas
+const BOAS_VINDAS_MESSAGES = {
+    primeira_saudacao: [
+        '👋 Olá! Seja muito bem-vindo(a) à GetVisa!',
+        '🌟 Que prazer ter você aqui!',
+        '🎉 Olá! Bem-vindo(a) à sua jornada de visto!',
+        '✨ Seja bem-vindo(a) à GetVisa Assessoria!'
+    ],
+    solicitar_nome: [
+        'Para começarmos seu atendimento de forma personalizada, poderia me dizer seu nome? 😊\n\nEx: Maria Silva',
+        'Vou preparar um atendimento especial para você! Primeiro, qual é o seu nome?\n\nEx: João Santos',
+        'Que tal nos conhecermos melhor? Me diga seu nome completo para eu te chamar corretamente!\n\nEx: Ana Oliveira'
+    ],
+    nome_invalido: [
+        '🤔 Hmm, parece que não entendi bem seu nome. Poderia digitar novamente?\n\nEx: Maria Silva',
+        '😅 Desculpe, não consegui identificar seu nome. Tente novamente no formato:\n\nEx: João Santos',
+        '📝 Para um atendimento personalizado, preciso do seu nome completo.\n\nEx: Ana Oliveira'
+    ],
+    confirmacao_nome: {
+        parte1: [
+            '😊 Prazer, ',
+            '🌟 Muito prazer, ',
+            '✨ Que nome bonito, ',
+            '🎯 Ótimo, '
+        ],
+        parte2: [
+            '! Agora sim posso te ajudar da melhor forma.\n\nVamos lá: como posso te ajudar hoje? Escolha uma opção:\n\n',
+            '! Estou aqui para realizar o sonho da sua viagem!\n\nEm que posso te ajudar? Escolha:\n\n',
+            '! Vamos encontrar a melhor solução para você!\n\nO que você precisa? Escolha uma opção:\n\n',
+            '! Preparado(a) para começar essa jornada?\n\nComo posso te ajudar? Escolha:\n\n'
+        ]
+    }
+};
+
+// Função para validar nome
+function validarNome(nome) {
+    if (!nome || nome.trim().length === 0) return false;
+    
+    const nomeLimpo = nome.trim();
+    
+    // Verificar tamanho mínimo e máximo
+    if (nomeLimpo.length < 2 || nomeLimpo.length > 100) return false;
+    
+    // Verificar se contém apenas letras, espaços e acentos
+    const regexNome = /^[a-zA-ZÀ-ÿ\s'-]+$/;
+    if (!regexNome.test(nomeLimpo)) return false;
+    
+    // Verificar se tem pelo menos um espaço (nome + sobrenome)
+    if (!nomeLimpo.includes(' ')) {
+        // Permitir apenas primeiro nome, mas avisar
+        return true; // Aceitamos, mas vamos sugerir nome completo
+    }
+    
+    // Verificar se não é só números ou caracteres especiais
+    if (/^\d+$/.test(nomeLimpo.replace(/\s/g, ''))) return false;
+    
+    // Lista de palavras que indicam que não é um nome
+    const palavrasInvalidas = ['sim', 'nao', 'ok', 'yes', 'no', 'teste', 'oi', 'ola'];
+    if (palavrasInvalidas.includes(nomeLimpo.toLowerCase())) return false;
+    
+    return true;
+}
+
+// Função para formatar nome (primeira letra maiúscula)
+function formatarNome(nome) {
+    return nome
+        .trim()
+        .toLowerCase()
+        .split(' ')
+        .map(palavra => {
+            if (palavra.length <= 2) return palavra.toLowerCase(); // da, de, do, etc
+            return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+        })
+        .join(' ');
+}
+
+// Função para escolher mensagem aleatória
+function getRandomMessage(messageArray) {
+    return messageArray[Math.floor(Math.random() * messageArray.length)];
+}
+
+// NOVA FUNÇÃO: Processar onboarding
+async function processarOnboarding(cleanPhone, messageText, state, body) {
+    console.log('=== PROCESSANDO ONBOARDING ===');
+    console.log('Passo atual: ' + state.onboardingStep);
+    console.log('Mensagem: ' + messageText);
+    
+    switch (state.onboardingStep) {
+        case ONBOARDING_STEPS.SAUDACAO:
+            // Enviar saudação e pedir nome
+            const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
+            const pedirNome = getRandomMessage(BOAS_VINDAS_MESSAGES.solicitar_nome);
+            
+            await sendReply(cleanPhone, saudacao + '\n\n' + pedirNome);
+            
+            // Atualizar estado
+            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_NOME;
+            state.lastActivity = Date.now();
+            userState.set(cleanPhone, state);
+            break;
+            
+        case ONBOARDING_STEPS.AGUARDANDO_NOME:
+            // Validar o nome recebido
+            const nomeValidado = validarNome(messageText);
+            
+            if (!nomeValidado) {
+                // Nome inválido, pedir novamente
+                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+                await sendReply(cleanPhone, msgInvalido);
+                return;
+            }
+            
+            // Formatar o nome
+            const nomeFormatado = formatarNome(messageText);
+            
+            // Salvar no Supabase
+            try {
+                const { data, error } = await supabase
+                    .from('clientes_novos')
+                    .upsert({
+                        telefone: cleanPhone,
+                        nome: nomeFormatado,
+                        data_contato: new Date().toISOString(),
+                        status: 'novo',
+                        onboarding_completo: true
+                    }, {
+                        onConflict: 'telefone'
+                    });
+                
+                if (error) {
+                    console.error('Erro ao salvar nome:', error);
+                } else {
+                    console.log('Nome salvo no Supabase: ' + nomeFormatado);
+                }
+            } catch (err) {
+                console.error('Erro ao atualizar cliente:', err);
+            }
+            
+            // Salvar nome no estado
+            state.nome = nomeFormatado;
+            state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+            userState.set(cleanPhone, state);
+            
+            // Enviar confirmação com menu
+            const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
+                              nomeFormatado.split(' ')[0] + // Primeiro nome
+                              getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
+                              await getMenuPrincipal();
+            
+            await sendReply(cleanPhone, confirmacao);
+            
+            console.log('Onboarding completo para: ' + nomeFormatado);
+            break;
+            
+        default:
+            // Se algo der errado, volta para saudação
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            userState.set(cleanPhone, state);
+            await processarOnboarding(cleanPhone, '', state, body);
+    }
+}
+
+// CORREÇÃO NA FUNÇÃO processarMenu para incluir onboarding
+async function processarMenu(cleanPhone, messageText, body) {
+    console.log('=== PROCESSANDO MENU ===');
+    console.log('Phone: ' + cleanPhone);
+    console.log('Message: "' + messageText + '"');
+    
+    // GET OU CRIA ESTADO com onboarding
+    let state = userState.get(cleanPhone);
+    if (!state) {
+        state = {
+            nivel: 'principal',
+            service: null,
+            nome: null,
+            onboardingStep: ONBOARDING_STEPS.SAUDACAO, // Começa onboarding
+            onboardingCompleto: false,
+            lastActivity: Date.now()
+        };
+        userState.set(cleanPhone, state);
+    }
+    state.lastActivity = Date.now();
+    
+    console.log('Estado atual:', {
+        nivel: state.nivel,
+        service: state.service,
+        nome: state.nome,
+        onboardingStep: state.onboardingStep
+    });
+    
+    // Se onboarding não está completo, processar onboarding primeiro
+    if (!state.onboardingCompleto || state.onboardingStep !== ONBOARDING_STEPS.COMPLETO) {
+        // Verificar se é uma saudação (começar onboarding)
+        const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem'];
+        
+        if (saudacoes.includes(messageText.toLowerCase()) || state.onboardingStep !== ONBOARDING_STEPS.SAUDACAO) {
+            await processarOnboarding(cleanPhone, messageText, state, body);
+            return;
+        }
+    }
+    
+    // Se já completou onboarding, marcar como completo
+    if (state.onboardingStep === ONBOARDING_STEPS.COMPLETO) {
+        state.onboardingCompleto = true;
+    }
+    
+    // COMANDO 0 - SEMPRE VOLTA AO MENU PRINCIPAL
+    if (messageText === '0') {
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
+        const menuPrincipal = await getMenuPrincipal();
+        await sendReply(cleanPhone, menuPrincipal);
+        console.log('Voltou ao menu principal');
+        return;
+    }
+    
+    // COMANDOS DE RESET
+    const resetCommands = ['menu', 'menu principal', 'inicio', 'comecar', 'voltar', 'principal'];
+    if (resetCommands.includes(messageText.toLowerCase())) {
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
+        await sendReply(cleanPhone, await getMenuPrincipal());
+        return;
+    }
+    
+    // SAUDAÇÕES (quando já completou onboarding)
+    if (state.onboardingCompleto) {
+        const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
+        if (saudacoes.includes(messageText.toLowerCase())) {
+            const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
+            const saudacaoMsg = nomeCliente ? 
+                '👋 Olá ' + nomeCliente + '! Que bom ver você de novo!\n\n' + await getMenuPrincipal() :
+                '👋 Olá! Que bom ter você aqui!\n\n' + await getMenuPrincipal();
+            
+            await sendReply(cleanPhone, saudacaoMsg);
+            return;
+        }
+    }
+    
+    // LÓGICA PRINCIPAL: Se está em submenu, mantém no submenu
+    if (state.nivel === 'submenu' && state.service) {
+        console.log('Processando no contexto do submenu: ' + state.service);
+        await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // Se está no menu principal
+    if (state.nivel === 'principal') {
+        await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // Fallback
+    state.nivel = 'principal';
+    state.service = null;
+    userState.set(cleanPhone, state);
+    await sendReply(cleanPhone, await getMenuPrincipal());
+}
+
+// ADICIONE estas funções logo após a função processarMenu:
+
+// Função para validar nome
+function validarNome(nome) {
+    if (!nome || nome.trim().length === 0) return false;
+    
+    const nomeLimpo = nome.trim();
+    
+    if (nomeLimpo.length < 2 || nomeLimpo.length > 100) return false;
+    
+    const regexNome = /^[a-zA-ZÀ-ÿ\s'-]+$/;
+    if (!regexNome.test(nomeLimpo)) return false;
+    
+    if (/^\d+$/.test(nomeLimpo.replace(/\s/g, ''))) return false;
+    
+    const palavrasInvalidas = ['sim', 'nao', 'ok', 'yes', 'no', 'teste', 'oi', 'ola'];
+    if (palavrasInvalidas.includes(nomeLimpo.toLowerCase())) return false;
+    
+    return true;
+}
+
+// Função para formatar nome
+function formatarNome(nome) {
+    return nome
+        .trim()
+        .toLowerCase()
+        .split(' ')
+        .map(palavra => {
+            if (palavra.length <= 2) return palavra.toLowerCase();
+            return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+        })
+        .join(' ');
+}
+
+// Função para escolher mensagem aleatória
+function getRandomMessage(messageArray) {
+    return messageArray[Math.floor(Math.random() * messageArray.length)];
+}
+
+// Função de onboarding
+async function processarOnboarding(cleanPhone, messageText, state, body) {
+    console.log('=== PROCESSANDO ONBOARDING ===');
+    console.log('Passo atual: ' + state.onboardingStep);
+    console.log('Mensagem: ' + messageText);
+    
+    switch (state.onboardingStep) {
+        case ONBOARDING_STEPS.SAUDACAO:
+            const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
+            const pedirNome = getRandomMessage(BOAS_VINDAS_MESSAGES.solicitar_nome);
+            
+            await sendReply(cleanPhone, saudacao + '\n\n' + pedirNome);
+            
+            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_NOME;
+            state.lastActivity = Date.now();
+            userState.set(cleanPhone, state);
+            break;
+            
+        case ONBOARDING_STEPS.AGUARDANDO_NOME:
+            const nomeValidado = validarNome(messageText);
+            
+            if (!nomeValidado) {
+                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+                await sendReply(cleanPhone, msgInvalido);
+                return;
+            }
+            
+            const nomeFormatado = formatarNome(messageText);
+            
+            try {
+                const { data, error } = await supabase
+                    .from('clientes_novos')
+                    .upsert({
+                        telefone: cleanPhone,
+                        nome: nomeFormatado,
+                        data_contato: new Date().toISOString(),
+                        status: 'novo',
+                        onboarding_completo: true
+                    }, {
+                        onConflict: 'telefone'
+                    });
+                
+                if (error) {
+                    console.error('Erro ao salvar nome:', error);
+                } else {
+                    console.log('Nome salvo no Supabase: ' + nomeFormatado);
+                }
+            } catch (err) {
+                console.error('Erro ao atualizar cliente:', err);
+            }
+            
+            state.nome = nomeFormatado;
+            state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+            userState.set(cleanPhone, state);
+            
+            const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
+                              nomeFormatado.split(' ')[0] +
+                              getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
+                              await getMenuPrincipal();
+            
+            await sendReply(cleanPhone, confirmacao);
+            
+            console.log('Onboarding completo para: ' + nomeFormatado);
+            break;
+            
+        default:
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            userState.set(cleanPhone, state);
+            await processarOnboarding(cleanPhone, '', state, body);
+    }
+}
+
+// ATUALIZAÇÃO: Função processarOpcaoNoSubmenu para usar nome do cliente
+async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
+    const service = state.service;
+    const nomeCliente = state.nome ? ', ' + state.nome.split(' ')[0] : '';
+    
+    console.log('=== SUBMENU ATIVO: ' + service + ' ===');
+    console.log('Opção recebida: ' + messageText);
+    
+    // Mapeamento de opções do submenu
+    const opcoesSubmenu = {
+        '1': 'preco',
+        '2': 'prazo', 
+        '3': 'documentos',
+        '4': 'processo',
+        '5': 'especial',
+        '6': 'avaliacao',
+        '7': 'especialista'
+    };
+    
+    // Se a opção digitada é uma opção válida do submenu (1-7)
+    if (opcoesSubmenu[messageText]) {
+        console.log('Processando opção ' + messageText + ' do submenu de ' + service);
+        
+        switch(messageText) {
+            case '1': // Preço
+                const respostaPreco = getRespostaSubmenu(service, 'preco');
+                await sendReply(cleanPhone, respostaPreco + '\n\n' +
+                    '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '2': // Prazo
+                const respostaPrazo = getRespostaSubmenu(service, 'prazo');
+                await sendReply(cleanPhone, respostaPrazo + '\n\n' +
+                    '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '3': // Documentos
+                const respostaDocs = getRespostaSubmenu(service, 'documentos');
+                await sendReply(cleanPhone, respostaDocs + '\n\n' +
+                    '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '4': // Processo
+                const respostaProcesso = getRespostaSubmenu(service, 'processo');
+                await sendReply(cleanPhone, respostaProcesso + '\n\n' +
+                    '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '5': // Visto Negado / Onde Fazer
+                if (service === 'passaporte') {
+                    const msg = '🏛️ ONDE FAZER O PASSAPORTE\n\n' +
+                               '📍 Polícia Federal (agendamento obrigatório)\n' +
+                               '🌐 Site: https://www.gov.br/pf/pt-br/assuntos/passaporte\n\n' +
+                               '📋 Passo a passo:\n' +
+                               '1. Acesse o site da PF\n' +
+                               '2. Preencha o formulário online\n' +
+                               '3. Pague a taxa GRU (~R$ 257)\n' +
+                               '4. Agende o atendimento\n' +
+                               '5. Compareça ao posto com os documentos\n\n' +
+                               '💡 Dica: Agende com antecedência!\n\n' +
+                               '📌 ' + nomeCliente + ' - Você está em: PASSAPORTE\n' +
+                               'Digite outra opção (1-7) ou 0 para menu principal';
+                    await sendReply(cleanPhone, msg);
+                } else {
+                    const msg = '🔄 VISTO NEGADO - RECUPERAÇÃO\n\n' +
+                               'Teve o visto negado? Não desanime!\n\n' +
+                               '🔗 Análise gratuita: https://getvisa.com.br/visto-americano-negado/\n\n' +
+                               '✅ Oferecemos:\n' +
+                               '• Análise do motivo da negativa\n' +
+                               '• Correção do formulário\n' +
+                               '• Documentação reforçada\n' +
+                               '• Preparação para entrevista\n\n' +
+                               '💰 Investimento: R$ 380\n\n' +
+                               '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                               'Digite outra opção (1-7) ou 0 para menu principal';
+                    await sendReply(cleanPhone, msg);
+                }
+                break;
+                
+            case '6': // Avaliação Gratuita
+                const links = {
+                    'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
+                    'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
+                    'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
+                    'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
+                    'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
+                    'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+                };
+                const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
+                
+                const msg = '📋 AVALIAÇÃO GRATUITA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                           '🔗 Acesse: ' + link + '\n\n' +
+                           '⏱️ Leva menos de 2 minutos!\n\n' +
+                           '📌 ' + nomeCliente + ' - Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                           'Digite outra opção (1-7) ou 0 para menu principal';
+                await sendReply(cleanPhone, msg);
+                break;
+                
+            case '7': // Falar com Especialista
+                const msgEsp = '👨‍💼 FALAR COM ESPECIALISTA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                              'Meu nome é Moisés e estou aqui para ajudar' + nomeCliente + '!\n\n' +
+                              '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                              '📧 E-mail: contato@getvisa.com.br\n\n' +
+                              '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                              'Digite outra opção (1-7) ou 0 para menu principal';
+                await sendReply(cleanPhone, msgEsp);
+                break;
+        }
+        return;
+    }
+    
+    // Se digitou 9, mostra o menu do serviço atual novamente
+    if (messageText === '9') {
+        const submenuTexto = getSubmenu(service);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // Se não é uma opção válida do submenu
+    const erroMsg = '❌ Opção inválida' + nomeCliente + '!\n\n' +
+                   'Você está no menu: ' + getServiceName(service).toUpperCase() + '\n\n' +
+                   'Opções disponíveis:\n' +
+                   getSubmenu(service) + '\n\n' +
+                   '💡 Para escolher outro serviço, digite 0 primeiro.';
+    await sendReply(cleanPhone, erroMsg);
+}
+
+// LOCALIZE a função cadastrarCliente atual e SUBSTITUA:
+
+async function cadastrarCliente(telefone, nome) {
+    nome = nome || 'Cliente_' + telefone;
+    console.log('Cadastrando/atualizando ' + telefone + ' com nome: ' + nome);
+    
+    const dadosCliente = {
+        telefone: telefone,
+        nome: nome,
+        data_contato: new Date().toISOString(),
+        status: 'novo',
+        onboarding_completo: false
+    };
+
+    const { data, error } = await supabase
+        .from('clientes_novos')
+        .upsert(dadosCliente, {
+            onConflict: 'telefone',
+            ignoreDuplicates: false
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Erro ao cadastrar cliente:', error);
+        return null;
+    }
+    
+    console.log('Cliente ' + telefone + ' cadastrado/atualizado como NOVO');
+    return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
+}
+
+// ATUALIZAÇÃO: Webhook para incluir onboarding
+app.post('/api/webhook/zapi', function(req, res) {
+    console.log('📨 WEBHOOK Z-API RECEBIDO');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+
+    res.status(200).json({
+        status: 'ok',
+        received: true,
+        timestamp: new Date().toISOString()
+    });
+
+    (async function() {
+        try {
+            var body = req.body;
+
+            // Ignorar mensagens de grupo, bot, status (mantido igual)
+            if (body.isGroup === true || body.isGroupMsg === true || 
+                (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
+                console.log('👥 Mensagem de grupo ignorada');
+                return;
+            }
+            
+            if (body.fromMe === true) {
+                console.log('🤖 Mensagem do próprio bot ignorada');
+                return;
+            }
+            
+            if (body.isStatusReply === true || body.waitingMessage === true) {
+                console.log('📊 Mensagem de status/waiting ignorada');
+                return;
+            }
+
+            var messageText = '';
+            var senderPhone = '';
+
+            // Extrair texto (mantido igual)
+            if (body.text) {
+                if (typeof body.text === 'string') messageText = body.text;
+                else if (body.text.message) messageText = body.text.message;
+                else if (body.text.body) messageText = body.text.body;
+                else if (body.text.text) messageText = body.text.text;
+            }
+            if (!messageText && body.message) {
+                if (typeof body.message === 'string') messageText = body.message;
+                else if (body.message.text) messageText = body.message.text;
+                else if (body.message.content) messageText = body.message.content;
+                else if (body.message.body) messageText = body.message.body;
+                else if (body.message.conversation) messageText = body.message.conversation;
+            }
+            if (!messageText && body.content) messageText = body.content;
+            if (!messageText && body.body) messageText = body.body;
+            if (!messageText && body.conversation) messageText = body.conversation;
+
+            // Extrair telefone (mantido igual)
+            if (body.phone) senderPhone = body.phone;
+            else if (body.from) senderPhone = body.from;
+            else if (body.sender) senderPhone = body.sender;
+            else if (body.wa_id) senderPhone = body.wa_id;
+            else if (body.chatId) senderPhone = body.chatId;
+            else if (body.author) senderPhone = body.author;
+
+            console.log('📝 Mensagem bruta: "' + messageText + '"');
+            console.log('📱 Telefone bruto: "' + senderPhone + '"');
+
+            if (!senderPhone || !messageText || messageText.trim().length === 0) {
+                console.log('❌ Dados inválidos - ignorando');
+                return;
+            }
+
+            messageText = messageText.trim();
+
+            var cleanPhone = senderPhone.toString().replace(/\D/g, '');
+            if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+            if (cleanPhone.length < 10) {
+                console.log('❌ Telefone inválido (' + cleanPhone + ')');
+                await sendReply(senderPhone, 'Desculpe, não conseguimos identificar seu número. Tente novamente.');
+                return;
+            }
+
+            console.log('✅ Telefone limpo: ' + cleanPhone);
+            console.log('💬 Mensagem: "' + messageText + '"');
+
+            // Verificar contato amigo (silenciar)
+            var amigo = await supabase
+                .from('contatos_amigos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (amigo.data) {
+                console.log('👤 Contato AMIGO: ' + cleanPhone + ' - SILÊNCIO TOTAL');
+                return;
+            }
+
+            // Verificar cliente finalizado
+            var finalizado = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (finalizado.data) {
+                console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
+                const msgFinalizado = '🌟 Muito obrigado por confiar na GetVisa!\n\n' +
+                                     'Seu processo foi concluído com sucesso.\n\n' +
+                                     '📋 Serviço: ' + (finalizado.data.servico || 'não informado') + '\n' +
+                                     '📅 Finalizado em: ' + new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') + '\n\n' +
+                                     '⭐ Avalie nosso serviço: https://getvisa.com.br/avaliacao\n\n' +
+                                     'Estamos aqui para você sempre que precisar!\n\n' +
+                                     'Digite 0 para o MENU principal';
+                await sendReply(cleanPhone, msgFinalizado);
+                return;
+            }
+
+            // Verificar cliente ativo
+            var ativo = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (ativo.data) {
+                console.log('🔄 Cliente ATIVO: ' + cleanPhone);
+                
+                // Se é ativo, pular onboarding
+                let state = userState.get(cleanPhone);
+                if (!state) {
+                    state = {
+                        nivel: 'principal',
+                        service: null,
+                        nome: ativo.data.nome || null,
+                        onboardingStep: ONBOARDING_STEPS.COMPLETO,
+                        onboardingCompleto: true,
+                        lastActivity: Date.now()
+                    };
+                    userState.set(cleanPhone, state);
+                }
+
+                var etapaMsg = '';
+                try {
+                    var etapa = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', cleanPhone)
+                        .maybeSingle();
+
+                    if (etapa.data) {
+                        var etapaInfo = ETAPAS[etapa.data.etapa_atual];
+                        etapaMsg = '\n📍 Etapa atual: ' + (etapaInfo && etapaInfo.label || etapa.data.etapa_atual);
+                    }
+                } catch (err) {
+                    console.log('Erro ao buscar etapa:', err);
+                }
+
+                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
+                const msgAtivo = '👋 Olá ' + nomeCliente + '!\n\n' +
+                                'Seu processo está em andamento.' + etapaMsg + '\n' +
+                                '📊 Status: ' + (ativo.data.status || 'em_processo') + '\n\n' +
+                                'Como posso ajudar?\n\n' +
+                                'Digite 0 para o MENU principal';
+                await sendReply(cleanPhone, msgAtivo);
+                
+                await processarMenu(cleanPhone, messageText, body);
+                return;
+            }
+
+            // Verificar cliente novo (já cadastrado)
+            var novo = await supabase
+                .from('clientes_novos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (novo.data) {
+                console.log('👤 Cliente NOVO já cadastrado: ' + cleanPhone);
+                
+                // Se já tem nome, pular onboarding
+                if (novo.data.nome && novo.data.onboarding_completo) {
+                    let state = userState.get(cleanPhone);
+                    if (!state) {
+                        state = {
+                            nivel: 'principal',
+                            service: null,
+                            nome: novo.data.nome,
+                            onboardingStep: ONBOARDING_STEPS.COMPLETO,
+                            onboardingCompleto: true,
+                            lastActivity: Date.now()
+                        };
+                        userState.set(cleanPhone, state);
+                    }
+                }
+                
+                await processarMenu(cleanPhone, messageText, body);
+                return;
+            }
+
+            // NOVO CLIENTE - Iniciar onboarding
+            console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
+            
+            // Cadastrar cliente básico (sem nome ainda)
+            var resultado = await cadastrarCliente(cleanPhone, 'Cliente');
+            if (!resultado) {
+                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                return;
+            }
+            
+            console.log('✅ Cliente cadastrado, iniciando onboarding');
+            
+            // Iniciar processo de onboarding
+            await processarMenu(cleanPhone, messageText, body);
+
+        } catch (error) {
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('Mensagem:', error.message);
+            console.error('Stack:', error.stack);
+
+            try {
+                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
+                if (phone) {
+                    var cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos.\n\nDigite 0 para tentar novamente.');
+                    }
+                }
+            } catch (e) {
+                console.error('Falha ao enviar mensagem de erro:', e);
+            }
+        }
+    })();
+});
+
+
 const INTENT_KEYWORDS = {
     'visto_americano': ['visto americano', 'eua', 'estados unidos', 'us visa', 'b1', 'b2', 'entrevista eua', 'visto eua'],
     'visto_canadense': ['visto canadense', 'canada', 'visto canada'],
@@ -1436,6 +2216,9 @@ function getSubmenu(service) {
         'Digite o número da opção (1-7)';
 }
 
+
+
+
 // CORREÇÃO: Tratamento de mensagens do webhook
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('📨 WEBHOOK Z-API RECEBIDO');
@@ -1808,16 +2591,16 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            console.log('NOVO CLIENTE DETECTADO: ' + cleanPhone);
-            var nomeCliente = body.name || (body.sender && body.sender.name) || body.pushName || 'Cliente';
-            var resultado = await cadastrarCliente(cleanPhone, nomeCliente);
-            if (!resultado) {
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas tecnicos.');
-                return;
-            }
-            console.log('Cliente ' + cleanPhone + ' cadastrado com sucesso!');
+            console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
 
-            await processarMenu(cleanPhone, messageText, body);
+var resultado = await cadastrarCliente(cleanPhone, 'Cliente');
+if (!resultado) {
+    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+    return;
+}
+
+console.log('✅ Cliente cadastrado, iniciando onboarding');
+await processarMenu(cleanPhone, messageText, body);
 
         } catch (error) {
             console.error('ERRO NO PROCESSAMENTO DO WEBHOOK:');
