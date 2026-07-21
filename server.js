@@ -2530,6 +2530,253 @@ app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
     }
 });
 
+// ============ ROTAS ADMIN ============
+
+// 1. Teste do Z-API
+app.get('/api/test/zapi', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const testPhone = '21974601812';
+        const testMessage = '🧪 Teste de conexão Z-API - ' + new Date().toLocaleString('pt-BR');
+        
+        console.log(`📨 Testando Z-API para: ${testPhone}`);
+        const result = await enviarWhatsApp(testPhone, testMessage);
+        
+        res.json({
+            success: result,
+            message: result ? '✅ Mensagem enviada com sucesso!' : '❌ Falha ao enviar mensagem',
+            phone: testPhone,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Erro no teste Z-API:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 2. Verificar cliente
+app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const telefone = req.params.telefone;
+        console.log(`🔍 Verificando cliente: ${telefone}`);
+        
+        // Buscar em clientes_ativos
+        const { data: ativo, error: ativoError } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        // Buscar etapa
+        let etapa = null;
+        if (ativo) {
+            const { data: etapaData } = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefone)
+                .maybeSingle();
+            etapa = etapaData;
+        }
+        
+        res.json({
+            success: true,
+            telefone: telefone,
+            cliente: ativo || null,
+            etapa: etapa || null,
+            encontrado: !!ativo
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// 3. Notificar cliente
+app.post('/api/admin/notificar-cliente', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone, mensagem } = req.body;
+        
+        if (!telefone) {
+            return res.status(400).json({ error: 'Telefone é obrigatório' });
+        }
+        
+        console.log(`📨 Enviando notificação para: ${telefone}`);
+        
+        // Buscar cliente
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        
+        if (!cliente) {
+            return res.status(404).json({ 
+                error: 'Cliente não encontrado em clientes_ativos',
+                telefone: telefone
+            });
+        }
+        
+        // Nome do cliente
+        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+            ? cliente.nome.split(' ')[0] 
+            : 'Cliente';
+        
+        // Mensagem padrão
+        const texto = mensagem || `🎉 Olá ${nomeCliente}!\n\n` +
+                     `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                     `📋 Status: Em andamento\n` +
+                     `📍 Etapa atual: Formulário recebido\n\n` +
+                     `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                     `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                     `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+        
+        const enviado = await enviarWhatsApp(telefone, texto);
+        
+        res.json({
+            success: true,
+            telefone: telefone,
+            cliente: cliente.nome,
+            notificacao_enviada: enviado,
+            mensagem: texto
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao notificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// 4. Mover cliente com notificação (versão melhorada)
+app.post('/api/painel/mover-com-notificacao', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone, destino, enviar_notificacao } = req.body;
+        
+        if (!telefone || !destino) {
+            return res.status(400).json({ error: 'Telefone e destino são obrigatórios' });
+        }
+        
+        // Buscar em clientes_novos
+        const { data: cliente, error } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        
+        if (!cliente) {
+            return res.status(404).json({ error: 'Cliente não encontrado em clientes_novos' });
+        }
+        
+        let resultado = {};
+        
+        if (destino === 'ativo') {
+            // Mover para ativo
+            const { data, error: insertError } = await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato,
+                    atualizado_em: new Date().toISOString()
+                })
+                .select()
+                .single();
+            
+            if (insertError) {
+                return res.status(500).json({ error: insertError.message });
+            }
+            
+            resultado = data;
+            
+            // Criar etapa
+            try {
+                await criarEtapaInicial(cliente.telefone);
+            } catch (err) {
+                console.error('Erro ao criar etapa:', err);
+            }
+            
+            // Enviar notificação
+            if (enviar_notificacao !== false) {
+                try {
+                    const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+                        ? cliente.nome.split(' ')[0] 
+                        : 'Cliente';
+                    
+                    const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                                   `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                                   `📋 Status: Em andamento\n` +
+                                   `📍 Etapa atual: Formulário recebido\n\n` +
+                                   `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                                   `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                                   `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+                    
+                    await enviarWhatsApp(cliente.telefone, mensagem);
+                    resultado.notificacao_enviada = true;
+                } catch (err) {
+                    console.error('Erro ao enviar notificação:', err);
+                    resultado.notificacao_enviada = false;
+                }
+            }
+            
+            // Remover de clientes_novos
+            await supabase.from('clientes_novos').delete().eq('telefone', telefone);
+            
+            res.json({
+                success: true,
+                message: 'Cliente movido para ATIVO com sucesso',
+                cliente: resultado,
+                notificacao: resultado.notificacao_enviada ? 'Enviada' : 'Não enviada'
+            });
+            
+        } else {
+            res.status(400).json({ error: 'Destino inválido. Use "ativo"' });
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao mover cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
 app.get('/health', function(req, res) { res.status(200).send('OK'); });
 app.get('/ping', function(req, res) { res.status(200).send('ok'); });
 

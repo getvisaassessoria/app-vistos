@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal do Cliente - GetVisa</title>
+    <style>
+        /* ============================================================
+           ESTILOS DO PORTAL
+           ============================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f4f8;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #003366;
+            font-size: 24px;
+        }
+        .header p {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #003366;
+            box-shadow: 0 0 0 3px rgba(0,51,102,0.1);
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #003366;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #002244;
+        }
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.success { background: #10b981; }
+        .toast.error { background: #ef4444; }
+        .toast.info { background: #3b82f6; }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #94a3b8;
+        }
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+        .timeline-item {
+            display: flex;
+            margin-bottom: 15px;
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: -15px;
+            width: 2px;
+            background: #dee2e6;
+        }
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        .timeline-badge {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            z-index: 1;
+        }
+        .timeline-content {
+            padding-left: 15px;
+        }
+        .timeline-content h6 {
+            font-size: 14px;
+            color: #1e293b;
+        }
+        .timeline-content small {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .timeline-item.pendente .timeline-content {
+            opacity: 0.5;
+        }
+        .timeline-item.atual .timeline-content h6 {
+            color: #007bff;
+            font-weight: bold;
+        }
+        .timeline-item.atual .timeline-badge {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .agendamento-card {
+            background: #f8fafc;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #003366;
+        }
+        .agendamento-card h6 {
+            font-size: 14px;
+            color: #1e293b;
+        }
+        .agendamento-card small {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-badge.ativo { background: #10b981; color: white; }
+        .status-badge.pendente { background: #f59e0b; color: white; }
+        .status-badge.finalizado { background: #3b82f6; color: white; }
+        .divider {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 20px 0;
+        }
+        .text-center { text-align: center; }
+        .text-muted { color: #94a3b8; }
+        .mt-10 { margin-top: 10px; }
+        .mb-10 { margin-bottom: 10px; }
+        .flex { display: flex; gap: 10px; }
+        .flex .btn { flex: 1; }
+        @media (max-width: 480px) {
+            .card { padding: 20px; }
+            .flex { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- ============================================================
+             TELA DE LOGIN
+             ============================================================ -->
+        <div class="card" id="tela-login">
+            <div class="header">
+                <h1>📋 Portal do Cliente</h1>
+                <p>GetVisa Assessoria</p>
+            </div>
+            <div class="form-group">
+                <label>📱 Seu WhatsApp</label>
+                <input type="text" id="input-telefone" placeholder="(21) 99999-9999">
+            </div>
+            <button class="btn btn-primary" id="btn-enviar-codigo" onclick="enviarCodigo()">
+                📲 Enviar Código
+            </button>
+            <p class="text-center text-muted mt-10" style="font-size:12px;">
+                Você receberá um código no WhatsApp
+            </p>
+        </div>
+
+        <!-- ============================================================
+             TELA DE VERIFICAÇÃO
+             ============================================================ -->
+        <div class="card hidden" id="tela-verificacao">
+            <div class="header">
+                <h1>🔐 Verificar Código</h1>
+                <p>Digite o código recebido no WhatsApp</p>
+            </div>
+            <div class="form-group">
+                <label>📱 Telefone</label>
+                <input type="text" id="input-telefone-verificar" readonly style="background:#f1f5f9;">
+            </div>
+            <div class="form-group">
+                <label>🔑 Código de 6 dígitos</label>
+                <input type="text" id="input-codigo" placeholder="000000" maxlength="6" inputmode="numeric">
+            </div>
+            <button class="btn btn-success" onclick="verificarCodigo()">
+                ✅ Verificar
+            </button>
+            <button class="btn btn-secondary mt-10" onclick="voltarLogin()">
+                🔙 Voltar
+            </button>
+        </div>
+
+        <!-- ============================================================
+             DASHBOARD DO CLIENTE
+             ============================================================ -->
+        <div class="card hidden" id="tela-dashboard">
+            <div class="header">
+                <h1 id="dash-nome">📋 Olá, Cliente!</h1>
+                <p id="dash-status">Status: <span class="status-badge ativo">Em Processo</span></p>
+            </div>
+            <hr class="divider">
+
+            <!-- Etapa Atual -->
+            <div id="dash-etapa-atual">
+                <h4>📍 Etapa Atual</h4>
+                <p style="font-size:18px;font-weight:600;color:#003366;" id="dash-etapa-label">📝 Formulário Enviado</p>
+            </div>
+            <hr class="divider">
+
+            <!-- Timeline -->
+            <div id="dash-timeline">
+                <h4>📊 Timeline do Processo</h4>
+                <div id="timeline-container">
+                    <div class="loading">🔄 Carregando...</div>
+                </div>
+            </div>
+            <hr class="divider">
+
+            <!-- Agendamentos -->
+            <div id="dash-agendamentos">
+                <h4>📅 Próximos Compromissos</h4>
+                <div id="agendamentos-container">
+                    <div class="loading">🔄 Carregando...</div>
+                </div>
+            </div>
+            <hr class="divider">
+
+            <!-- Ações -->
+            <div class="flex">
+                <button class="btn btn-primary" onclick="baixarDS160()">
+                    📄 Baixar DS-160
+                </button>
+                <button class="btn btn-secondary" onclick="sair()">
+                    🚪 Sair
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         TOAST
+         ============================================================ -->
+    <div class="toast" id="toast"></div>
+
+    <!-- ============================================================
+         JAVASCRIPT
+         ============================================================ -->
+    <script>
+        // ============================================================
+        //  VARIÁVEIS GLOBAIS
+        // ============================================================
+        let telefoneAtual = null;
+
+        // ============================================================
+        //  TOAST
+        // ============================================================
+        function showToast(mensagem, tipo = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = mensagem;
+            toast.className = `toast ${tipo}`;
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ============================================================
+        //  TELAS
+        // ============================================================
+        function mostrarTela(telaId) {
+            document.querySelectorAll('.card').forEach(el => el.classList.add('hidden'));
+            document.getElementById(telaId).classList.remove('hidden');
+        }
+
+        function voltarLogin() {
+            mostrarTela('tela-login');
+        }
+
+        function sair() {
+            mostrarTela('tela-login');
+            document.getElementById('input-telefone').value = '';
+            document.getElementById('input-codigo').value = '';
+            showToast('👋 Até logo!', 'info');
+        }
+
+        // ============================================================
+        //  ENVIAR CÓDIGO
+        // ============================================================
+        async function enviarCodigo() {
+            const telefone = document.getElementById('input-telefone').value.trim();
+            if (!telefone) {
+                showToast('⚠️ Digite seu telefone', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-enviar-codigo');
+            btn.disabled = true;
+            btn.textContent = '⏳ Enviando...';
+
+            try {
+                const response = await fetch('/api/portal/enviar-codigo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefone })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('✅ Código enviado com sucesso!', 'success');
+                    telefoneAtual = telefone;
+                    document.getElementById('input-telefone-verificar').value = telefone;
+                    mostrarTela('tela-verificacao');
+                    document.getElementById('input-codigo').focus();
+                } else {
+                    showToast('❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                showToast('❌ Erro ao enviar código', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📲 Enviar Código';
+            }
+        }
+
+        // ============================================================
+        //  VERIFICAR CÓDIGO
+        // ============================================================
+        async function verificarCodigo() {
+            const codigo = document.getElementById('input-codigo').value.trim();
+            if (!codigo || codigo.length < 6) {
+                showToast('⚠️ Digite o código de 6 dígitos', 'error');
+                return;
+            }
+
+            const btn = event?.target || document.querySelector('#tela-verificacao .btn-success');
+            btn.disabled = true;
+            btn.textContent = '⏳ Verificando...';
+
+            try {
+                const response = await fetch('/api/portal/verificar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telefone: telefoneAtual,
+                        codigo: codigo
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('✅ Acesso autorizado!', 'success');
+                    carregarDashboard(data);
+                } else {
+                    showToast('❌ Código inválido', 'error');
+                }
+            } catch (error) {
+                showToast('❌ Erro ao verificar', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✅ Verificar';
+            }
+        }
+
+        // ============================================================
+        //  CARREGAR DASHBOARD
+        // ============================================================
+        function carregarDashboard(data) {
+            const cliente = data.cliente;
+            const etapa = data.etapa;
+            const agendamentos = data.agendamentos || [];
+
+            // Nome do cliente
+            document.getElementById('dash-nome').textContent = `📋 Olá, ${cliente.nome || 'Cliente'}!`;
+
+            // Status
+            const statusMap = {
+                'em_processo': '🟢 Em Processo',
+                'finalizado': '✅ Finalizado',
+                'pendente': '🟡 Pendente'
+            };
+            document.getElementById('dash-status').innerHTML = 
+                `Status: <span class="status-badge ativo">${statusMap[cliente.status] || cliente.status}</span>`;
+
+            // Etapa atual
+            const etapaLabels = {
+                'formulario_enviado': '📝 Formulário Enviado',
+                'analise_correcoes': '🔍 Análise e Correções',
+                'boleto_emitido': '💰 Boleto Emitido',
+                'boleto_pago': '✅ Boleto Pago',
+                'agendamento_realizado': '📅 Agendamento Realizado',
+                'treinamento_realizado': '🎯 Treinamento Concluído',
+                'entrevista_realizada': '🎤 Entrevista Realizada',
+                'passaporte_retornado': '📫 Passaporte Retornado'
+            };
+            document.getElementById('dash-etapa-label').textContent = 
+                etapaLabels[etapa?.etapa_atual] || etapa?.etapa_atual || '📝 Formulário Enviado';
+
+            // Timeline
+            renderizarTimeline(etapa);
+
+            // Agendamentos
+            renderizarAgendamentos(agendamentos);
+
+            // Mostrar dashboard
+            mostrarTela('tela-dashboard');
+        }
+
+        // ============================================================
+        //  RENDERIZAR TIMELINE
+        // ============================================================
+        function renderizarTimeline(etapa) {
+            const container = document.getElementById('timeline-container');
+
+            const etapas = [
+                { id: 'formulario_enviado', label: '📝 Formulário Enviado' },
+                { id: 'analise_correcoes', label: '🔍 Análise e Correções' },
+                { id: 'boleto_emitido', label: '💰 Boleto Emitido' },
+                { id: 'boleto_pago', label: '✅ Boleto Pago' },
+                { id: 'agendamento_realizado', label: '📅 Agendamento Realizado' },
+                { id: 'treinamento_realizado', label: '🎯 Treinamento Concluído' },
+                { id: 'entrevista_realizada', label: '🎤 Entrevista Realizada' },
+                { id: 'passaporte_retornado', label: '📫 Passaporte Retornado' }
+            ];
+
+            const etapaAtual = etapa?.etapa_atual || 'formulario_enviado';
+            const indexAtual = etapas.findIndex(e => e.id === etapaAtual);
+
+            let html = '<div class="timeline">';
+            etapas.forEach((e, index) => {
+                const isConcluida = index <= indexAtual;
+                const isAtual = index === indexAtual;
+                html += `
+                    <div class="timeline-item ${isConcluida ? 'concluida' : 'pendente'} ${isAtual ? 'atual' : ''}">
+                        <div class="timeline-badge" style="background: ${isConcluida ? '#003366' : '#e9ecef'}">
+                            ${isConcluida ? '✓' : index + 1}
+                        </div>
+                        <div class="timeline-content">
+                            <h6>${e.label}</h6>
+                            <small>${isAtual ? '🔄 Em andamento' : (isConcluida ? '✅ Concluída' : '⏳ Pendente')}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // ============================================================
+        //  RENDERIZAR AGENDAMENTOS
+        // ============================================================
+        function renderizarAgendamentos(agendamentos) {
+            const container = document.getElementById('agendamentos-container');
+
+            if (!agendamentos || agendamentos.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">📅 Nenhum compromisso agendado</p>';
+                return;
+            }
+
+            let html = '';
+            agendamentos.forEach(item => {
+                const data = new Date(item.data).toLocaleDateString('pt-BR');
+                const hora = item.hora?.substring(0, 5) || '';
+                html += `
+                    <div class="agendamento-card">
+                        <h6>${item.atividade || 'Compromisso'}</h6>
+                        <small>📅 ${data} ${hora ? `🕐 ${hora}` : ''} • 📍 ${item.local || 'Local não definido'}</small>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // ============================================================
+        //  BAIXAR DS-160
+        // ============================================================
+        function baixarDS160() {
+            showToast('📄 Baixando DS-160...', 'info');
+            // Implementar download do PDF
+            window.location.href = `/api/portal/ds160/${telefoneAtual}`;
+        }
+
+        // ============================================================
+        //  ENTER PARA ENVIAR
+        // ============================================================
+        document.getElementById('input-telefone').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') enviarCodigo();
+        });
+        document.getElementById('input-codigo').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') verificarCodigo();
+        });
+
+        // ============================================================
+        //  MÁSCARA DE TELEFONE
+        // ============================================================
+        document.getElementById('input-telefone').addEventListener('input', function(e) {
+            let value = this.value.replace(/\D/g, '');
+            if (value.length > 11) value = value.substring(0, 11);
+            if (value.length > 0) {
+                value = '(' + value;
+            }
+            if (value.length > 3) {
+                value = value.substring(0, 3) + ') ' + value.substring(3);
+            }
+            if (value.length > 10) {
+                value = value.substring(0, 10) + '-' + value.substring(10);
+            }
+            this.value = value;
+        });
+    </script>
+</body>
+</html>
