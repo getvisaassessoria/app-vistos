@@ -119,12 +119,10 @@ const ETAPAS = {
     'passaporte_retornado': { id: 'passaporte_retornado', label: 'Passaporte Retornado', next: null, color: '#2ecc71' }
 };
 
-// ==================== SISTEMA DE ONBOARDING ====================
+// ❌ REMOVA esta linha se já existe um userState antes:
+// const userState = new Map();
 
-// Adicionar novo estado para controle de onboarding
-const userState = new Map();
-
-// Configuração do fluxo de onboarding
+// ✅ MANTENHA apenas estas constantes:
 const ONBOARDING_STEPS = {
     SAUDACAO: 'saudacao',
     AGUARDANDO_NOME: 'aguardando_nome',
@@ -132,7 +130,6 @@ const ONBOARDING_STEPS = {
     COMPLETO: 'completo'
 };
 
-// Mensagens do fluxo de boas-vindas
 const BOAS_VINDAS_MESSAGES = {
     primeira_saudacao: [
         '👋 Olá! Seja muito bem-vindo(a) à GetVisa!',
@@ -158,7 +155,7 @@ const BOAS_VINDAS_MESSAGES = {
             '🎯 Ótimo, '
         ],
         parte2: [
-            '! Agora sim posso te ajudar da melhor forma.\n\nVamos lá: como posso te ajudar hoje? Escolha uma opção:\n\n',
+            '! Agora sim posso te ajudar da melhor forma.\n\nVamos lá: como posso ajudar hoje? Escolha uma opção:\n\n',
             '! Estou aqui para realizar o sonho da sua viagem!\n\nEm que posso te ajudar? Escolha:\n\n',
             '! Vamos encontrar a melhor solução para você!\n\nO que você precisa? Escolha uma opção:\n\n',
             '! Preparado(a) para começar essa jornada?\n\nComo posso te ajudar? Escolha:\n\n'
@@ -2401,20 +2398,17 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
 
             // NOVO CLIENTE - Cadastrar e enviar boas-vindas
-            console.log('🆕 NOVO CLIENTE DETECTADO: ' + cleanPhone);
-            var nomeCliente = body.name || 
-                            (body.sender && body.sender.name) || 
-                            body.pushName || 
-                            body.contactName || 
-                            'Cliente';
-            
-            var resultado = await cadastrarCliente(cleanPhone, nomeCliente);
-            if (!resultado) {
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                return;
-            }
-            
-            console.log('✅ Cliente ' + cleanPhone + ' cadastrado com sucesso!');
+            console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
+
+            // Cadastrar cliente básico (sem nome ainda)
+              var resultado = await cadastrarCliente(cleanPhone, 'Cliente');
+              if (!resultado) {
+                  await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                  return;
+              }
+
+              console.log('✅ Cliente cadastrado, iniciando onboarding');
+              await processarMenu(cleanPhone, messageText, body);
             
             // Enviar mensagem de boas-vindas com menu
             const boasVindas = '🎉 SEJA BEM-VINDO À GETVISA!\n\n' +
@@ -2585,11 +2579,6 @@ app.post('/api/webhook/zapi', function(req, res) {
                 clienteExistente = novoFormatado.data;
             }
 
-            if (clienteExistente) {
-                console.log('Cliente NOVO ja cadastrado: ' + cleanPhone);
-                await processarMenu(cleanPhone, messageText, body);
-                return;
-            }
 
             console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
 
