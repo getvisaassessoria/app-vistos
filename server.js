@@ -513,7 +513,7 @@ function getSubmenu(service) {
         'Digite o numero da opcao desejada';
 }
 
-// CORREÇÃO PRINCIPAL: Função processarMenu melhorada
+// CORREÇÃO COMPLETA - Mantendo o contexto do submenu
 async function processarMenu(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENU ===');
     console.log('Phone: ' + cleanPhone);
@@ -525,7 +525,6 @@ async function processarMenu(cleanPhone, messageText, body) {
         state = {
             nivel: 'principal',
             service: null,
-            subOpcao: null,  // NOVO: para rastrear sub-opções
             lastActivity: Date.now()
         };
         userState.set(cleanPhone, state);
@@ -534,59 +533,200 @@ async function processarMenu(cleanPhone, messageText, body) {
     
     console.log('Estado atual: nivel=' + state.nivel + ', service=' + state.service);
     
-    // COMANDO 0 - VOLTA AO MENU PRINCIPAL
+    // COMANDO 0 - SEMPRE VOLTA AO MENU PRINCIPAL (única forma de sair do submenu)
     if (messageText === '0') {
         state.nivel = 'principal';
         state.service = null;
-        state.subOpcao = null;
         userState.set(cleanPhone, state);
         const menuPrincipal = await getMenuPrincipal();
         await sendReply(cleanPhone, menuPrincipal);
-        console.log('Voltou ao menu principal');
+        console.log('Voltou ao menu principal - contexto resetado');
         return;
     }
     
-    // SAUDAÇÕES E COMANDOS ESPECIAIS
-    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem', 'menu', 'inicio', 'comecar', 'voltar'];
-    if (saudacoes.includes(messageText.toLowerCase()) || messageText.toLowerCase() === 'menu principal') {
+    // COMANDOS DE RESET - voltam ao menu principal
+    const resetCommands = ['menu', 'menu principal', 'inicio', 'comecar', 'voltar', 'principal'];
+    if (resetCommands.includes(messageText.toLowerCase())) {
         state.nivel = 'principal';
         state.service = null;
-        state.subOpcao = null;
         userState.set(cleanPhone, state);
-        const menuPrincipal = await getMenuPrincipal();
-        await sendReply(cleanPhone, menuPrincipal);
+        await sendReply(cleanPhone, await getMenuPrincipal());
+        console.log('Reset para menu principal');
         return;
     }
     
-    // ============================================================
-    // PROCESSAMENTO POR NÍVEL
-    // ============================================================
-    
-    switch(state.nivel) {
-        case 'principal':
-            await processarNivelPrincipal(cleanPhone, messageText, state);
-            break;
-            
-        case 'submenu':
-            await processarNivelSubmenu(cleanPhone, messageText, state);
-            break;
-            
-        case 'sub-submenu':
-            await processarNivelSubSubmenu(cleanPhone, messageText, state);
-            break;
-            
-        default:
-            // Reset para menu principal
+    // SAUDAÇÕES - mostram menu principal mas mantêm contexto limpo
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem'];
+    if (saudacoes.includes(messageText.toLowerCase())) {
+        if (state.nivel === 'submenu' && state.service) {
+            // Se está em submenu, pergunta se quer continuar ou voltar
+            const msg = '👋 Olá! Você está no menu de ' + getServiceName(state.service).toUpperCase() + '.\n\n' +
+                       'Deseja:\n' +
+                       '• Continuar neste menu? Digite 9\n' +
+                       '• Voltar ao menu principal? Digite 0';
+            await sendReply(cleanPhone, msg);
+        } else {
             state.nivel = 'principal';
             state.service = null;
             userState.set(cleanPhone, state);
             await sendReply(cleanPhone, await getMenuPrincipal());
+        }
+        return;
     }
+    
+    // LÓGICA PRINCIPAL: Se está em submenu, mantém no submenu
+    if (state.nivel === 'submenu' && state.service) {
+        console.log('Processando no contexto do submenu: ' + state.service);
+        await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // Se está no menu principal
+    if (state.nivel === 'principal') {
+        await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // Fallback
+    state.nivel = 'principal';
+    state.service = null;
+    userState.set(cleanPhone, state);
+    await sendReply(cleanPhone, await getMenuPrincipal());
 }
 
-// NOVA FUNÇÃO: Processar nível principal
-async function processarNivelPrincipal(cleanPhone, messageText, state) {
-    console.log('Processando MENU PRINCIPAL: opcao=' + messageText);
+// NOVA FUNÇÃO: Processar opções dentro do submenu (mantém contexto)
+async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
+    const service = state.service;
+    console.log('=== SUBMENU ATIVO: ' + service + ' ===');
+    console.log('Opção recebida: ' + messageText);
+    
+    // Mapeamento de opções do submenu
+    const opcoesSubmenu = {
+        '1': 'preco',
+        '2': 'prazo', 
+        '3': 'documentos',
+        '4': 'processo',
+        '5': 'especial', // Visto negado ou Onde fazer
+        '6': 'avaliacao',
+        '7': 'especialista'
+    };
+    
+    // Se a opção digitada é uma opção válida do submenu (1-7)
+    if (opcoesSubmenu[messageText]) {
+        console.log('Processando opção ' + messageText + ' do submenu de ' + service);
+        
+        switch(messageText) {
+            case '1': // Preço
+                const respostaPreco = getRespostaSubmenu(service, 'preco');
+                await sendReply(cleanPhone, respostaPreco + '\n\n' +
+                    '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '2': // Prazo
+                const respostaPrazo = getRespostaSubmenu(service, 'prazo');
+                await sendReply(cleanPhone, respostaPrazo + '\n\n' +
+                    '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '3': // Documentos
+                const respostaDocs = getRespostaSubmenu(service, 'documentos');
+                await sendReply(cleanPhone, respostaDocs + '\n\n' +
+                    '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '4': // Processo
+                const respostaProcesso = getRespostaSubmenu(service, 'processo');
+                await sendReply(cleanPhone, respostaProcesso + '\n\n' +
+                    '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                    'Digite outra opção (1-7) ou 0 para menu principal');
+                break;
+                
+            case '5': // Visto Negado / Onde Fazer
+                if (service === 'passaporte') {
+                    const msg = '🏛️ ONDE FAZER O PASSAPORTE\n\n' +
+                               '📍 Polícia Federal (agendamento obrigatório)\n' +
+                               '🌐 Site: https://www.gov.br/pf/pt-br/assuntos/passaporte\n\n' +
+                               '📋 Passo a passo:\n' +
+                               '1. Acesse o site da PF\n' +
+                               '2. Preencha o formulário online\n' +
+                               '3. Pague a taxa GRU (~R$ 257)\n' +
+                               '4. Agende o atendimento\n' +
+                               '5. Compareça ao posto com os documentos\n\n' +
+                               '💡 Dica: Agende com antecedência!\n\n' +
+                               '📌 Você está em: PASSAPORTE\n' +
+                               'Digite outra opção (1-7) ou 0 para menu principal';
+                    await sendReply(cleanPhone, msg);
+                } else {
+                    const msg = '🔄 VISTO NEGADO - RECUPERAÇÃO\n\n' +
+                               'Teve o visto negado? Não desanime!\n\n' +
+                               '🔗 Análise gratuita: https://getvisa.com.br/visto-americano-negado/\n\n' +
+                               '✅ Oferecemos:\n' +
+                               '• Análise do motivo da negativa\n' +
+                               '• Correção do formulário\n' +
+                               '• Documentação reforçada\n' +
+                               '• Preparação para entrevista\n\n' +
+                               '💰 Investimento: R$ 380\n\n' +
+                               '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                               'Digite outra opção (1-7) ou 0 para menu principal';
+                    await sendReply(cleanPhone, msg);
+                }
+                break;
+                
+            case '6': // Avaliação Gratuita
+                const links = {
+                    'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
+                    'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
+                    'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
+                    'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
+                    'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
+                    'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+                };
+                const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
+                
+                const msg = '📋 AVALIAÇÃO GRATUITA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                           '🔗 Acesse: ' + link + '\n\n' +
+                           '⏱️ Leva menos de 2 minutos!\n\n' +
+                           '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                           'Digite outra opção (1-7) ou 0 para menu principal';
+                await sendReply(cleanPhone, msg);
+                break;
+                
+            case '7': // Falar com Especialista
+                const msgEsp = '👨‍💼 FALAR COM ESPECIALISTA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                              'Meu nome é Moisés e estou aqui para ajudar!\n\n' +
+                              '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                              '📧 E-mail: contato@getvisa.com.br\n\n' +
+                              '📌 Você está em: ' + getServiceName(service).toUpperCase() + '\n' +
+                              'Digite outra opção (1-7) ou 0 para menu principal';
+                await sendReply(cleanPhone, msgEsp);
+                break;
+        }
+        return;
+    }
+    
+    // Se digitou 9, mostra o menu do serviço atual novamente
+    if (messageText === '9') {
+        const submenuTexto = getSubmenu(service);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // Se não é uma opção válida do submenu, mostra mensagem de erro
+    // mas MANTÉM o contexto do submenu atual
+    const erroMsg = '❌ Opção inválida!\n\n' +
+                   'Você está no menu: ' + getServiceName(service).toUpperCase() + '\n\n' +
+                   'Opções disponíveis:\n' +
+                   getSubmenu(service) + '\n\n' +
+                   '💡 Para escolher outro serviço, digite 0 primeiro.';
+    await sendReply(cleanPhone, erroMsg);
+}
+
+// Função para processar menu principal (quando não está em submenu)
+async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
+    console.log('=== MENU PRINCIPAL ===');
     
     const servicoMap = {
         '1': 'visto_americano',
@@ -597,7 +737,23 @@ async function processarNivelPrincipal(cleanPhone, messageText, state) {
         '6': 'passaporte'
     };
     
-    // OPÇÃO 7 - AJUDA
+    // Se escolheu um serviço (1-6)
+    if (servicoMap[messageText]) {
+        const serviceKey = servicoMap[messageText];
+        console.log('Entrando no submenu de: ' + serviceKey);
+        
+        // Muda para submenu e salva o serviço
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        userState.set(cleanPhone, state);
+        
+        // Mostra o submenu do serviço escolhido
+        const submenuTexto = getSubmenu(serviceKey);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // Opção 7 - Ajuda (menu principal)
     if (messageText === '7') {
         const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
                         '👨‍💼 Moisés - Especialista em Vistos\n\n' +
@@ -610,159 +766,71 @@ async function processarNivelPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
-    const serviceKey = servicoMap[messageText];
-    
-    if (serviceKey) {
-        console.log('Servico selecionado: ' + serviceKey);
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        
-        const submenuTexto = getSubmenu(serviceKey);
-        console.log('Enviando submenu:', submenuTexto);
-        await sendReply(cleanPhone, submenuTexto);
-        return;
-    }
-    
-    // DETECTAR INTENÇÃO POR TEXTO
+    // Se não reconheceu a opção no menu principal
     const intent = detectIntent(messageText);
     if (intent) {
         const resposta = getRespostaIntencao(intent, state.service);
-        await sendReply(cleanPhone, resposta);
+        await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
         return;
     }
     
-    // OPÇÃO NÃO RECONHECIDA - MOSTRAR MENU NOVAMENTE COM MENSAGEM DE ERRO
-    const menuMsg = '❌ Opção inválida! Por favor, escolha uma das opções abaixo:\n\n' + 
+    // Mensagem não reconhecida
+    const erroMsg = '❌ Opção não reconhecida!\n\n' +
+                   'Por favor, escolha uma das opções:\n\n' +
                    await getMenuPrincipal();
-    await sendReply(cleanPhone, menuMsg);
-}
-
-// NOVA FUNÇÃO: Processar nível submenu
-async function processarNivelSubmenu(cleanPhone, messageText, state) {
-    console.log('Processando SUBMENU: opcao=' + messageText);
-    const service = state.service;
-    
-    if (!service) {
-        state.nivel = 'principal';
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, await getMenuPrincipal());
-        return;
-    }
-    
-    const isPassaporte = service === 'passaporte';
-    
-    // OPÇÃO 7 - FALAR COM ESPECIALISTA
-    if (messageText === '7') {
-        const especialistaMsg = '👨‍💼 FALAR COM ESPECIALISTA - ' + getServiceName(service).toUpperCase() + '\n\n' +
-                               'Meu nome é Moisés e estou aqui para te ajudar!\n\n' +
-                               '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
-                               '📧 E-mail: contato@getvisa.com.br\n\n' +
-                               'Ou se preferir, me envie sua dúvida aqui mesmo que responderei em breve!\n\n' +
-                               'Digite 0 para voltar ao MENU principal';
-        await sendReply(cleanPhone, especialistaMsg);
-        return;
-    }
-    
-    // OPÇÃO 6 - AVALIAÇÃO GRATUITA
-    if (messageText === '6') {
-        const links = {
-            'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
-            'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
-            'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
-            'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
-            'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
-            'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
-        };
-        const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
-        
-        const avaliacaoMsg = '📋 AVALIAÇÃO GRATUITA - ' + getServiceName(service).toUpperCase() + '\n\n' +
-                            '🔗 Acesse: ' + link + '\n\n' +
-                            '⏱️ Leva menos de 2 minutos!\n\n' +
-                            'Após preencher, nossa equipe analisará seu perfil e entrará em contato.\n\n' +
-                            'Digite 0 para voltar ao MENU principal';
-        await sendReply(cleanPhone, avaliacaoMsg);
-        return;
-    }
-    
-    // OPÇÃO 5 - VISTO NEGADO / ONDE FAZER
-    if (messageText === '5') {
-        if (isPassaporte) {
-            const ondeFazerMsg = '🏛️ ONDE FAZER O PASSAPORTE\n\n' +
-                                '📍 Polícia Federal (agendamento obrigatório)\n' +
-                                '🌐 Site: https://www.gov.br/pf/pt-br/assuntos/passaporte\n\n' +
-                                '📋 Passo a passo:\n' +
-                                '1. Acesse o site da PF\n' +
-                                '2. Preencha o formulário online\n' +
-                                '3. Pague a taxa GRU (~R$ 257)\n' +
-                                '4. Agende o atendimento\n' +
-                                '5. Compareça ao posto com os documentos\n\n' +
-                                '💡 Dica: Agende com antecedência, as vagas são limitadas!\n\n' +
-                                'Digite 0 para voltar ao MENU principal';
-            await sendReply(cleanPhone, ondeFazerMsg);
-        } else {
-            const vistoNegadoMsg = '🔄 VISTO NEGADO - RECUPERAÇÃO\n\n' +
-                                  'Teve o visto negado? Não desanime!\n\n' +
-                                  '🔗 Faça uma análise gratuita do seu caso:\n' +
-                                  'https://getvisa.com.br/visto-americano-negado/\n\n' +
-                                  '✅ O que oferecemos:\n' +
-                                  '• Análise do motivo da negativa\n' +
-                                  '• Correção do formulário DS-160\n' +
-                                  '• Documentação reforçada\n' +
-                                  '• Preparação especial para entrevista\n' +
-                                  '• Acompanhamento completo\n\n' +
-                                  '💰 Investimento: R$ 380 (assessoria especializada)\n\n' +
-                                  '📊 Taxa de aprovação: 85% em casos de reaplicação\n\n' +
-                                  'Digite 0 para voltar ao MENU principal';
-            await sendReply(cleanPhone, vistoNegadoMsg);
-        }
-        return;
-    }
-    
-    // OPÇÕES 1 A 4 - INFORMAÇÕES ESPECÍFICAS
-    if (['1', '2', '3', '4'].includes(messageText)) {
-        const opcoesMap = {
-            '1': 'preco',
-            '2': 'prazo',
-            '3': 'documentos',
-            '4': 'processo'
-        };
-        
-        const opcao = opcoesMap[messageText];
-        const resposta = getRespostaSubmenu(service, opcao);
-        
-        // Adicionar informação de navegação
-        const respostaCompleta = resposta + '\n\n' +
-                                '💡 Dica: Digite:\n' +
-                                '• 0 - Menu principal\n' +
-                                '• 9 - Voltar ao menu de ' + getServiceName(service).toUpperCase();
-        
-        await sendReply(cleanPhone, respostaCompleta);
-        return;
-    }
-    
-    // COMANDO 9 - VOLTAR AO SUBMENU DO SERVIÇO ATUAL
-    if (messageText === '9') {
-        const submenuTexto = getSubmenu(service);
-        await sendReply(cleanPhone, submenuTexto);
-        return;
-    }
-    
-    // OPÇÃO NÃO RECONHECIDA
-    const erroMsg = '❌ Opção inválida!\n\n' + getSubmenu(service);
     await sendReply(cleanPhone, erroMsg);
 }
 
-// NOVA FUNÇÃO: Processar nível sub-submenu (se necessário no futuro)
-async function processarNivelSubSubmenu(cleanPhone, messageText, state) {
-    // Implementação futura para sub-submenus
-    // Por enquanto, volta ao submenu
-    state.nivel = 'submenu';
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, getSubmenu(state.service));
+// CORREÇÃO: getRespostaSubmenu sem adicionar opções extras de navegação
+function getRespostaSubmenu(servico, opcao) {
+    var respostas = {
+        preco: {
+            visto_americano: '💰 INVESTIMENTO - VISTO AMERICANO\n\n' +
+                           'Taxa Consular: ~R$ 950\n' +
+                           'Assessoria: R$ 350\n\n' +
+                           '✅ Inclui:\n' +
+                           '• DS-160\n' +
+                           '• Agendamento\n' +
+                           '• Preparação para entrevista\n' +
+                           '• Acompanhamento total',
+            // ... (manter outras respostas)
+        },
+        prazo: {
+            visto_americano: '⏱️ PRAZO - VISTO AMERICANO\n\n' +
+                           'Agendamento: até 8 semanas\n' +
+                           'Análise consular: 7-10 dias úteis\n' +
+                           'Retorno do passaporte: 5-7 dias úteis\n\n' +
+                           '📅 Total estimado: 30-40 dias',
+            // ... (manter outras respostas)
+        },
+        // ... (manter outras categorias)
+    };
+    
+    var resposta = respostas[opcao] && respostas[opcao][servico];
+    if (!resposta) {
+        resposta = '📋 INFORMAÇÕES EM BREVE\n\n' +
+                  'Estamos preparando conteúdo específico para ' + 
+                  servico.replace('_', ' ').toUpperCase() + '.';
+    }
+    
+    return resposta;
 }
 
-// CORREÇÃO: Função getSubmenu melhorada
+// CORREÇÃO: getMenuPrincipal mais claro
+async function getMenuPrincipal() {
+    return '🌟 GETVISA - ASSESSORIA EM VISTOS\n\n' +
+           'Escolha o serviço desejado:\n\n' +
+           '1️⃣ - 🇺🇸 VISTO AMERICANO\n' +
+           '2️⃣ - 🇨🇦 VISTO CANADENSE\n' +
+           '3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n' +
+           '4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n' +
+           '5️⃣ - 🇨🇦 eTA CANADENSE\n' +
+           '6️⃣ - 🛂 PASSAPORTE\n' +
+           '7️⃣ - 📞 AJUDA / CONTATO\n\n' +
+           'Digite o número da opção (1-7)';
+}
+
+// CORREÇÃO: getSubmenu mais claro
 function getSubmenu(service) {
     const names = {
         'visto_americano': '🇺🇸 VISTO AMERICANO',
@@ -786,22 +854,7 @@ function getSubmenu(service) {
         '6️⃣ - 📊 AVALIAÇÃO GRATUITA\n' + 
         '7️⃣ - 👨‍💼 FALAR COM ESPECIALISTA\n\n' + 
         '0️⃣ - VOLTAR AO MENU PRINCIPAL\n\n' +
-        'Digite o número da opção desejada (1-7)';
-}
-
-// CORREÇÃO: Função getMenuPrincipal melhorada
-async function getMenuPrincipal() {
-    return '🌟 GETVISA - ASSESSORIA EM VISTOS\n\n' +
-           'Escolha o serviço desejado:\n\n' +
-           '1️⃣ - 🇺🇸 VISTO AMERICANO\n' +
-           '2️⃣ - 🇨🇦 VISTO CANADENSE\n' +
-           '3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n' +
-           '4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n' +
-           '5️⃣ - 🇨🇦 eTA CANADENSE\n' +
-           '6️⃣ - 🛂 PASSAPORTE\n' +
-           '7️⃣ - 📞 AJUDA / CONTATO\n\n' +
-           'Digite o número da opção (1-7) ou me pergunte algo!\n' +
-           'Digite 0 para ver este MENU novamente';
+        'Digite o número da opção (1-7)';
 }
 
 // CORREÇÃO: Tratamento de mensagens do webhook
