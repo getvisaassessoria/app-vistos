@@ -643,25 +643,24 @@ Meu nome é *Moisés* e estou aqui para te ajudar!
             return;
         }
 
-        // Opção 6 - Avaliação gratuita
-        if (messageText === '6') {
-            const links = {
-                'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
-                'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
-                'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
-                'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
-                'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
-                'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
-            };
-            await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${getServiceName(service)}*
-
-👉 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano/'}
-
-⏱️ Leva menos de 2 minutos!
-
-📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-            return;
-        }
+       if (messageText === '6') {
+    const links = {
+        'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
+        'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
+        'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
+        'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
+        'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
+        'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+    };
+    const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
+    await sendReply(cleanPhone, 
+        `📊 *AVALIAÇÃO GRATUITA - ${getServiceName(service)}*\n\n` +
+        `🔗 ${link}\n\n` +
+        `⏱️ Leva menos de 2 minutos!\n\n` +
+        `📌 *Digite 0 para voltar ao MENU principal* 🚀`
+    );
+    return;
+}
 
         // Opção 5 - Visto Negado ou Onde Fazer
         if (messageText === '5') {
