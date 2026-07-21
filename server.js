@@ -637,13 +637,13 @@ async function processarMenu(cleanPhone, messageText, body) {
         }
 
         if (messageText === '5') {
-            if (service === 'passaporte') {
-                await sendReply(cleanPhone, `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-            } else {
-                await sendReply(cleanPhone, `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado/\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-            }
-            return;
-        }
+    if (service === 'passaporte') {
+        await sendReply(cleanPhone, `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+    } else {
+        await sendReply(cleanPhone, `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado/\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+    }
+    return;
+}
 
         if (['1', '2', '3', '4'].includes(messageText)) {
             const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
