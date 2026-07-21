@@ -494,118 +494,92 @@ async function processarOnboarding(cleanPhone, messageText, state) {
 }
 
 // ============ FUNÇÕES DE PROCESSAMENTO DE MENU ============
-async function processarMenu(cleanPhone, messageText, body) {
-    console.log('=== PROCESSANDO MENU ===');
-    console.log('Phone: ' + cleanPhone);
-    console.log('Message: "' + messageText + '"');
+async function processarOnboarding(cleanPhone, messageText, state) {
+    console.log('=== PROCESSANDO ONBOARDING ===');
+    console.log('Passo atual: ' + state.onboardingStep);
+    console.log('Mensagem: "' + messageText + '"');
     
-    // GET OU CRIA ESTADO
-    let state = userState.get(cleanPhone);
-    if (!state) {
-        // Verificar se cliente já tem nome no banco
-        let nomeExistente = null;
-        try {
-            const { data } = await supabase
-                .from('clientes_novos')
-                .select('nome, onboarding_completo')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
+    // Bloquear comandos de escape durante o onboarding
+    const escapeCommands = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
+    if (escapeCommands.includes(messageText.toLowerCase().trim())) {
+        await sendReply(cleanPhone, '👋 Antes de continuar, preciso saber seu nome para te atender melhor!\n\n' +
+            'Qual é o seu nome completo? 😊\n\nEx: Maria Silva');
+        return;
+    }
+    
+    switch (state.onboardingStep) {
+        case ONBOARDING_STEPS.SAUDACAO:
+            const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
+            const pedirNome = getRandomMessage(BOAS_VINDAS_MESSAGES.solicitar_nome);
             
-            if (data && data.nome) {
-                nomeExistente = data.nome;
-            }
-        } catch (err) {
-            console.error('Erro ao buscar nome:', err);
-        }
-        
-        state = {
-            nivel: 'principal',
-            service: null,
-            nome: nomeExistente || null,
-            onboardingStep: nomeExistente ? ONBOARDING_STEPS.COMPLETO : ONBOARDING_STEPS.SAUDACAO,
-            onboardingCompleto: !!nomeExistente,
-            lastActivity: Date.now()
-        };
-        userState.set(cleanPhone, state);
-    }
-    state.lastActivity = Date.now();
-    
-    console.log('Estado atual:', {
-        nivel: state.nivel,
-        service: state.service,
-        nome: state.nome,
-        onboardingStep: state.onboardingStep,
-        onboardingCompleto: state.onboardingCompleto
-    });
-    
-    // VERIFICAR ONBOARDING - PRIORIDADE MÁXIMA
-    if (!state.onboardingCompleto || state.onboardingStep !== ONBOARDING_STEPS.COMPLETO) {
-        console.log('🔄 Iniciando onboarding para ' + cleanPhone);
-        await processarOnboarding(cleanPhone, messageText, state);
-        return;
-    }
-    
-    // COMANDO 0 - SEMPRE VOLTA AO MENU PRINCIPAL
-    if (messageText === '0') {
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
-        const menuPrincipal = await getMenuPrincipal();
-        await sendReply(cleanPhone, menuPrincipal);
-        console.log('Voltou ao menu principal');
-        return;
-    }
-    
-    // COMANDOS DE RESET
-    const resetCommands = ['menu', 'menu principal', 'inicio', 'comecar', 'voltar', 'principal'];
-    if (resetCommands.includes(messageText.toLowerCase())) {
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, await getMenuPrincipal());
-        return;
-    }
-    
-    // SAUDAÇÕES (quando já completou onboarding)
-    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
-    if (saudacoes.includes(messageText.toLowerCase())) {
-        if (state.nivel === 'submenu' && state.service) {
-            const msg = '👋 Olá ' + (state.nome ? state.nome.split(' ')[0] : '') + '! Você está no menu de ' + getServiceName(state.service).toUpperCase() + '.\n\n' +
-                       'Deseja:\n' +
-                       '• Continuar neste menu? Digite 9\n' +
-                       '• Voltar ao menu principal? Digite 0';
-            await sendReply(cleanPhone, msg);
-        } else {
-            state.nivel = 'principal';
-            state.service = null;
+            await sendReply(cleanPhone, saudacao + '\n\n' + pedirNome);
+            
+            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_NOME;
+            state.lastActivity = Date.now();
             userState.set(cleanPhone, state);
-            const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
-            const saudacaoMsg = nomeCliente ? 
-                '👋 Olá ' + nomeCliente + '! Que bom ver você de novo!\n\n' + await getMenuPrincipal() :
-                '👋 Olá! Que bom ter você aqui!\n\n' + await getMenuPrincipal();
-            await sendReply(cleanPhone, saudacaoMsg);
-        }
-        return;
+            break;
+            
+        case ONBOARDING_STEPS.AGUARDANDO_NOME:
+            // Validar nome
+            const nomeValidado = validarNome(messageText);
+            
+            if (!nomeValidado) {
+                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+                await sendReply(cleanPhone, msgInvalido);
+                return;
+            }
+            
+            const nomeFormatado = formatarNome(messageText);
+            
+            // SALVAR NO BANCO COM O NOME CORRETO
+            try {
+                const { data, error } = await supabase
+                    .from('clientes_novos')
+                    .upsert({
+                        telefone: cleanPhone,
+                        nome: nomeFormatado,  // Nome real do usuário
+                        data_contato: new Date().toISOString(),
+                        status: 'novo',
+                        onboarding_completo: true
+                    }, {
+                        onConflict: 'telefone'
+                    });
+                
+                if (error) {
+                    console.error('Erro ao salvar nome:', error);
+                } else {
+                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+                }
+            } catch (err) {
+                console.error('Erro ao atualizar cliente:', err);
+            }
+            
+            // Atualizar estado
+            state.nome = nomeFormatado;
+            state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+            state.onboardingCompleto = true;
+            userState.set(cleanPhone, state);
+            
+            // Enviar confirmação com menu
+            const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
+                              nomeFormatado.split(' ')[0] +
+                              getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
+                              await getMenuPrincipal();
+            
+            await sendReply(cleanPhone, confirmacao);
+            
+            console.log('🎉 Onboarding completo para:', nomeFormatado);
+            break;
+            
+        default:
+            // Fallback: reiniciar onboarding
+            console.log('⚠️ Fallback - reiniciando onboarding');
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            state.onboardingCompleto = false;
+            state.nome = null;
+            userState.set(cleanPhone, state);
+            await processarOnboarding(cleanPhone, '', state);
     }
-    
-    // LÓGICA PRINCIPAL: Se está em submenu, mantém no submenu
-    if (state.nivel === 'submenu' && state.service) {
-        console.log('Processando no contexto do submenu: ' + state.service);
-        await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
-        return;
-    }
-    
-    // Se está no menu principal
-    if (state.nivel === 'principal') {
-        await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
-        return;
-    }
-    
-    // Fallback
-    state.nivel = 'principal';
-    state.service = null;
-    userState.set(cleanPhone, state);
-    await sendReply(cleanPhone, await getMenuPrincipal());
 }
 
 async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
@@ -822,17 +796,22 @@ async function sendReply(phone, message) {
 }
 
 // ============ FUNÇÕES DE BANCO DE DADOS ============
+// ============ FUNÇÃO CADASTRAR CLIENTE CORRIGIDA ============
 async function cadastrarCliente(telefone, nome) {
-    nome = nome || 'Cliente_' + telefone;
-    console.log('Cadastrando/atualizando ' + telefone + ' com nome: ' + nome);
+    console.log('Cadastrando/atualizando ' + telefone + '...');
     
     const dadosCliente = {
         telefone: telefone,
-        nome: nome,
         data_contato: new Date().toISOString(),
         status: 'novo',
         onboarding_completo: false
     };
+    
+    // SÓ inclui nome se for passado explicitamente
+    if (nome) {
+        dadosCliente.nome = nome;
+    }
+    // Se não tiver nome, NÃO coloca "Cliente_" - deixa vazio ou NULL
 
     const { data, error } = await supabase
         .from('clientes_novos')
@@ -848,7 +827,7 @@ async function cadastrarCliente(telefone, nome) {
         return null;
     }
     
-    console.log('Cliente ' + telefone + ' cadastrado/atualizado como NOVO');
+    console.log('Cliente ' + telefone + ' cadastrado com sucesso (sem nome)');
     return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
 
@@ -1652,17 +1631,18 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
 
             // NOVO CLIENTE - Iniciar onboarding
-            console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
-            
-            // Cadastrar cliente básico
-            var resultado = await cadastrarCliente(cleanPhone, null);
-            if (!resultado) {
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                return;
-            }
-            
-            console.log('✅ Cliente cadastrado, iniciando onboarding');
-            await processarMenu(cleanPhone, messageText, body);
+            // NOVO CLIENTE - Iniciar onboarding
+              console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
+
+              // Cadastrar cliente básico (SEM nome, aguardando onboarding)
+              var resultado = await cadastrarCliente(cleanPhone, null); // <-- PASSA null
+              if (!resultado) {
+                  await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                  return;
+              }
+
+              console.log('✅ Cliente cadastrado (sem nome), iniciando onboarding');
+              await processarMenu(cleanPhone, messageText, body);
 
         } catch (error) {
             console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
