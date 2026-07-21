@@ -1955,18 +1955,65 @@ app.post('/api/painel/mover', async function(req, res) {
                 atualizado_em: new Date().toISOString()
             });
             if (insert.error) return res.status(500).json({ success: false, message: insert.error.message });
-            try { await criarEtapaInicial(cliente.data.telefone); } catch (err) { console.error('Erro ao criar etapa:', err); }
+            
+            try { 
+                await criarEtapaInicial(cliente.data.telefone); 
+            } catch (err) { 
+                console.error('Erro ao criar etapa:', err); 
+            }
+            
+            // ============================================================
+            // 🔔 ENVIAR NOTIFICAÇÃO AUTOMÁTICA PARA O CLIENTE
+            // ============================================================
+            try {
+                const nomeCliente = cliente.data.nome && !cliente.data.nome.startsWith('Cliente_') 
+                    ? cliente.data.nome.split(' ')[0] 
+                    : 'Cliente';
+                
+                const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                               `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                               `📋 Status: Em andamento\n` +
+                               `📍 Etapa atual: Formulário recebido\n\n` +
+                               `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                               `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                               `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+                
+                await enviarWhatsApp(cliente.data.telefone, mensagem);
+                console.log(`✅ Notificação automática enviada para ${telefone}`);
+            } catch (err) {
+                console.error('❌ Erro ao enviar notificação automática:', err);
+            }
+            // ============================================================
+            
         } else {
+            // Destino: amigo
             var insert = await supabase.from('contatos_amigos').insert({
                 telefone: cliente.data.telefone,
                 nome: cliente.data.nome,
                 criado_em: cliente.data.data_contato
             });
             if (insert.error) return res.status(500).json({ success: false, message: insert.error.message });
+            
+            // 🔔 Notificar que foi marcado como amigo (opcional)
+            try {
+                const mensagem = `🔇 Olá! Você foi marcado como contato amigo no sistema GetVisa.\n\n` +
+                               `Isso significa que você não receberá mais notificações automáticas.\n\n` +
+                               `Se isso foi um engano, entre em contato conosco: https://wa.me/5521974601812`;
+                await enviarWhatsApp(cliente.data.telefone, mensagem);
+                console.log(`✅ Notificação de "amigo" enviada para ${telefone}`);
+            } catch (err) {
+                console.error('❌ Erro ao enviar notificação de amigo:', err);
+            }
         }
 
         await supabase.from('clientes_novos').delete().eq('telefone', telefone);
-        res.json({ success: true, message: 'Cliente ' + telefone + ' movido para ' + destino });
+        
+        res.json({ 
+            success: true, 
+            message: 'Cliente ' + telefone + ' movido para ' + destino,
+            notificacao_enviada: true
+        });
+        
     } catch (error) {
         console.error('Erro ao mover cliente:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -1984,6 +2031,7 @@ app.post('/api/painel/mover-varios', async function(req, res) {
 
         var movidos = 0;
         var erros = [];
+        var notificacoes = 0;
         
         for (var i = 0; i < telefones.length; i++) {
             var telefone = telefones[i];
@@ -1998,6 +2046,27 @@ app.post('/api/painel/mover-varios', async function(req, res) {
                         criado_em: cliente.data.data_contato,
                         atualizado_em: new Date().toISOString()
                     });
+                    
+                    // 🔔 Notificar cada cliente movido
+                    try {
+                        const nomeCliente = cliente.data.nome && !cliente.data.nome.startsWith('Cliente_') 
+                            ? cliente.data.nome.split(' ')[0] 
+                            : 'Cliente';
+                        
+                        const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                                       `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                                       `📋 Status: Em andamento\n` +
+                                       `📍 Etapa atual: Formulário recebido\n\n` +
+                                       `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                                       `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812`;
+                        
+                        await enviarWhatsApp(cliente.data.telefone, mensagem);
+                        notificacoes++;
+                        console.log(`✅ Notificação enviada para ${telefone}`);
+                    } catch (err) {
+                        console.error(`❌ Erro ao notificar ${telefone}:`, err);
+                    }
+                    
                 } else {
                     await supabase.from('contatos_amigos').insert({
                         telefone: cliente.data.telefone,
@@ -2005,6 +2074,7 @@ app.post('/api/painel/mover-varios', async function(req, res) {
                         criado_em: cliente.data.data_contato
                     });
                 }
+                
                 await supabase.from('clientes_novos').delete().eq('telefone', telefone);
                 movidos++;
             } catch (err) { erros.push(telefone + ': ' + err.message); }
@@ -2013,8 +2083,9 @@ app.post('/api/painel/mover-varios', async function(req, res) {
         res.json({ 
             success: true, 
             movidos: movidos, 
+            notificacoes_enviadas: notificacoes,
             erros: erros.length > 0 ? erros : undefined, 
-            message: movidos + ' cliente(s) movido(s)' 
+            message: movidos + ' cliente(s) movido(s), ' + notificacoes + ' notificação(ões) enviada(s)' 
         });
     } catch (error) {
         console.error('Erro ao mover clientes:', error);
@@ -2291,6 +2362,171 @@ app.post('/api/test/webhook-manual', async function(req, res) {
     } catch (error) {
         console.error('Erro no teste manual:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ ROTA PARA NOTIFICAR CLIENTE MANUALMENTE ============
+app.post('/api/admin/notificar-cliente', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone } = req.body;
+        
+        if (!telefone) {
+            return res.status(400).json({ error: 'Telefone é obrigatório' });
+        }
+        
+        console.log(`📨 Enviando notificação manual para: ${telefone}`);
+        
+        // Limpar telefone para busca
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        
+        // Buscar cliente em clientes_ativos
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        
+        if (!cliente) {
+            // Tentar buscar com telefone limpo
+            const { data: clienteLimpo } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', telefoneLimpo)
+                .maybeSingle();
+            
+            if (!clienteLimpo) {
+                return res.status(404).json({ 
+                    error: 'Cliente não encontrado em clientes_ativos',
+                    telefone_buscado: telefone,
+                    telefone_limpo: telefoneLimpo
+                });
+            }
+            
+            // Se encontrou com telefone limpo, usar esse
+            cliente = clienteLimpo;
+        }
+        
+        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+            ? cliente.nome.split(' ')[0] 
+            : 'Cliente';
+        
+        const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                       `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                       `📋 Status: Em andamento\n` +
+                       `📍 Etapa atual: Formulário recebido\n\n` +
+                       `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                       `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                       `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+        
+        const enviado = await enviarWhatsApp(telefone, mensagem);
+        
+        res.json({
+            success: true,
+            telefone: telefone,
+            cliente: {
+                nome: cliente.nome,
+                criado_em: cliente.criado_em
+            },
+            notificacao_enviada: enviado,
+            mensagem: mensagem
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao notificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// ============ ROTA PARA VERIFICAR STATUS DO CLIENTE ============
+app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const telefone = req.params.telefone;
+        console.log(`🔍 Verificando cliente: ${telefone}`);
+        
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        
+        // Buscar em todas as tabelas
+        const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
+        const results = {};
+        
+        for (const table of tables) {
+            const { data, error } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefone)
+                .maybeSingle();
+            
+            if (!error && data) {
+                results[table] = data;
+            }
+            
+            // Tentar com telefone limpo
+            if (!results[table]) {
+                const { data: dataLimpo } = await supabase
+                    .from(table)
+                    .select('*')
+                    .eq('telefone', telefoneLimpo)
+                    .maybeSingle();
+                
+                if (dataLimpo) {
+                    results[table] = dataLimpo;
+                }
+            }
+        }
+        
+        // Buscar etapa se estiver em clientes_ativos
+        let etapa = null;
+        if (results['clientes_ativos']) {
+            const { data } = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefone)
+                .maybeSingle();
+            
+            if (!data) {
+                const { data: dataLimpo } = await supabase
+                    .from('etapas_processo')
+                    .select('*')
+                    .eq('cliente_telefone', telefoneLimpo)
+                    .maybeSingle();
+                etapa = dataLimpo;
+            } else {
+                etapa = data;
+            }
+        }
+        
+        res.json({
+            success: true,
+            telefone_buscado: telefone,
+            telefone_limpo: telefoneLimpo,
+            encontrado_em: Object.keys(results).filter(k => results[k]),
+            dados: results,
+            etapa: etapa
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
