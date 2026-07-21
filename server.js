@@ -502,7 +502,9 @@ async function getSubmenu(service) {
 }
 
 async function processarMenu(cleanPhone, messageText, body) {
-    console.log('Processando menu para ' + cleanPhone + ': "' + messageText + '"');
+    console.log('=== PROCESSAR MENU ===');
+    console.log('Telefone: ' + cleanPhone);
+    console.log('Mensagem: "' + messageText + '"');
 
     var state = userState.get(cleanPhone);
     if (!state) {
@@ -515,29 +517,40 @@ async function processarMenu(cleanPhone, messageText, body) {
     }
     state.lastActivity = Date.now();
 
+    console.log('Estado atual: nivel=' + state.nivel + ', service=' + state.service);
+
+    // Comando 0 - Volta ao menu principal
     if (messageText === '0') {
         state.nivel = 'principal';
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
+        console.log('Voltou ao menu principal');
         return;
     }
 
+    // Saudações
     var saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste'];
     if (saudacoes.indexOf(messageText.toLowerCase()) !== -1) {
         await sendReply(cleanPhone, await getMenuPrincipal());
         return;
     }
 
+    // ============================================================
+    // SUBMENU - se já estiver no submenu
+    // ============================================================
     if (state.nivel === 'submenu') {
+        console.log('ESTA NO SUBMENU - processando opcao: ' + messageText);
         var service = state.service;
         var isPassaporte = service === 'passaporte';
 
+        // Opção 7 - Falar com especialista
         if (messageText === '7') {
             await sendReply(cleanPhone, 'FALAR COM ESPECIALISTA - ' + getServiceName(service) + '\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
             return;
         }
 
+        // Opção 6 - Avaliação gratuita
         if (messageText === '6') {
             var links = {
                 'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
@@ -552,6 +565,7 @@ async function processarMenu(cleanPhone, messageText, body) {
             return;
         }
 
+        // Opção 5 - Visto Negado ou Onde Fazer
         if (messageText === '5') {
             if (isPassaporte) {
                 await sendReply(cleanPhone, 'ONDE FAZER O PASSAPORTE\n\n- Policia Federal (agendar no site da PF)\n- Postos de atendimento em todo Brasil\n- Agendamento online obrigatorio\n\nhttps://www.gov.br/pf/pt-br/assuntos/passaporte\n\nDigite 0 para voltar ao MENU principal');
@@ -561,6 +575,7 @@ async function processarMenu(cleanPhone, messageText, body) {
             return;
         }
 
+        // Opções 1 a 4 - Preço, Prazo, Documentos, Processo
         if (['1', '2', '3', '4'].indexOf(messageText) !== -1) {
             var opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
             var resposta = getRespostaSubmenu(service, opcoesMap[messageText]);
@@ -568,11 +583,20 @@ async function processarMenu(cleanPhone, messageText, body) {
             return;
         }
 
-        await sendReply(cleanPhone, await getSubmenu(service));
+        // Se não for nenhuma opção válida, mostra o submenu novamente
+        console.log('Opcao invalida no submenu, mostrando novamente');
+        var submenuTexto = await getSubmenu(service);
+        console.log('Submenu texto: ' + submenuTexto);
+        await sendReply(cleanPhone, submenuTexto);
         return;
     }
 
+    // ============================================================
+    // MENU PRINCIPAL
+    // ============================================================
     if (state.nivel === 'principal') {
+        console.log('ESTA NO MENU PRINCIPAL - opcao: ' + messageText);
+        
         var serviceKey = null;
         switch (messageText) {
             case '1': serviceKey = 'visto_americano'; break;
@@ -595,20 +619,20 @@ async function processarMenu(cleanPhone, messageText, body) {
         }
 
         if (serviceKey) {
+            console.log('SERVICE SELECIONADO: ' + serviceKey);
             state.nivel = 'submenu';
             state.service = serviceKey;
             userState.set(cleanPhone, state);
-            await sendReply(cleanPhone, await getSubmenu(serviceKey));
+            console.log('NOVO ESTADO: nivel=' + state.nivel + ', service=' + state.service);
+            
+            var submenuCompleto = await getSubmenu(serviceKey);
+            console.log('SUBMENU COMPLETO: ' + submenuCompleto);
+            
+            await sendReply(cleanPhone, submenuCompleto);
+            console.log('SUBMENU ENVIADO!');
         }
     }
 }
-
-function validateApiKey(req, res, next) {
-    var apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) return res.status(403).json({ error: 'Acesso negado' });
-    next();
-}
-
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('WEBHOOK Z-API RECEBIDO');
     console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -1790,90 +1814,7 @@ async function gerarPDF_DS160(data) {
     });
 }
 
-// ============================================================
-//  ROTA PASSAPORTE
-// ============================================================
-app.post('/api/submit-passaporte', async function(req, res) {
-    var data = req.body;
 
-    console.log('Dados de passaporte recebidos');
-
-    if (isSpamData(data)) {
-        console.log('SPAM Passaporte - Dados rejeitados');
-        return res.status(200).json({ success: true, message: 'Recebido' });
-    }
-
-    res.status(200).json({ success: true, message: 'Requisicao recebida, processando...' });
-
-    (async function() {
-        try {
-            var nome = data['nome_completo'] || data['passaporte_nome'] || 'Cliente_Sem_Nome';
-            var emailCliente = data['email'] || data['passaporte_email'] || null;
-            var telefoneCliente = data['celular'] || data['telefone'] || data['passaporte_telefone'] || null;
-
-            // Salvar no Supabase
-            if (telefoneCliente) {
-                try {
-                    var telefoneLimpo = limparTelefone(telefoneCliente);
-                    
-                    var insert = await supabase
-                        .from('clientes_ativos')
-                        .upsert({
-                            telefone: telefoneLimpo,
-                            nome: nome,
-                            email: emailCliente,
-                            atualizado_em: new Date().toISOString()
-                        }, {
-                            onConflict: 'telefone',
-                            ignoreDuplicates: false
-                        });
-
-                    if (insert.error) {
-                        console.error('Erro ao salvar cliente:', insert.error);
-                    } else {
-                        console.log('Cliente salvo: ' + telefoneLimpo);
-                    }
-                } catch (err) {
-                    console.error('Erro ao processar cliente:', err.message);
-                }
-            }
-
-            var pdfBuffer = await gerarPDF_Passaporte(data);
-            console.log('PDF gerado para passaporte de ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
-
-            // Enviar para a equipe
-            await resend.emails.send({
-                from: 'GetVisa <contato@getvisa.com.br>',
-                to: ['getvisa.assessoria@gmail.com'],
-                subject: 'Passaporte: ' + nome,
-                html: '<strong>Solicitacao de passaporte recebida.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
-                attachments: [{
-                    filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf',
-                    content: pdfBuffer.toString('base64')
-                }]
-            });
-            console.log('E-mail enviado para a equipe (passaporte)');
-
-            // Enviar para o cliente
-            if (emailCliente && emailCliente.trim() !== '') {
-                await resend.emails.send({
-                    from: 'GetVisa <contato@getvisa.com.br>',
-                    to: [emailCliente],
-                    subject: 'Sua solicitacao de passaporte foi recebida - ' + nome,
-                    html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos sua solicitacao de passaporte com sucesso!</p><p>Nossa equipe entrara em contato em ate 24h.</p>',
-                    attachments: [{
-                        filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf',
-                        content: pdfBuffer.toString('base64')
-                    }]
-                });
-                console.log('E-mail enviado para o cliente (passaporte): ' + emailCliente);
-            }
-
-        } catch (err) {
-            console.error('Erro no processamento do passaporte:', err);
-        }
-    })();
-});
 
 app.listen(PORT, '0.0.0.0', function() {
     console.log('Servidor rodando na porta ' + PORT);
