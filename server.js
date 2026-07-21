@@ -487,8 +487,8 @@ async function getMenuPrincipal() {
     return 'GETVISA - ESCOLHA O SERVICO\n\n1 - VISTO AMERICANO\n2 - VISTO CANADENSE\n3 - VISTO AUSTRALIANO\n4 - eTA UK (REINO UNIDO)\n5 - eTA CANADENSE\n6 - PASSAPORTE\n7 - AJUDA / CONTATO\n\nDigite o numero da opcao desejada (1 a 7) ou me pergunte algo!\nDigite 0 para ver este MENU novamente';
 }
 
-async function getSubmenu(service) {
-    var names = {
+function getSubmenu(service) {
+    const names = {
         'visto_americano': 'VISTO AMERICANO',
         'visto_canadense': 'VISTO CANADENSE',
         'visto_australiano': 'VISTO AUSTRALIANO',
@@ -496,9 +496,21 @@ async function getSubmenu(service) {
         'eta_canadense': 'eTA CANADENSE',
         'passaporte': 'PASSAPORTE'
     };
-    var isPassaporte = service === 'passaporte';
-    var opcao5 = isPassaporte ? 'ONDE FAZER' : 'VISTO NEGADO';
-    return names[service] || 'SERVICO' + '\n\n1 - PRECO\n2 - PRAZO\n3 - DOCUMENTOS\n4 - PROCESSO\n5 - ' + opcao5 + '\n6 - AVALIACAO GRATUITA\n7 - FALAR COM ESPECIALISTA\n\n0 - VOLTAR AO MENU PRINCIPAL\n\nDigite o numero da opcao desejada';
+
+    const isPassaporte = service === 'passaporte';
+    const opcao5 = isPassaporte ? 'ONDE FAZER' : 'VISTO NEGADO';
+    const nome = names[service] || 'SERVICO';
+
+    return nome + '\n\n' + 
+        '1 - PRECO\n' + 
+        '2 - PRAZO\n' + 
+        '3 - DOCUMENTOS\n' + 
+        '4 - PROCESSO\n' + 
+        '5 - ' + opcao5 + '\n' +
+        '6 - AVALIACAO GRATUITA\n' + 
+        '7 - FALAR COM ESPECIALISTA\n\n' + 
+        '0 - VOLTAR AO MENU PRINCIPAL\n\n' +
+        'Digite o numero da opcao desejada';
 }
 
 async function processarMenu(cleanPhone, messageText, body) {
@@ -642,18 +654,13 @@ async function processarMenu(cleanPhone, messageText, body) {
         }
 
         if (serviceKey) {
-            console.log('SERVICE SELECIONADO: ' + serviceKey);
-            state.nivel = 'submenu';
-            state.service = serviceKey;
-            userState.set(cleanPhone, state);
-            console.log('NOVO ESTADO: nivel=' + state.nivel + ', service=' + state.service);
-            
-            var submenuCompleto = await getSubmenu(serviceKey);
-            console.log('SUBMENU: ' + submenuCompleto);
-            
-            await sendReply(cleanPhone, submenuCompleto);
-            console.log('SUBMENU ENVIADO!');
-        }
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        userState.set(cleanPhone, state);
+        const submenuTexto = getSubmenu(serviceKey);
+        console.log('ENVIANDO SUBMENU: ' + submenuTexto);
+        await sendReply(cleanPhone, submenuTexto);
+    }
     }
 }
 app.post('/api/webhook/zapi', function(req, res) {
