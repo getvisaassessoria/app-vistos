@@ -781,36 +781,615 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     await sendReply(cleanPhone, erroMsg);
 }
 
-// CORREÇÃO: getRespostaSubmenu sem adicionar opções extras de navegação
+// CONTEÚDO COMPLETO DAS OPÇÕES 3 E 4 DO MENU PRINCIPAL
 function getRespostaSubmenu(servico, opcao) {
     var respostas = {
         preco: {
             visto_americano: '💰 INVESTIMENTO - VISTO AMERICANO\n\n' +
-                           'Taxa Consular: ~R$ 950\n' +
-                           'Assessoria: R$ 350\n\n' +
-                           '✅ Inclui:\n' +
-                           '• DS-160\n' +
-                           '• Agendamento\n' +
-                           '• Preparação para entrevista\n' +
-                           '• Acompanhamento total',
-            // ... (manter outras respostas)
+                           '💵 Taxa Consular (DS-160): ~R$ 950,00\n' +
+                           '💼 Assessoria GetVisa: R$ 350,00\n\n' +
+                           '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                           '• Preenchimento completo do DS-160\n' +
+                           '• Agendamento da entrevista no CASV\n' +
+                           '• Agendamento no Consulado Americano\n' +
+                           '• Preparação completa para entrevista\n' +
+                           '• Simulado de entrevista\n' +
+                           '• Acompanhamento até retirada do passaporte\n' +
+                           '• Suporte via WhatsApp durante todo processo\n\n' +
+                           '📌 FORMAS DE PAGAMENTO:\n' +
+                           '• Pix\n' +
+                           '• Cartão de crédito (até 12x)\n' +
+                           '• Boleto bancário\n\n' +
+                           '💡 A taxa consular é paga diretamente ao consulado.',
+
+            visto_canadense: '💰 INVESTIMENTO - VISTO CANADENSE\n\n' +
+                            '💵 Taxa Consular: ~R$ 750,00\n' +
+                            '💼 Assessoria GetVisa: R$ 400,00\n\n' +
+                            '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                            '• Análise completa do perfil\n' +
+                            '• Preenchimento da aplicação GCKey\n' +
+                            '• Upload de documentos no sistema IRCC\n' +
+                            '• Agendamento da biometria\n' +
+                            '• Carta de intenção personalizada\n' +
+                            '• Preparação para entrevista (se solicitada)\n' +
+                            '• Acompanhamento até decisão final\n' +
+                            '• Suporte via WhatsApp\n\n' +
+                            '📌 FORMAS DE PAGAMENTO:\n' +
+                            '• Pix\n' +
+                            '• Cartão de crédito (até 12x)\n' +
+                            '• Boleto bancário',
+
+            visto_australiano: '💰 INVESTIMENTO - VISTO AUSTRALIANO\n\n' +
+                              '💵 Taxa Consular: ~R$ 850,00\n' +
+                              '💼 Assessoria GetVisa: R$ 450,00\n\n' +
+                              '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                              '• Análise detalhada do perfil migratório\n' +
+                              '• Preenchimento da aplicação ImmiAccount\n' +
+                              '• Tradução juramentada de documentos\n' +
+                              '• Carta de intenção em inglês\n' +
+                              '• Roteiro de viagem personalizado\n' +
+                              '• Comprovação financeira adequada\n' +
+                              '• Acompanhamento até decisão\n' +
+                              '• Suporte via WhatsApp\n\n' +
+                              '📌 FORMAS DE PAGAMENTO:\n' +
+                              '• Pix\n' +
+                              '• Cartão de crédito (até 12x)\n' +
+                              '• Boleto bancário',
+
+            eta_uk: '💰 INVESTIMENTO - eTA UK (REINO UNIDO)\n\n' +
+                    '💵 Taxa Governamental: ~R$ 120,00\n' +
+                    '💼 Assessoria GetVisa: R$ 150,00\n\n' +
+                    '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                    '• Preenchimento da aplicação online\n' +
+                    '• Validação completa dos dados\n' +
+                    '• Verificação de pendências\n' +
+                    '• Acompanhamento da aprovação\n' +
+                    '• Envio do eTA por e-mail\n' +
+                    '• Suporte via WhatsApp\n\n' +
+                    '⚡ Processo 100% online e rápido!\n\n' +
+                    '📌 FORMAS DE PAGAMENTO:\n' +
+                    '• Pix\n' +
+                    '• Cartão de crédito',
+
+            eta_canadense: '💰 INVESTIMENTO - eTA CANADENSE\n\n' +
+                          '💵 Taxa Governamental: ~R$ 50,00\n' +
+                          '💼 Assessoria GetVisa: R$ 100,00\n\n' +
+                          '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                          '• Aplicação online rápida\n' +
+                          '• Validação de documentos\n' +
+                          '• Verificação de elegibilidade\n' +
+                          '• Acompanhamento da aprovação\n' +
+                          '• Envio do eTA por e-mail\n' +
+                          '• Suporte via WhatsApp\n\n' +
+                          '⚡ Aprovação em até 24 horas!\n\n' +
+                          '📌 FORMAS DE PAGAMENTO:\n' +
+                          '• Pix\n' +
+                          '• Cartão de crédito',
+
+            passaporte: '💰 INVESTIMENTO - PASSAPORTE\n\n' +
+                       '💵 Taxa PF (GRU): ~R$ 257,25\n' +
+                       '💼 Assessoria GetVisa: R$ 150,00\n\n' +
+                       '✅ INCLUI NO NOSSO SERVIÇO:\n' +
+                       '• Agendamento no site da Polícia Federal\n' +
+                       '• Conferência de toda documentação\n' +
+                       '• Preenchimento do formulário online\n' +
+                       '• Emissão da GRU para pagamento\n' +
+                       '• Orientações para o dia do atendimento\n' +
+                       '• Acompanhamento da emissão\n' +
+                       '• Suporte via WhatsApp\n\n' +
+                       '📌 FORMAS DE PAGAMENTO:\n' +
+                       '• Pix\n' +
+                       '• Cartão de crédito\n' +
+                       '• Boleto bancário'
         },
+        
         prazo: {
             visto_americano: '⏱️ PRAZO - VISTO AMERICANO\n\n' +
-                           'Agendamento: até 8 semanas\n' +
-                           'Análise consular: 7-10 dias úteis\n' +
-                           'Retorno do passaporte: 5-7 dias úteis\n\n' +
-                           '📅 Total estimado: 30-40 dias',
-            // ... (manter outras respostas)
+                           '📅 ETAPAS E PRAZOS:\n\n' +
+                           '1️⃣ Preenchimento DS-160: 1-2 dias\n' +
+                           '2️⃣ Agendamento CASV/Consulado: 1-8 semanas\n' +
+                           '   (depende da disponibilidade)\n' +
+                           '3️⃣ Coleta biométrica (CASV): 1 dia\n' +
+                           '4️⃣ Entrevista no Consulado: 1 dia\n' +
+                           '5️⃣ Análise consular: 7-10 dias úteis\n' +
+                           '6️⃣ Retorno do passaporte: 5-7 dias úteis\n\n' +
+                           '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                           '• 30 a 40 dias (em média)\n\n' +
+                           '⚡ DICA: Agendamos na primeira data disponível!\n' +
+                           '🗓️ Melhor época: Evite dezembro e julho (alta temporada)',
+
+            visto_canadense: '⏱️ PRAZO - VISTO CANADENSE\n\n' +
+                            '📅 ETAPAS E PRAZOS:\n\n' +
+                            '1️⃣ Análise e preparação: 1-2 dias\n' +
+                            '2️⃣ Aplicação online (GCKey): 1 dia\n' +
+                            '3️⃣ Agendamento biometria: 1-4 semanas\n' +
+                            '4️⃣ Coleta biométrica: 1 dia\n' +
+                            '5️⃣ Processamento IRCC: 4-8 semanas\n' +
+                            '6️⃣ Envio do passaporte: 2-3 dias úteis\n\n' +
+                            '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                            '• 30 a 60 dias\n\n' +
+                            '📊 O processamento varia conforme:\n' +
+                            '• País de residência\n' +
+                            '• Tipo de visto solicitado\n' +
+                            '• Volume de aplicações no período',
+
+            visto_australiano: '⏱️ PRAZO - VISTO AUSTRALIANO\n\n' +
+                              '📅 ETAPAS E PRAZOS:\n\n' +
+                              '1️⃣ Análise de perfil: 1 dia\n' +
+                              '2️⃣ Preparação de documentos: 2-3 dias\n' +
+                              '3️⃣ Aplicação ImmiAccount: 1 dia\n' +
+                              '4️⃣ Análise do governo australiano:\n' +
+                              '   • 75% dos casos: 18 dias\n' +
+                              '   • 90% dos casos: 38 dias\n' +
+                              '5️⃣ Notificação de decisão: Por e-mail\n\n' +
+                              '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                              '• 15 a 40 dias\n\n' +
+                              '⚡ DICA: Quanto mais completa a documentação,\n' +
+                              'mais rápida a análise!',
+
+            eta_uk: '⏱️ PRAZO - eTA UK (REINO UNIDO)\n\n' +
+                    '📅 PROCESSO SUPER RÁPIDO:\n\n' +
+                    '1️⃣ Coleta de dados: 30 minutos\n' +
+                    '2️⃣ Aplicação online: Imediata\n' +
+                    '3️⃣ Análise automatizada: Até 72 horas\n' +
+                    '4️⃣ Aprovação: Recebe por e-mail\n\n' +
+                    '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                    '• 1 a 3 dias úteis\n\n' +
+                    '✅ Vantagens:\n' +
+                    '• Não precisa ir ao consulado\n' +
+                    '• Não precisa de entrevista\n' +
+                    '• Válido por 2 anos\n' +
+                    '• Múltiplas entradas',
+
+            eta_canadense: '⏱️ PRAZO - eTA CANADENSE\n\n' +
+                          '📅 PROCESSO EXPRESS:\n\n' +
+                          '1️⃣ Coleta de dados: 20 minutos\n' +
+                          '2️⃣ Aplicação online: Imediata\n' +
+                          '3️⃣ Análise automatizada: Minutos a 24h\n' +
+                          '4️⃣ Aprovação: Recebe por e-mail\n\n' +
+                          '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                          '• 1 dia (muitas aprovações em minutos!)\n\n' +
+                          '✅ Vantagens:\n' +
+                          '• Totalmente online\n' +
+                          '• Sem entrevista\n' +
+                          '• Válido por 5 anos\n' +
+                          '• Múltiplas entradas',
+
+            passaporte: '⏱️ PRAZO - PASSAPORTE\n\n' +
+                       '📅 ETAPAS E PRAZOS:\n\n' +
+                       '1️⃣ Agendamento PF: Imediato (sujeito a vagas)\n' +
+                       '2️⃣ Atendimento no posto: Data agendada\n' +
+                       '3️⃣ Emissão pela PF: 7-15 dias úteis\n' +
+                       '4️⃣ Entrega nos Correios: 3-7 dias úteis\n\n' +
+                       '⏰ TEMPO TOTAL ESTIMADO:\n' +
+                       '• Comum: 10 a 20 dias úteis\n' +
+                       '• Urgente: 3-5 dias úteis (taxa extra)\n\n' +
+                       '⚠️ ATENÇÃO:\n' +
+                       '• Agende com antecedência\n' +
+                       '• Verifique a validade do seu passaporte atual\n' +
+                       '• Para viagens, passaporte precisa ter\n' +
+                       '  no mínimo 6 meses de validade'
         },
-        // ... (manter outras categorias)
+        
+        // ==================== OPÇÃO 3: DOCUMENTOS ====================
+        documentos: {
+            visto_americano: '📄 DOCUMENTOS NECESSÁRIOS - VISTO AMERICANO\n\n' +
+                           '🔴 DOCUMENTOS OBRIGATÓRIOS:\n\n' +
+                           '📋 Documentos Pessoais:\n' +
+                           '• Passaporte válido (mínimo 6 meses)\n' +
+                           '• Passaportes anteriores (se tiver)\n' +
+                           '• Foto 5x7 recente (fundo branco)\n' +
+                           '• RG e CPF originais\n' +
+                           '• Certidão de nascimento ou casamento\n\n' +
+                           '💰 Documentos Financeiros:\n' +
+                           '• Comprovante de renda (3 últimos meses)\n' +
+                           '• Declaração de Imposto de Renda\n' +
+                           '• Extratos bancários (3 meses)\n' +
+                           '• Comprovante de investimentos\n\n' +
+                           '🏠 Vínculos com o Brasil:\n' +
+                           '• Comprovante de residência\n' +
+                           '• Contrato de aluguel ou escritura de imóvel\n' +
+                           '• Documento de veículo (se tiver)\n' +
+                           '• Carteira de trabalho (páginas preenchidas)\n' +
+                           '• Contrato social de empresa (se for sócio)\n\n' +
+                           '📌 DOCUMENTOS RECOMENDADOS:\n' +
+                           '• Carta do empregador (férias ou licença)\n' +
+                           '• Histórico de viagens anteriores\n' +
+                           '• Fotos de família e vida social no Brasil\n' +
+                           '• Diploma de formação acadêmica\n\n' +
+                           '💡 DICA IMPORTANTE:\n' +
+                           'Quanto mais vínculos comprovar, maiores as chances!',
+
+            visto_canadense: '📄 DOCUMENTOS NECESSÁRIOS - VISTO CANADENSE\n\n' +
+                            '🔴 DOCUMENTOS OBRIGATÓRIOS:\n\n' +
+                            '📋 Documentos Pessoais:\n' +
+                            '• Passaporte válido\n' +
+                            '• Foto digital (formato específico)\n' +
+                            '• RG e CPF\n' +
+                            '• Certidão de nascimento/casamento\n\n' +
+                            '💰 Documentos Financeiros:\n' +
+                            '• Comprovantes bancários (4 meses)\n' +
+                            '• Declaração de IR (último ano)\n' +
+                            '• Holerites (3 últimos meses)\n' +
+                            '• Comprovante de bens (imóveis, veículos)\n\n' +
+                            '🏠 Vínculos:\n' +
+                            '• Carta do empregador\n' +
+                            '• Comprovante de residência\n' +
+                            '• Vínculos familiares no Brasil\n\n' +
+                            '📝 Documentos Específicos:\n' +
+                            '• Carta de intenção (nós elaboramos)\n' +
+                            '• Roteiro de viagem detalhado\n' +
+                            '• Reserva de hotel (provisória)\n' +
+                            '• Seguro viagem (recomendado)\n\n' +
+                            '⚠️ IMPORTANTE:\n' +
+                            '• Documentos em português precisam de tradução juramentada\n' +
+                            '• Tudo é enviado digitalmente pelo sistema IRCC',
+
+            visto_australiano: '📄 DOCUMENTOS NECESSÁRIOS - VISTO AUSTRALIANO\n\n' +
+                              '🔴 DOCUMENTOS OBRIGATÓRIOS:\n\n' +
+                              '📋 Documentos Pessoais:\n' +
+                              '• Passaporte válido (6 meses mín.)\n' +
+                              '• Certidão de nascimento traduzida\n' +
+                              '• RG e CPF\n' +
+                              '• Fotos recentes\n\n' +
+                              '💰 Documentos Financeiros:\n' +
+                              '• Extratos bancários (3 meses)\n' +
+                              '• Comprovante de renda\n' +
+                              '• Declaração de IR\n' +
+                              '• Comprovante de poupança/investimentos\n\n' +
+                              '📝 Documentos da Viagem:\n' +
+                              '• Roteiro detalhado da viagem\n' +
+                              '• Carta de intenção em inglês\n' +
+                              '• Reserva de hospedagem\n' +
+                              '• Passagem aérea (provisória)\n' +
+                              '• Seguro saúde internacional\n\n' +
+                              '💼 Documentos Profissionais:\n' +
+                              '• Carta do empregador (em inglês)\n' +
+                              '• Contrato de trabalho\n' +
+                              '• Diploma e certificados\n\n' +
+                              '⚠️ ATENÇÃO:\n' +
+                              '• Todos documentos precisam ser traduzidos\n' +
+                              '• Sistema ImmiAccount aceita upload digital',
+
+            eta_uk: '📄 DOCUMENTOS NECESSÁRIOS - eTA UK\n\n' +
+                    '🟢 DOCUMENTAÇÃO SIMPLIFICADA:\n\n' +
+                    '📋 Obrigatório:\n' +
+                    '• Passaporte válido (biométrico)\n' +
+                    '• E-mail válido para receber o eTA\n' +
+                    '• Cartão de crédito para pagamento\n\n' +
+                    '📝 Informações Necessárias:\n' +
+                    '• Dados pessoais (igual passaporte)\n' +
+                    '• Endereço residencial\n' +
+                    '• Histórico de viagens (se tiver)\n' +
+                    '• Dados de emprego/ocupação\n\n' +
+                    '❌ NÃO PRECISA:\n' +
+                    '• Comprovante de renda\n' +
+                    '• Passagem aérea\n' +
+                    '• Reserva de hotel\n' +
+                    '• Seguro viagem\n' +
+                    '• Tradução de documentos\n' +
+                    '• Ir ao consulado\n\n' +
+                    '✅ VANTAGENS:\n' +
+                    '• Processo 100% online\n' +
+                    '• Sem entrevista\n' +
+                    '• Aprovação rápida\n' +
+                    '• Válido por 2 anos',
+
+            eta_canadense: '📄 DOCUMENTOS NECESSÁRIOS - eTA CANADENSE\n\n' +
+                          '🟢 DOCUMENTAÇÃO MÍNIMA:\n\n' +
+                          '📋 Obrigatório:\n' +
+                          '• Passaporte válido\n' +
+                          '• E-mail válido\n' +
+                          '• Cartão de crédito (taxa CAD$ 7)\n\n' +
+                          '📝 Informações Necessárias:\n' +
+                          '• Dados do passaporte\n' +
+                          '• Endereço residencial\n' +
+                          '• Ocupação/emprego atual\n' +
+                          '• Histórico de viagens (se tiver)\n\n' +
+                          '❌ NÃO PRECISA:\n' +
+                          '• Foto\n' +
+                          '• Documentos financeiros\n' +
+                          '• Comprovante de vínculos\n' +
+                          '• Passagem ou hotel\n' +
+                          '• Seguro viagem\n' +
+                          '• Entrevista\n\n' +
+                          '✅ VANTAGENS:\n' +
+                          '• Super rápido (minutos)\n' +
+                          '• Totalmente online\n' +
+                          '• Válido por 5 anos\n' +
+                          '• Múltiplas entradas',
+
+            passaporte: '📄 DOCUMENTOS NECESSÁRIOS - PASSAPORTE\n\n' +
+                       '🔴 DOCUMENTOS OBRIGATÓRIOS:\n\n' +
+                       '📋 Para TODOS:\n' +
+                       '• Documento de identidade (RG) original\n' +
+                       '  (emitido há menos de 10 anos)\n' +
+                       '• CPF (número ou documento)\n' +
+                       '• Certidão de nascimento ou casamento\n' +
+                       '  (original ou cópia autenticada)\n' +
+                       '• Foto 5x7 recente (alguns postos tiram na hora)\n' +
+                       '• Comprovante de pagamento da GRU\n\n' +
+                       '👨 PARA HOMENS (18-45 anos):\n' +
+                       '• Certificado de alistamento militar\n' +
+                       '• Certificado de dispensa\n' +
+                       '• OU comprovante de regularidade militar\n\n' +
+                       '🗳️ PARA MAIORES DE 18 ANOS:\n' +
+                       '• Título de eleitor\n' +
+                       '• Comprovante de votação (última eleição)\n' +
+                       '• OU certidão de quitação eleitoral\n\n' +
+                       '📌 CASOS ESPECIAIS:\n' +
+                       '• Passaporte anterior (se tiver)\n' +
+                       '• Autorização para menores de 18 anos\n' +
+                       '• Documento de naturalização (naturalizados)\n\n' +
+                       '💡 DICA IMPORTANTE:\n' +
+                       '• Verifique se o RG está em bom estado\n' +
+                       '• RG não pode ser muito antigo (max 10 anos)\n' +
+                       '• Leve documentos originais e cópias'
+        },
+        
+        // ==================== OPÇÃO 4: PROCESSO ====================
+        processo: {
+            visto_americano: '🔄 PROCESSO COMPLETO - VISTO AMERICANO\n\n' +
+                           '📋 PASSO A PASSO DETALHADO:\n\n' +
+                           '1️⃣ ANÁLISE INICIAL (Dia 1)\n' +
+                           '• Avaliamos seu perfil\n' +
+                           '• Identificamos pontos fortes e fracos\n' +
+                           '• Definimos estratégia personalizada\n\n' +
+                           '2️⃣ PREENCHIMENTO DS-160 (Dia 1-2)\n' +
+                           '• Coletamos todas suas informações\n' +
+                           '• Preenchemos o formulário oficial\n' +
+                           '• Revisamos todos os dados\n' +
+                           '• Você aprova antes do envio\n\n' +
+                           '3️⃣ PAGAMENTO DA TAXA (Dia 2-3)\n' +
+                           '• Emitimos boleto da taxa consular\n' +
+                           '• Você paga via banco ou cartão\n' +
+                           '• Confirmamos o pagamento\n\n' +
+                           '4️⃣ AGENDAMENTO CASV (Dia 3-4)\n' +
+                           '• Agendamos coleta biométrica\n' +
+                           '• Data mais próxima disponível\n' +
+                           '• Enviamos confirmação\n\n' +
+                           '5️⃣ AGENDAMENTO CONSULAR (Dia 3-4)\n' +
+                           '• Agendamos sua entrevista\n' +
+                           '• Escolhemos melhor data/horário\n' +
+                           '• Enviamos carta de agendamento\n\n' +
+                           '6️⃣ COLETA BIOMÉTRICA - CASV\n' +
+                           '• Você vai ao CASV na data marcada\n' +
+                           '• Coleta de digitais e foto\n' +
+                           '• Duração: ~30 minutos\n\n' +
+                           '7️⃣ PREPARAÇÃO PARA ENTREVISTA\n' +
+                           '• Simulado completo de entrevista\n' +
+                           '• Lista de possíveis perguntas\n' +
+                           '• Dicas de postura e vestimenta\n' +
+                           '• Documentação organizada\n\n' +
+                           '8️⃣ ENTREVISTA NO CONSULADO\n' +
+                           '• Comparecimento na data marcada\n' +
+                           '• Entrevista com oficial consular\n' +
+                           '• Duração: 5-15 minutos\n' +
+                           '• Resultado imediato (aprovado/negado)\n\n' +
+                           '9️⃣ RETIRADA DO PASSAPORTE\n' +
+                           '• Após aprovação, passaporte fica retido\n' +
+                           '• Retorno em 5-7 dias úteis\n' +
+                           '• Retirada no local escolhido\n' +
+                           '• Ou entrega via Correios\n\n' +
+                           '✅ NOSSO ACOMPANHAMENTO:\n' +
+                           '• Suporte WhatsApp em todas etapas\n' +
+                           '• Lembretes de datas importantes\n' +
+                           '• Auxílio em caso de pendências\n' +
+                           '• Comemoração na aprovação! 🎉',
+
+            visto_canadense: '🔄 PROCESSO COMPLETO - VISTO CANADENSE\n\n' +
+                            '📋 PASSO A PASSO DETALHADO:\n\n' +
+                            '1️⃣ ANÁLISE DE PERFIL (Dia 1)\n' +
+                            '• Avaliamos seu perfil migratório\n' +
+                            '• Verificamos elegibilidade\n' +
+                            '• Definimos melhor estratégia\n\n' +
+                            '2️⃣ PREPARAÇÃO DE DOCUMENTOS (Dia 1-3)\n' +
+                            '• Listamos documentos necessários\n' +
+                            '• Orientamos traduções juramentadas\n' +
+                            '• Revisamos toda documentação\n\n' +
+                            '3️⃣ CRIAÇÃO GCKey (Dia 2)\n' +
+                            '• Criamos sua conta no sistema IRCC\n' +
+                            '• Configuramos perfil completo\n' +
+                            '• Vinculamos sua aplicação\n\n' +
+                            '4️⃣ PREENCHIMENTO DA APLICAÇÃO (Dia 2-3)\n' +
+                            '• Preenchemos formulários oficiais\n' +
+                            '• Elaboramos carta de intenção\n' +
+                            '• Organizamos documentos para upload\n\n' +
+                            '5️⃣ PAGAMENTO DAS TAXAS (Dia 3)\n' +
+                            '• Taxa de processamento\n' +
+                            '• Taxa de biometria\n' +
+                            '• Pagamento online via cartão\n\n' +
+                            '6️⃣ UPLOAD DE DOCUMENTOS (Dia 3)\n' +
+                            '• Enviamos todos documentos digitalizados\n' +
+                            '• Sistema IRCC recebe e processa\n' +
+                            '• Confirmação de recebimento\n\n' +
+                            '7️⃣ AGENDAMENTO BIOMETRIA (Dia 3-4)\n' +
+                            '• Agendamos coleta biométrica\n' +
+                            '• No centro de solicitação de visto (VAC)\n' +
+                            '• Data mais próxima disponível\n\n' +
+                            '8️⃣ COLETA BIOMÉTRICA\n' +
+                            '• Comparecimento no VAC\n' +
+                            '• Coleta de digitais e foto\n' +
+                            '• Duração: ~20 minutos\n\n' +
+                            '9️⃣ PROCESSAMENTO IRCC (4-8 semanas)\n' +
+                            '• Governo canadense analisa o caso\n' +
+                            '• Pode solicitar documentos extras\n' +
+                            '• Análise de background check\n\n' +
+                            '🔟 DECISÃO E ENVIO DO PASSAPORTE\n' +
+                            '• Se aprovado, solicitam passaporte\n' +
+                            '• Envio para VAC ou consulado\n' +
+                            '• Visto é colado no passaporte\n' +
+                            '• Retorno em 5-10 dias\n\n' +
+                            '✅ NOSSO ACOMPANHAMENTO:\n' +
+                            '• Monitoramento constante do status\n' +
+                            '• Suporte em todas as fases\n' +
+                            '• Auxílio com solicitações adicionais\n' +
+                            '• Atualizações por WhatsApp',
+
+            visto_australiano: '🔄 PROCESSO COMPLETO - VISTO AUSTRALIANO\n\n' +
+                              '📋 PASSO A PASSO DETALHADO:\n\n' +
+                              '1️⃣ ANÁLISE DE PERFIL (Dia 1)\n' +
+                              '• Avaliação completa do perfil\n' +
+                              '• Verificação de elegibilidade\n' +
+                              '• Identificação do visto ideal\n\n' +
+                              '2️⃣ PREPARAÇÃO DE DOCUMENTOS (Dia 1-3)\n' +
+                              '• Lista personalizada de documentos\n' +
+                              '• Tradução juramentada (inglês)\n' +
+                              '• Revisão de cada documento\n\n' +
+                              '3️⃣ CRIAÇÃO ImmiAccount (Dia 2)\n' +
+                              '• Criamos conta no sistema australiano\n' +
+                              '• Configuramos perfil completo\n' +
+                              '• Iniciamos aplicação online\n\n' +
+                              '4️⃣ PREENCHIMENTO DA APLICAÇÃO (Dia 2-3)\n' +
+                              '• Preenchemos todos formulários\n' +
+                              '• Carta de intenção em inglês\n' +
+                              '• Roteiro de viagem detalhado\n\n' +
+                              '5️⃣ UPLOAD DE DOCUMENTOS (Dia 3)\n' +
+                              '• Digitalização de alta qualidade\n' +
+                              '• Upload no sistema ImmiAccount\n' +
+                              '• Organização por categorias\n\n' +
+                              '6️⃣ PAGAMENTO DA TAXA (Dia 3)\n' +
+                              '• Pagamento online no ImmiAccount\n' +
+                              '• Via cartão de crédito internacional\n' +
+                              '• Confirmação imediata\n\n' +
+                              '7️⃣ ANÁLISE DO GOVERNO AUSTRALIANO\n' +
+                              '• Departamento de Imigração analisa\n' +
+                              '• 75% dos casos: até 18 dias\n' +
+                              '• 90% dos casos: até 38 dias\n' +
+                              '• Pode solicitar mais documentos\n\n' +
+                              '8️⃣ DECISÃO\n' +
+                              '• Notificação por e-mail\n' +
+                              '• Visto eletrônico (não cola no passaporte)\n' +
+                              '• Vinculado ao número do passaporte\n' +
+                              '• Confirmação no sistema VEVO\n\n' +
+                              '✅ NOSSO ACOMPANHAMENTO:\n' +
+                              '• Monitoramento do ImmiAccount\n' +
+                              '• Resposta rápida a exigências\n' +
+                              '• Verificação do visto aprovado\n' +
+                              '• Orientações para viagem',
+
+            eta_uk: '🔄 PROCESSO COMPLETO - eTA UK\n\n' +
+                    '📋 PASSO A PASSO SIMPLIFICADO:\n\n' +
+                    '1️⃣ COLETA DE INFORMAÇÕES (30 min)\n' +
+                    '• Dados pessoais básicos\n' +
+                    '• Informações do passaporte\n' +
+                    '• Histórico de viagens\n' +
+                    '• Dados de contato\n\n' +
+                    '2️⃣ APLICAÇÃO ONLINE (Imediato)\n' +
+                    '• Preenchemos formulário oficial\n' +
+                    '• Sistema do governo britânico\n' +
+                    '• Revisão dos dados\n' +
+                    '• Envio da aplicação\n\n' +
+                    '3️⃣ PAGAMENTO (Imediato)\n' +
+                    '• Taxa governamental: ~£10\n' +
+                    '• Pagamento com cartão de crédito\n' +
+                    '• Confirmação instantânea\n\n' +
+                    '4️⃣ ANÁLISE AUTOMATIZADA (Até 72h)\n' +
+                    '• Sistema cruza informações\n' +
+                    '• Verifica bancos de dados\n' +
+                    '• Background check rápido\n' +
+                    '• Maioria aprovado em horas\n\n' +
+                    '5️⃣ APROVAÇÃO (Por e-mail)\n' +
+                    '• Recebe eTA por e-mail\n' +
+                    '• Vinculado ao passaporte\n' +
+                    '• Não precisa imprimir\n' +
+                    '• Companhias aéreas verificam\n\n' +
+                    '✅ VANTAGENS:\n' +
+                    '• 100% online\n' +
+                    '• Sem entrevista\n' +
+                    '• Sem envio de documentos físicos\n' +
+                    '• Válido por 2 anos\n' +
+                    '• Múltiplas entradas (até 6 meses cada)',
+
+            eta_canadense: '🔄 PROCESSO COMPLETO - eTA CANADENSE\n\n' +
+                          '📋 PASSO A PASSO EXPRESS:\n\n' +
+                          '1️⃣ COLETA DE DADOS (20 min)\n' +
+                          '• Informações do passaporte\n' +
+                          '• Dados pessoais básicos\n' +
+                          '• Endereço e contato\n' +
+                          '• Ocupação atual\n\n' +
+                          '2️⃣ APLICAÇÃO ONLINE (Imediato)\n' +
+                          '• Site oficial do governo canadense\n' +
+                          '• Preenchemos formulário\n' +
+                          '• Revisão cuidadosa\n' +
+                          '• Envio eletrônico\n\n' +
+                          '3️⃣ PAGAMENTO (Imediato)\n' +
+                          '• Taxa: CAD$ 7 (canadense)\n' +
+                          '• Apenas cartão de crédito\n' +
+                          '• Processamento instantâneo\n\n' +
+                          '4️⃣ ANÁLISE AUTOMATIZADA\n' +
+                          '• Sistema IRCC verifica dados\n' +
+                          '• Maioria aprovado em minutos\n' +
+                          '• Máximo: 24 horas\n' +
+                          '• Resposta por e-mail\n\n' +
+                          '5️⃣ APROVAÇÃO\n' +
+                          '• eTA enviado por e-mail\n' +
+                          '• Vinculado eletronicamente\n' +
+                          '• Companhias aéreas verificam\n' +
+                          '• Não precisa de documento físico\n\n' +
+                          '✅ VANTAGENS:\n' +
+                          '• Processo mais rápido\n' +
+                          '• Totalmente online\n' +
+                          '• Válido por 5 anos\n' +
+                          '• Múltiplas entradas\n' +
+                          '• Permite conexões no Canadá',
+
+            passaporte: '🔄 PROCESSO COMPLETO - PASSAPORTE\n\n' +
+                       '📋 PASSO A PASSO DETALHADO:\n\n' +
+                       '1️⃣ ANÁLISE DE DOCUMENTOS (Dia 1)\n' +
+                       '• Verificamos documentação necessária\n' +
+                       '• Conferimos pendências (militar, eleitoral)\n' +
+                       '• Orientamos regularizações se preciso\n\n' +
+                       '2️⃣ PREENCHIMENTO ONLINE (Dia 1)\n' +
+                       '• Acessamos site da Polícia Federal\n' +
+                       '• Preenchemos formulário completo\n' +
+                       '• Geramos protocolo de solicitação\n\n' +
+                       '3️⃣ EMISSÃO DA GRU (Dia 1)\n' +
+                       '• Emitimos Guia de Recolhimento da União\n' +
+                       '• Valor atual: R$ 257,25\n' +
+                       '• Enviamos boleto para pagamento\n\n' +
+                       '4️⃣ PAGAMENTO DA GRU (Dia 1-2)\n' +
+                       '• Pagamento em qualquer banco\n' +
+                       '• Compensação em 24-48h\n' +
+                       '• Confirmação no sistema\n\n' +
+                       '5️⃣ AGENDAMENTO NA PF (Dia 2-3)\n' +
+                       '• Buscamos vagas disponíveis\n' +
+                       '• Agendamos no posto mais próximo\n' +
+                       '• Melhor data e horário\n' +
+                       '• Enviamos confirmação\n\n' +
+                       '6️⃣ ATENDIMENTO NA PF (Data agendada)\n' +
+                       '• Comparecimento com documentos\n' +
+                       '• Coleta de digitais e foto\n' +
+                       '• Validação dos documentos\n' +
+                       '• Protocolo de acompanhamento\n\n' +
+                       '7️⃣ ACOMPANHAMENTO DA EMISSÃO\n' +
+                       '• Monitoramento no site da PF\n' +
+                       '• Prazo: 7-15 dias úteis\n' +
+                       '• Avisamos quando estiver pronto\n\n' +
+                       '8️⃣ RETIRADA DO PASSAPORTE\n' +
+                       '• No posto da PF (agendar retirada)\n' +
+                       '• Ou receber via Correios (taxa extra)\n' +
+                       '• Levar documento de identidade\n' +
+                       '• Conferir dados do passaporte\n\n' +
+                       '⚠️ IMPORTANTE:\n' +
+                       '• Não se atrase no dia agendado\n' +
+                       '• Leve todos documentos originais\n' +
+                       '• Se perder o prazo, precisa reagendar\n' +
+                       '• Passaporte válido por 10 anos\n\n' +
+                       '💡 DICA URGENTE:\n' +
+                       '• Emergência? Temos opção de urgência\n' +
+                       '• Emergência: 3-5 dias úteis\n' +
+                       '• Consulte-nos sobre o processo!'
+        }
     };
     
     var resposta = respostas[opcao] && respostas[opcao][servico];
     if (!resposta) {
         resposta = '📋 INFORMAÇÕES EM BREVE\n\n' +
                   'Estamos preparando conteúdo específico para ' + 
-                  servico.replace('_', ' ').toUpperCase() + '.';
+                  getServiceName(servico) + '.\n\n' +
+                  'Enquanto isso, que tal falar com um especialista?\n' +
+                  'Digite 7 para falar conosco!';
     }
     
     return resposta;
