@@ -514,12 +514,12 @@ function getSubmenu(service) {
 }
 
 async function processarMenu(cleanPhone, messageText, body) {
-    console.log('=== PROCESSAR MENU ===');
-    console.log('Telefone: ' + cleanPhone);
-    console.log('Mensagem: "' + messageText + '"');
-
-    // PEGA O ESTADO ATUAL
-    var state = userState.get(cleanPhone);
+    console.log('=== PROCESSANDO MENU ===');
+    console.log('Phone: ' + cleanPhone);
+    console.log('Message: "' + messageText + '"');
+    
+    // GET OU CRIA ESTADO
+    let state = userState.get(cleanPhone);
     if (!state) {
         state = {
             nivel: 'principal',
@@ -529,65 +529,46 @@ async function processarMenu(cleanPhone, messageText, body) {
         userState.set(cleanPhone, state);
     }
     state.lastActivity = Date.now();
-
+    
     console.log('Estado atual: nivel=' + state.nivel + ', service=' + state.service);
-
-    // ============================================================
-    // COMANDO 0 - VOLTA AO MENU PRINCIPAL (RESETA TUDO)
-    // ============================================================
+    
+    // COMANDO 0 - VOLTA AO MENU PRINCIPAL
     if (messageText === '0') {
         state.nivel = 'principal';
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
-        console.log('Voltou ao menu principal e resetou o estado');
+        console.log('Voltou ao menu principal');
         return;
     }
-
-    // ============================================================
+    
     // SAUDAÇÕES
-    // ============================================================
-    var saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste'];
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem'];
     if (saudacoes.indexOf(messageText.toLowerCase()) !== -1) {
-        // RESETA O ESTADO AO ENVIAR O MENU PRINCIPAL
         state.nivel = 'principal';
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
         return;
     }
-
+    
     // ============================================================
-    // VERIFICA SE É UM NÚMERO DE 1 A 7 (MENU PRINCIPAL)
-    // ============================================================
-    var numerosMenu = ['1', '2', '3', '4', '5', '6', '7'];
-    var isNumeroMenu = numerosMenu.indexOf(messageText) !== -1;
-
-    // SE FOR UM NÚMERO DE 1 A 7 E O ESTADO FOR SUBMENU, RESETA PARA PRINCIPAL
-    if (isNumeroMenu && state.nivel === 'submenu') {
-        console.log('USUARIO DIGITOU ' + messageText + ' NO SUBMENU - RESETANDO PARA PRINCIPAL');
-        state.nivel = 'principal';
-        state.service = null;
-        userState.set(cleanPhone, state);
-    }
-
-    // ============================================================
-    // SUBMENU - PROCESSAR OPÇÕES DO SUBMENU
+    // SE ESTIVER NO SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
-        console.log('ESTA NO SUBMENU - processando opcao: ' + messageText);
-        var service = state.service;
-        var isPassaporte = service === 'passaporte';
-
-        // Opção 7 - Falar com especialista
+        console.log('Processando SUBMENU: opcao=' + messageText);
+        const service = state.service;
+        const isPassaporte = service === 'passaporte';
+        
+        // OPÇÃO 7 - FALAR COM ESPECIALISTA
         if (messageText === '7') {
             await sendReply(cleanPhone, 'FALAR COM ESPECIALISTA - ' + getServiceName(service) + '\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
             return;
         }
-
-        // Opção 6 - Avaliação gratuita
+        
+        // OPÇÃO 6 - AVALIAÇÃO GRATUITA
         if (messageText === '6') {
-            var links = {
+            const links = {
                 'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
                 'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
                 'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
@@ -595,12 +576,12 @@ async function processarMenu(cleanPhone, messageText, body) {
                 'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
                 'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
             };
-            var link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
+            const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
             await sendReply(cleanPhone, 'AVALIACAO GRATUITA - ' + getServiceName(service) + '\n\n' + link + '\n\nLeva menos de 2 minutos!\n\nDigite 0 para voltar ao MENU principal');
             return;
         }
-
-        // Opção 5 - Visto Negado ou Onde Fazer
+        
+        // OPÇÃO 5 - VISTO NEGADO / ONDE FAZER
         if (messageText === '5') {
             if (isPassaporte) {
                 await sendReply(cleanPhone, 'ONDE FAZER O PASSAPORTE\n\n- Policia Federal (agendar no site da PF)\n- Postos de atendimento em todo Brasil\n- Agendamento online obrigatorio\n\nhttps://www.gov.br/pf/pt-br/assuntos/passaporte\n\nDigite 0 para voltar ao MENU principal');
@@ -609,58 +590,81 @@ async function processarMenu(cleanPhone, messageText, body) {
             }
             return;
         }
-
-        // Opções 1 a 4 - Preço, Prazo, Documentos, Processo
-        if (['1', '2', '3', '4'].indexOf(messageText) !== -1) {
-            var opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
-            var resposta = getRespostaSubmenu(service, opcoesMap[messageText]);
+        
+        // OPÇÕES 1 A 4 - PREÇO, PRAZO, DOCUMENTOS, PROCESSO
+        if (messageText === '1') {
+            const resposta = getRespostaSubmenu(service, 'preco');
             await sendReply(cleanPhone, resposta);
             return;
         }
-
-        // Se não for nenhuma opção válida, mostra o submenu novamente
-        console.log('Opcao invalida no submenu, mostrando novamente');
-        var submenuTexto = await getSubmenu(service);
-        console.log('Submenu texto: ' + submenuTexto);
+        if (messageText === '2') {
+            const resposta = getRespostaSubmenu(service, 'prazo');
+            await sendReply(cleanPhone, resposta);
+            return;
+        }
+        if (messageText === '3') {
+            const resposta = getRespostaSubmenu(service, 'documentos');
+            await sendReply(cleanPhone, resposta);
+            return;
+        }
+        if (messageText === '4') {
+            const resposta = getRespostaSubmenu(service, 'processo');
+            await sendReply(cleanPhone, resposta);
+            return;
+        }
+        
+        // SE NÃO FOR NENHUMA OPÇÃO VÁLIDA, MOSTRA O SUBMENU NOVAMENTE
+        console.log('Opcao invalida no submenu: ' + messageText);
+        const submenuTexto = getSubmenu(service);
         await sendReply(cleanPhone, submenuTexto);
         return;
     }
-
+    
     // ============================================================
     // MENU PRINCIPAL
     // ============================================================
     if (state.nivel === 'principal') {
-        console.log('ESTA NO MENU PRINCIPAL - opcao: ' + messageText);
+        console.log('Processando MENU PRINCIPAL: opcao=' + messageText);
         
-        var serviceKey = null;
-        switch (messageText) {
-            case '1': serviceKey = 'visto_americano'; break;
-            case '2': serviceKey = 'visto_canadense'; break;
-            case '3': serviceKey = 'visto_australiano'; break;
-            case '4': serviceKey = 'eta_uk'; break;
-            case '5': serviceKey = 'eta_canadense'; break;
-            case '6': serviceKey = 'passaporte'; break;
-            case '7':
-                await sendReply(cleanPhone, 'FALAR COM ESPECIALISTA\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
-                return;
-            default:
-                var intent = detectIntent(messageText);
-                if (intent) {
-                    await sendReply(cleanPhone, getRespostaIntencao(intent));
-                    return;
-                }
-                await sendReply(cleanPhone, await getMenuPrincipal());
-                return;
+        const servicoMap = {
+            '1': 'visto_americano',
+            '2': 'visto_canadense',
+            '3': 'visto_australiano',
+            '4': 'eta_uk',
+            '5': 'eta_canadense',
+            '6': 'passaporte'
+        };
+        
+        // OPÇÃO 7 - AJUDA
+        if (messageText === '7') {
+            await sendReply(cleanPhone, 'AJUDA / CONTATO\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
+            return;
         }
-
+        
+        const serviceKey = servicoMap[messageText];
+        
         if (serviceKey) {
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        const submenuTexto = getSubmenu(serviceKey);
-        console.log('ENVIANDO SUBMENU: ' + submenuTexto);
-        await sendReply(cleanPhone, submenuTexto);
-    }
+            console.log('Servico selecionado: ' + serviceKey);
+            state.nivel = 'submenu';
+            state.service = serviceKey;
+            userState.set(cleanPhone, state);
+            
+            const submenuTexto = getSubmenu(serviceKey);
+            console.log('Enviando submenu: ' + submenuTexto);
+            await sendReply(cleanPhone, submenuTexto);
+            return;
+        }
+        
+        // DETECTAR INTENÇÃO
+        const intent = detectIntent(messageText);
+        if (intent) {
+            const resposta = getRespostaIntencao(intent);
+            await sendReply(cleanPhone, resposta);
+            return;
+        }
+        
+        // NÃO ENTENDEU - MOSTRA MENU PRINCIPAL
+        await sendReply(cleanPhone, await getMenuPrincipal());
     }
 }
 app.post('/api/webhook/zapi', function(req, res) {
