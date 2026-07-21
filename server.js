@@ -545,10 +545,22 @@ function getRespostaIntencao(intent, service = null) {
 }
 
 // ============================================================
-//  FUNÇÕES DE MENU
+//  FUNÇÕES DE MENU (VERSÃO CORRIGIDA)
 // ============================================================
+
 async function getMenuPrincipal() {
-    return `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸\n\n1️⃣ 🇺🇸 VISTO AMERICANO\n2️⃣ 🇨🇦 VISTO CANADENSE\n3️⃣ 🇦🇺 VISTO AUSTRALIANO\n4️⃣ 🇬🇧 eTA UK (REINO UNIDO)\n5️⃣ 🇨🇦 eTA CANADENSE\n6️⃣ 📘 PASSAPORTE\n7️⃣ 📞 AJUDA / CONTATO\n\n💬 *Digite o número da opção desejada (1 a 7) ou me pergunte algo!*\n• Digite *0* para ver este MENU novamente 🚀`;
+    return `🇺🇸 *GETVISA - ESCOLHA O SERVIÇO* 🇺🇸
+
+1️⃣ 🇺🇸 VISTO AMERICANO
+2️⃣ 🇨🇦 VISTO CANADENSE
+3️⃣ 🇦🇺 VISTO AUSTRALIANO
+4️⃣ 🇬🇧 eTA UK (REINO UNIDO)
+5️⃣ 🇨🇦 eTA CANADENSE
+6️⃣ 📘 PASSAPORTE
+7️⃣ 📞 AJUDA / CONTATO
+
+💬 *Digite o número da opção desejada (1 a 7)*
+• Digite *0* para ver este MENU novamente 🚀`;
 }
 
 async function getSubmenu(service) {
@@ -560,25 +572,31 @@ async function getSubmenu(service) {
         'eta_canadense': '🇨🇦 eTA CANADENSE',
         'passaporte': '📘 PASSAPORTE'
     };
+    
+    // 🔥 VERIFICA SE É PASSAPORTE
     const isPassaporte = service === 'passaporte';
-    return `${names[service] || 'SERVIÇO'}\n\n1️⃣ 💰 PREÇO\n2️⃣ ⏰ PRAZO\n3️⃣ 📄 DOCUMENTOS\n4️⃣ 📋 PROCESSO\n5️⃣ ${isPassaporte ? '📍 ONDE FAZER' : '⚠️ VISTO NEGADO'}\n6️⃣ 📊 AVALIAÇÃO GRATUITA\n7️⃣ 📞 FALAR COM ESPECIALISTA\n0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL\n\n💬 *Digite o número da opção desejada ou me pergunte algo!* 🚀`;
-}
-// ============================================================
-//  AUTENTICAÇÃO ADMIN
-// ============================================================
-function validateApiKey(req, res, next) {
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== ADMIN_API_KEY) return res.status(403).json({ error: 'Acesso negado' });
-    next();
+    
+    return `${names[service] || 'SERVIÇO'}
+
+1️⃣ 💰 PREÇO
+2️⃣ ⏰ PRAZO
+3️⃣ 📄 DOCUMENTOS
+4️⃣ 📋 PROCESSO
+5️⃣ ${isPassaporte ? '📍 ONDE FAZER' : '⚠️ VISTO NEGADO'}
+6️⃣ 📊 AVALIAÇÃO GRATUITA
+7️⃣ 📞 FALAR COM ESPECIALISTA
+
+0️⃣ 🔙 VOLTAR AO MENU PRINCIPAL
+
+💬 *Digite o número da opção desejada* 🚀`;
 }
 
 // ============================================================
-//  FUNÇÃO PARA PROCESSAR O MENU (CORRIGIDA)
+//  FUNÇÃO PARA PROCESSAR O MENU
 // ============================================================
 async function processarMenu(cleanPhone, messageText, body) {
     console.log(`🔄 Processando menu para ${cleanPhone}: "${messageText}"`);
 
-    // PEGAR OU CRIAR O ESTADO DA CONVERSA
     let state = userState.get(cleanPhone);
     if (!state) {
         state = {
@@ -587,7 +605,6 @@ async function processarMenu(cleanPhone, messageText, body) {
             lastActivity: Date.now()
         };
         userState.set(cleanPhone, state);
-        console.log(`📌 Novo estado criado para ${cleanPhone}: principal`);
     }
     state.lastActivity = Date.now();
 
@@ -597,7 +614,6 @@ async function processarMenu(cleanPhone, messageText, body) {
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
-        console.log(`↩️ Voltou ao menu principal`);
         return;
     }
 
@@ -605,24 +621,29 @@ async function processarMenu(cleanPhone, messageText, body) {
     const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e aí', 'hey', 'hi', 'hello', 'teste'];
     if (saudacoes.includes(messageText.toLowerCase())) {
         await sendReply(cleanPhone, await getMenuPrincipal());
-        console.log(`👋 Saudação detectada, enviando menu`);
         return;
     }
-
-    console.log(`📊 Estado atual: nivel=${state.nivel}, service=${state.service}`);
 
     // ============================================================
     // SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
         const service = state.service;
-        console.log(`📌 Processando SUBMENU para serviço: ${service}`);
+        const isPassaporte = service === 'passaporte';
 
+        // Opção 7 - Falar com especialista
         if (messageText === '7') {
-            await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+            await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA - ${getServiceName(service)}*
+
+Meu nome é *Moisés* e estou aqui para te ajudar!
+
+📱 *WhatsApp:* https://wa.me/5521974601812
+
+📌 *Digite 0 para voltar ao MENU principal* 🚀`);
             return;
         }
 
+        // Opção 6 - Avaliação gratuita
         if (messageText === '6') {
             const links = {
                 'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
@@ -632,28 +653,58 @@ async function processarMenu(cleanPhone, messageText, body) {
                 'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense',
                 'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
             };
-            await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${getServiceName(service)}*\n\n🔗 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano'}\n\n⏱️ Leva menos de 2 minutos!\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+            await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${getServiceName(service)}*
+
+🔗 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano'}
+
+⏱️ Leva menos de 2 minutos!
+
+📌 *Digite 0 para voltar ao MENU principal* 🚀`);
             return;
         }
 
+        // 🔥 CORREÇÃO: Opção 5 - separada por serviço
         if (messageText === '5') {
-    if (service === 'passaporte') {
-        await sendReply(cleanPhone, `📍 *ONDE FAZER O PASSAPORTE*\n\n• Polícia Federal (agendar no site da PF)\n• Postos de atendimento em todo Brasil\n• Agendamento online obrigatório\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-    } else {
-        await sendReply(cleanPhone, `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*\n\n📊 *Faça uma análise gratuita:*\n🔗 https://getvisa.com.br/visto-americano-negado/\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
-    }
-    return;
-}
+            if (isPassaporte) {
+                // PASSAPORTE: ONDE FAZER
+                await sendReply(cleanPhone, `📍 *ONDE FAZER O PASSAPORTE*
 
+• Polícia Federal (agendar no site da PF)
+• Postos de atendimento em todo Brasil
+• Agendamento online obrigatório
+
+🔗 https://www.gov.br/pf/pt-br/assuntos/passaporte
+
+📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+            } else {
+                // OUTROS SERVIÇOS: VISTO NEGADO
+                await sendReply(cleanPhone, `⚠️ *VISTO NEGADO - ${getServiceName(service).toUpperCase()}*
+
+📊 *Faça uma análise gratuita do seu caso:*
+🔗 https://getvisa.com.br/visto-americano-negado/
+
+*O que fazemos:*
+✅ Análise do motivo da negativa
+✅ Correção do formulário
+✅ Documentação reforçada
+✅ Preparação para entrevista
+
+💰 *Assessoria especializada:* R$ 380
+
+📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+            }
+            return;
+        }
+
+        // Opções 1 a 4 - Preço, Prazo, Documentos, Processo
         if (['1', '2', '3', '4'].includes(messageText)) {
             const opcoesMap = { '1': 'preco', '2': 'prazo', '3': 'documentos', '4': 'processo' };
             let resposta = getRespostaSubmenu(service, opcoesMap[messageText]);
-            resposta += `\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`;
             await sendReply(cleanPhone, resposta);
-            console.log(`📤 Resposta do submenu enviada: ${opcoesMap[messageText]}`);
             return;
         }
 
+        // Se não for nenhuma opção válida, mostra o submenu novamente
         await sendReply(cleanPhone, await getSubmenu(service));
         return;
     }
@@ -662,7 +713,6 @@ async function processarMenu(cleanPhone, messageText, body) {
     // MENU PRINCIPAL
     // ============================================================
     if (state.nivel === 'principal') {
-        console.log(`📌 Processando MENU PRINCIPAL para: "${messageText}"`);
         let serviceKey = null;
         switch (messageText) {
             case '1': serviceKey = 'visto_americano'; break;
@@ -672,7 +722,13 @@ async function processarMenu(cleanPhone, messageText, body) {
             case '5': serviceKey = 'eta_canadense'; break;
             case '6': serviceKey = 'passaporte'; break;
             case '7':
-                await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA*\n\nMeu nome é *Moisés* e estou aqui para te ajudar!\n\n📱 *WhatsApp:* https://wa.me/5521974601812\n\n📌 *Digite 0 para voltar ao MENU principal* 🚀`);
+                await sendReply(cleanPhone, `📞 *FALAR COM ESPECIALISTA*
+
+Meu nome é *Moisés* e estou aqui para te ajudar!
+
+📱 *WhatsApp:* https://wa.me/5521974601812
+
+📌 *Digite 0 para voltar ao MENU principal* 🚀`);
                 return;
             default:
                 const intent = detectIntent(messageText);
@@ -688,7 +744,6 @@ async function processarMenu(cleanPhone, messageText, body) {
             state.nivel = 'submenu';
             state.service = serviceKey;
             userState.set(cleanPhone, state);
-            console.log(`✅ Mudou para SUBMENU: ${serviceKey}`);
             await sendReply(cleanPhone, await getSubmenu(serviceKey));
         }
     }
