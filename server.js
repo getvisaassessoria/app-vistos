@@ -513,6 +513,7 @@ function getSubmenu(service) {
         'Digite o numero da opcao desejada';
 }
 
+// CORREÇÃO PRINCIPAL: Função processarMenu melhorada
 async function processarMenu(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENU ===');
     console.log('Phone: ' + cleanPhone);
@@ -524,6 +525,7 @@ async function processarMenu(cleanPhone, messageText, body) {
         state = {
             nivel: 'principal',
             service: null,
+            subOpcao: null,  // NOVO: para rastrear sub-opções
             lastActivity: Date.now()
         };
         userState.set(cleanPhone, state);
@@ -536,137 +538,496 @@ async function processarMenu(cleanPhone, messageText, body) {
     if (messageText === '0') {
         state.nivel = 'principal';
         state.service = null;
+        state.subOpcao = null;
         userState.set(cleanPhone, state);
-        await sendReply(cleanPhone, await getMenuPrincipal());
+        const menuPrincipal = await getMenuPrincipal();
+        await sendReply(cleanPhone, menuPrincipal);
         console.log('Voltou ao menu principal');
         return;
     }
     
-    // SAUDAÇÕES
-    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem'];
-    if (saudacoes.indexOf(messageText.toLowerCase()) !== -1) {
+    // SAUDAÇÕES E COMANDOS ESPECIAIS
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste', 'tudo bem', 'menu', 'inicio', 'comecar', 'voltar'];
+    if (saudacoes.includes(messageText.toLowerCase()) || messageText.toLowerCase() === 'menu principal') {
         state.nivel = 'principal';
         state.service = null;
+        state.subOpcao = null;
+        userState.set(cleanPhone, state);
+        const menuPrincipal = await getMenuPrincipal();
+        await sendReply(cleanPhone, menuPrincipal);
+        return;
+    }
+    
+    // ============================================================
+    // PROCESSAMENTO POR NÍVEL
+    // ============================================================
+    
+    switch(state.nivel) {
+        case 'principal':
+            await processarNivelPrincipal(cleanPhone, messageText, state);
+            break;
+            
+        case 'submenu':
+            await processarNivelSubmenu(cleanPhone, messageText, state);
+            break;
+            
+        case 'sub-submenu':
+            await processarNivelSubSubmenu(cleanPhone, messageText, state);
+            break;
+            
+        default:
+            // Reset para menu principal
+            state.nivel = 'principal';
+            state.service = null;
+            userState.set(cleanPhone, state);
+            await sendReply(cleanPhone, await getMenuPrincipal());
+    }
+}
+
+// NOVA FUNÇÃO: Processar nível principal
+async function processarNivelPrincipal(cleanPhone, messageText, state) {
+    console.log('Processando MENU PRINCIPAL: opcao=' + messageText);
+    
+    const servicoMap = {
+        '1': 'visto_americano',
+        '2': 'visto_canadense',
+        '3': 'visto_australiano',
+        '4': 'eta_uk',
+        '5': 'eta_canadense',
+        '6': 'passaporte'
+    };
+    
+    // OPÇÃO 7 - AJUDA
+    if (messageText === '7') {
+        const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
+                        '👨‍💼 Moisés - Especialista em Vistos\n\n' +
+                        '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                        '📧 E-mail: contato@getvisa.com.br\n\n' +
+                        '🌐 Site: https://getvisa.com.br\n\n' +
+                        '⏰ Horário: Seg-Sex, 9h às 18h\n\n' +
+                        'Digite 0 para voltar ao MENU principal';
+        await sendReply(cleanPhone, ajudaMsg);
+        return;
+    }
+    
+    const serviceKey = servicoMap[messageText];
+    
+    if (serviceKey) {
+        console.log('Servico selecionado: ' + serviceKey);
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        userState.set(cleanPhone, state);
+        
+        const submenuTexto = getSubmenu(serviceKey);
+        console.log('Enviando submenu:', submenuTexto);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // DETECTAR INTENÇÃO POR TEXTO
+    const intent = detectIntent(messageText);
+    if (intent) {
+        const resposta = getRespostaIntencao(intent, state.service);
+        await sendReply(cleanPhone, resposta);
+        return;
+    }
+    
+    // OPÇÃO NÃO RECONHECIDA - MOSTRAR MENU NOVAMENTE COM MENSAGEM DE ERRO
+    const menuMsg = '❌ Opção inválida! Por favor, escolha uma das opções abaixo:\n\n' + 
+                   await getMenuPrincipal();
+    await sendReply(cleanPhone, menuMsg);
+}
+
+// NOVA FUNÇÃO: Processar nível submenu
+async function processarNivelSubmenu(cleanPhone, messageText, state) {
+    console.log('Processando SUBMENU: opcao=' + messageText);
+    const service = state.service;
+    
+    if (!service) {
+        state.nivel = 'principal';
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
         return;
     }
     
-    // ============================================================
-    // SE ESTIVER NO SUBMENU
-    // ============================================================
-    if (state.nivel === 'submenu') {
-        console.log('Processando SUBMENU: opcao=' + messageText);
-        const service = state.service;
-        const isPassaporte = service === 'passaporte';
+    const isPassaporte = service === 'passaporte';
+    
+    // OPÇÃO 7 - FALAR COM ESPECIALISTA
+    if (messageText === '7') {
+        const especialistaMsg = '👨‍💼 FALAR COM ESPECIALISTA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                               'Meu nome é Moisés e estou aqui para te ajudar!\n\n' +
+                               '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                               '📧 E-mail: contato@getvisa.com.br\n\n' +
+                               'Ou se preferir, me envie sua dúvida aqui mesmo que responderei em breve!\n\n' +
+                               'Digite 0 para voltar ao MENU principal';
+        await sendReply(cleanPhone, especialistaMsg);
+        return;
+    }
+    
+    // OPÇÃO 6 - AVALIAÇÃO GRATUITA
+    if (messageText === '6') {
+        const links = {
+            'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
+            'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
+            'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
+            'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
+            'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
+            'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
+        };
+        const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
         
-        // OPÇÃO 7 - FALAR COM ESPECIALISTA
-        if (messageText === '7') {
-            await sendReply(cleanPhone, 'FALAR COM ESPECIALISTA - ' + getServiceName(service) + '\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
-            return;
+        const avaliacaoMsg = '📋 AVALIAÇÃO GRATUITA - ' + getServiceName(service).toUpperCase() + '\n\n' +
+                            '🔗 Acesse: ' + link + '\n\n' +
+                            '⏱️ Leva menos de 2 minutos!\n\n' +
+                            'Após preencher, nossa equipe analisará seu perfil e entrará em contato.\n\n' +
+                            'Digite 0 para voltar ao MENU principal';
+        await sendReply(cleanPhone, avaliacaoMsg);
+        return;
+    }
+    
+    // OPÇÃO 5 - VISTO NEGADO / ONDE FAZER
+    if (messageText === '5') {
+        if (isPassaporte) {
+            const ondeFazerMsg = '🏛️ ONDE FAZER O PASSAPORTE\n\n' +
+                                '📍 Polícia Federal (agendamento obrigatório)\n' +
+                                '🌐 Site: https://www.gov.br/pf/pt-br/assuntos/passaporte\n\n' +
+                                '📋 Passo a passo:\n' +
+                                '1. Acesse o site da PF\n' +
+                                '2. Preencha o formulário online\n' +
+                                '3. Pague a taxa GRU (~R$ 257)\n' +
+                                '4. Agende o atendimento\n' +
+                                '5. Compareça ao posto com os documentos\n\n' +
+                                '💡 Dica: Agende com antecedência, as vagas são limitadas!\n\n' +
+                                'Digite 0 para voltar ao MENU principal';
+            await sendReply(cleanPhone, ondeFazerMsg);
+        } else {
+            const vistoNegadoMsg = '🔄 VISTO NEGADO - RECUPERAÇÃO\n\n' +
+                                  'Teve o visto negado? Não desanime!\n\n' +
+                                  '🔗 Faça uma análise gratuita do seu caso:\n' +
+                                  'https://getvisa.com.br/visto-americano-negado/\n\n' +
+                                  '✅ O que oferecemos:\n' +
+                                  '• Análise do motivo da negativa\n' +
+                                  '• Correção do formulário DS-160\n' +
+                                  '• Documentação reforçada\n' +
+                                  '• Preparação especial para entrevista\n' +
+                                  '• Acompanhamento completo\n\n' +
+                                  '💰 Investimento: R$ 380 (assessoria especializada)\n\n' +
+                                  '📊 Taxa de aprovação: 85% em casos de reaplicação\n\n' +
+                                  'Digite 0 para voltar ao MENU principal';
+            await sendReply(cleanPhone, vistoNegadoMsg);
         }
+        return;
+    }
+    
+    // OPÇÕES 1 A 4 - INFORMAÇÕES ESPECÍFICAS
+    if (['1', '2', '3', '4'].includes(messageText)) {
+        const opcoesMap = {
+            '1': 'preco',
+            '2': 'prazo',
+            '3': 'documentos',
+            '4': 'processo'
+        };
         
-        // OPÇÃO 6 - AVALIAÇÃO GRATUITA
-        if (messageText === '6') {
-            const links = {
-                'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
-                'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense/',
-                'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano/',
-                'eta_uk': 'https://getvisa.com.br/simulador-eta-uk/',
-                'eta_canadense': 'https://getvisa.com.br/simulador-eta-canadense/',
-                'passaporte': 'https://getvisa.com.br/formulario-passaporte/'
-            };
-            const link = links[service] || 'https://getvisa.com.br/simulador-visto-americano/';
-            await sendReply(cleanPhone, 'AVALIACAO GRATUITA - ' + getServiceName(service) + '\n\n' + link + '\n\nLeva menos de 2 minutos!\n\nDigite 0 para voltar ao MENU principal');
-            return;
-        }
+        const opcao = opcoesMap[messageText];
+        const resposta = getRespostaSubmenu(service, opcao);
         
-        // OPÇÃO 5 - VISTO NEGADO / ONDE FAZER
-        if (messageText === '5') {
-            if (isPassaporte) {
-                await sendReply(cleanPhone, 'ONDE FAZER O PASSAPORTE\n\n- Policia Federal (agendar no site da PF)\n- Postos de atendimento em todo Brasil\n- Agendamento online obrigatorio\n\nhttps://www.gov.br/pf/pt-br/assuntos/passaporte\n\nDigite 0 para voltar ao MENU principal');
-            } else {
-                await sendReply(cleanPhone, 'VISTO NEGADO - ' + getServiceName(service).toUpperCase() + '\n\nFaca uma analise gratuita do seu caso:\nhttps://getvisa.com.br/visto-americano-negado/\n\nO que fazemos:\n- Analise do motivo da negativa\n- Correcao do formulario\n- Documentacao reforcada\n- Preparacao para entrevista\n\nAssessoria especializada: R$ 380\n\nDigite 0 para voltar ao MENU principal');
-            }
-            return;
-        }
+        // Adicionar informação de navegação
+        const respostaCompleta = resposta + '\n\n' +
+                                '💡 Dica: Digite:\n' +
+                                '• 0 - Menu principal\n' +
+                                '• 9 - Voltar ao menu de ' + getServiceName(service).toUpperCase();
         
-        // OPÇÕES 1 A 4 - PREÇO, PRAZO, DOCUMENTOS, PROCESSO
-        if (messageText === '1') {
-            const resposta = getRespostaSubmenu(service, 'preco');
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        if (messageText === '2') {
-            const resposta = getRespostaSubmenu(service, 'prazo');
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        if (messageText === '3') {
-            const resposta = getRespostaSubmenu(service, 'documentos');
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        if (messageText === '4') {
-            const resposta = getRespostaSubmenu(service, 'processo');
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        
-        // SE NÃO FOR NENHUMA OPÇÃO VÁLIDA, MOSTRA O SUBMENU NOVAMENTE
-        console.log('Opcao invalida no submenu: ' + messageText);
+        await sendReply(cleanPhone, respostaCompleta);
+        return;
+    }
+    
+    // COMANDO 9 - VOLTAR AO SUBMENU DO SERVIÇO ATUAL
+    if (messageText === '9') {
         const submenuTexto = getSubmenu(service);
         await sendReply(cleanPhone, submenuTexto);
         return;
     }
     
-    // ============================================================
-    // MENU PRINCIPAL
-    // ============================================================
-    if (state.nivel === 'principal') {
-        console.log('Processando MENU PRINCIPAL: opcao=' + messageText);
-        
-        const servicoMap = {
-            '1': 'visto_americano',
-            '2': 'visto_canadense',
-            '3': 'visto_australiano',
-            '4': 'eta_uk',
-            '5': 'eta_canadense',
-            '6': 'passaporte'
-        };
-        
-        // OPÇÃO 7 - AJUDA
-        if (messageText === '7') {
-            await sendReply(cleanPhone, 'AJUDA / CONTATO\n\nMeu nome e Moises e estou aqui para te ajudar!\n\nWhatsApp: https://wa.me/5521974601812\n\nDigite 0 para voltar ao MENU principal');
-            return;
-        }
-        
-        const serviceKey = servicoMap[messageText];
-        
-        if (serviceKey) {
-            console.log('Servico selecionado: ' + serviceKey);
-            state.nivel = 'submenu';
-            state.service = serviceKey;
-            userState.set(cleanPhone, state);
-            
-            const submenuTexto = getSubmenu(serviceKey);
-            console.log('Enviando submenu: ' + submenuTexto);
-            await sendReply(cleanPhone, submenuTexto);
-            return;
-        }
-        
-        // DETECTAR INTENÇÃO
-        const intent = detectIntent(messageText);
-        if (intent) {
-            const resposta = getRespostaIntencao(intent);
-            await sendReply(cleanPhone, resposta);
-            return;
-        }
-        
-        // NÃO ENTENDEU - MOSTRA MENU PRINCIPAL
-        await sendReply(cleanPhone, await getMenuPrincipal());
-    }
+    // OPÇÃO NÃO RECONHECIDA
+    const erroMsg = '❌ Opção inválida!\n\n' + getSubmenu(service);
+    await sendReply(cleanPhone, erroMsg);
 }
+
+// NOVA FUNÇÃO: Processar nível sub-submenu (se necessário no futuro)
+async function processarNivelSubSubmenu(cleanPhone, messageText, state) {
+    // Implementação futura para sub-submenus
+    // Por enquanto, volta ao submenu
+    state.nivel = 'submenu';
+    userState.set(cleanPhone, state);
+    await sendReply(cleanPhone, getSubmenu(state.service));
+}
+
+// CORREÇÃO: Função getSubmenu melhorada
+function getSubmenu(service) {
+    const names = {
+        'visto_americano': '🇺🇸 VISTO AMERICANO',
+        'visto_canadense': '🇨🇦 VISTO CANADENSE',
+        'visto_australiano': '🇦🇺 VISTO AUSTRALIANO',
+        'eta_uk': '🇬🇧 eTA UK',
+        'eta_canadense': '🇨🇦 eTA CANADENSE',
+        'passaporte': '🛂 PASSAPORTE'
+    };
+
+    const isPassaporte = service === 'passaporte';
+    const opcao5 = isPassaporte ? '🏛️ ONDE FAZER' : '🔄 VISTO NEGADO';
+    const nome = names[service] || 'SERVIÇO';
+
+    return '📋 ' + nome + '\n\n' + 
+        '1️⃣ - 💰 PREÇO\n' + 
+        '2️⃣ - ⏱️ PRAZO\n' + 
+        '3️⃣ - 📄 DOCUMENTOS\n' + 
+        '4️⃣ - 🔄 PROCESSO\n' + 
+        '5️⃣ - ' + opcao5 + '\n' +
+        '6️⃣ - 📊 AVALIAÇÃO GRATUITA\n' + 
+        '7️⃣ - 👨‍💼 FALAR COM ESPECIALISTA\n\n' + 
+        '0️⃣ - VOLTAR AO MENU PRINCIPAL\n\n' +
+        'Digite o número da opção desejada (1-7)';
+}
+
+// CORREÇÃO: Função getMenuPrincipal melhorada
+async function getMenuPrincipal() {
+    return '🌟 GETVISA - ASSESSORIA EM VISTOS\n\n' +
+           'Escolha o serviço desejado:\n\n' +
+           '1️⃣ - 🇺🇸 VISTO AMERICANO\n' +
+           '2️⃣ - 🇨🇦 VISTO CANADENSE\n' +
+           '3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n' +
+           '4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n' +
+           '5️⃣ - 🇨🇦 eTA CANADENSE\n' +
+           '6️⃣ - 🛂 PASSAPORTE\n' +
+           '7️⃣ - 📞 AJUDA / CONTATO\n\n' +
+           'Digite o número da opção (1-7) ou me pergunte algo!\n' +
+           'Digite 0 para ver este MENU novamente';
+}
+
+// CORREÇÃO: Tratamento de mensagens do webhook
+app.post('/api/webhook/zapi', function(req, res) {
+    console.log('📨 WEBHOOK Z-API RECEBIDO');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+
+    res.status(200).json({
+        status: 'ok',
+        received: true,
+        timestamp: new Date().toISOString()
+    });
+
+    (async function() {
+        try {
+            var body = req.body;
+
+            // Ignorar mensagens de grupo
+            if (body.isGroup === true || body.isGroupMsg === true || 
+                (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
+                console.log('👥 Mensagem de grupo ignorada');
+                return;
+            }
+            
+            // Ignorar mensagens do próprio bot
+            if (body.fromMe === true) {
+                console.log('🤖 Mensagem do próprio bot ignorada');
+                return;
+            }
+            
+            // Ignorar mensagens de status
+            if (body.isStatusReply === true || body.waitingMessage === true) {
+                console.log('📊 Mensagem de status/waiting ignorada');
+                return;
+            }
+
+            var messageText = '';
+            var senderPhone = '';
+
+            // Extrair texto da mensagem (múltiplos formatos)
+            if (body.text) {
+                if (typeof body.text === 'string') messageText = body.text;
+                else if (body.text.message) messageText = body.text.message;
+                else if (body.text.body) messageText = body.text.body;
+                else if (body.text.text) messageText = body.text.text;
+            }
+            if (!messageText && body.message) {
+                if (typeof body.message === 'string') messageText = body.message;
+                else if (body.message.text) messageText = body.message.text;
+                else if (body.message.content) messageText = body.message.content;
+                else if (body.message.body) messageText = body.message.body;
+                else if (body.message.conversation) messageText = body.message.conversation;
+            }
+            if (!messageText && body.content) messageText = body.content;
+            if (!messageText && body.body) messageText = body.body;
+            if (!messageText && body.conversation) messageText = body.conversation;
+
+            // Extrair número do telefone (múltiplos formatos)
+            if (body.phone) senderPhone = body.phone;
+            else if (body.from) senderPhone = body.from;
+            else if (body.sender) senderPhone = body.sender;
+            else if (body.wa_id) senderPhone = body.wa_id;
+            else if (body.chatId) senderPhone = body.chatId;
+            else if (body.author) senderPhone = body.author;
+
+            console.log('📝 Mensagem bruta: "' + messageText + '"');
+            console.log('📱 Telefone bruto: "' + senderPhone + '"');
+
+            if (!senderPhone || !messageText || messageText.trim().length === 0) {
+                console.log('❌ Dados inválidos - ignorando');
+                return;
+            }
+
+            messageText = messageText.trim();
+
+            // Limpar número de telefone
+            var cleanPhone = senderPhone.toString().replace(/\D/g, '');
+            if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
+            if (cleanPhone.length < 10) {
+                console.log('❌ Telefone inválido (' + cleanPhone + ')');
+                await sendReply(senderPhone, 'Desculpe, não conseguimos identificar seu número. Tente novamente.');
+                return;
+            }
+
+            console.log('✅ Telefone limpo: ' + cleanPhone);
+            console.log('💬 Mensagem: "' + messageText + '"');
+
+            // Verificar se é contato amigo (silenciar)
+            var amigo = await supabase
+                .from('contatos_amigos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (amigo.data) {
+                console.log('👤 Contato AMIGO: ' + cleanPhone + ' - SILÊNCIO TOTAL');
+                return;
+            }
+
+            // Verificar se é cliente finalizado
+            var finalizado = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (finalizado.data) {
+                console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
+                const msgFinalizado = '🌟 Muito obrigado por confiar na GetVisa!\n\n' +
+                                     'Seu processo foi concluído com sucesso.\n\n' +
+                                     '📋 Serviço: ' + (finalizado.data.servico || 'não informado') + '\n' +
+                                     '📅 Finalizado em: ' + new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') + '\n\n' +
+                                     '⭐ Avalie nosso serviço: https://getvisa.com.br/avaliacao\n\n' +
+                                     'Estamos aqui para você sempre que precisar!\n\n' +
+                                     'Digite 0 para o MENU principal';
+                await sendReply(cleanPhone, msgFinalizado);
+                return;
+            }
+
+            // Verificar se é cliente ativo
+            var ativo = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            if (ativo.data) {
+                console.log('🔄 Cliente ATIVO: ' + cleanPhone);
+
+                var etapaMsg = '';
+                try {
+                    var etapa = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', cleanPhone)
+                        .maybeSingle();
+
+                    if (etapa.data) {
+                        var etapaInfo = ETAPAS[etapa.data.etapa_atual];
+                        etapaMsg = '\n📍 Etapa atual: ' + (etapaInfo && etapaInfo.label || etapa.data.etapa_atual);
+                    }
+                } catch (err) {
+                    console.log('Erro ao buscar etapa:', err);
+                }
+
+                const msgAtivo = '👋 Olá ' + (ativo.data.nome || 'Cliente') + '!\n\n' +
+                                'Seu processo está em andamento.' + etapaMsg + '\n' +
+                                '📊 Status: ' + (ativo.data.status || 'em_processo') + '\n\n' +
+                                'Como posso ajudar?\n\n' +
+                                'Digite 0 para o MENU principal';
+                await sendReply(cleanPhone, msgAtivo);
+                
+                // Processar a mensagem no menu
+                await processarMenu(cleanPhone, messageText, body);
+                return;
+            }
+
+            // Verificar se é cliente novo
+            console.log('🔍 Verificando se é NOVO...');
+
+            var novo = await supabase
+                .from('clientes_novos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+
+            var clienteExistente = novo.data;
+            if (!clienteExistente) {
+                var telefoneFormatado = formatarTelefone(cleanPhone);
+                var novoFormatado = await supabase
+                    .from('clientes_novos')
+                    .select('*')
+                    .eq('telefone', telefoneFormatado)
+                    .maybeSingle();
+                clienteExistente = novoFormatado.data;
+            }
+
+            if (clienteExistente) {
+                console.log('👤 Cliente NOVO já cadastrado: ' + cleanPhone);
+                await processarMenu(cleanPhone, messageText, body);
+                return;
+            }
+
+            // NOVO CLIENTE - Cadastrar e enviar boas-vindas
+            console.log('🆕 NOVO CLIENTE DETECTADO: ' + cleanPhone);
+            var nomeCliente = body.name || 
+                            (body.sender && body.sender.name) || 
+                            body.pushName || 
+                            body.contactName || 
+                            'Cliente';
+            
+            var resultado = await cadastrarCliente(cleanPhone, nomeCliente);
+            if (!resultado) {
+                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                return;
+            }
+            
+            console.log('✅ Cliente ' + cleanPhone + ' cadastrado com sucesso!');
+            
+            // Enviar mensagem de boas-vindas com menu
+            const boasVindas = '🎉 SEJA BEM-VINDO À GETVISA!\n\n' +
+                              'Olá ' + nomeCliente + '!\n\n' +
+                              'Somos especialistas em assessoria para vistos e passaportes.\n\n' +
+                              await getMenuPrincipal();
+            
+            await sendReply(cleanPhone, boasVindas);
+
+        } catch (error) {
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('Mensagem:', error.message);
+            console.error('Stack:', error.stack);
+
+            try {
+                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
+                if (phone) {
+                    var cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
+                    }
+                }
+            } catch (e) {
+                console.error('Falha ao enviar mensagem de erro:', e);
+            }
+        }
+    })();
+});
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('WEBHOOK Z-API RECEBIDO');
     console.log('Body:', JSON.stringify(req.body, null, 2));
