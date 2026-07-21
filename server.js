@@ -506,6 +506,7 @@ async function processarMenu(cleanPhone, messageText, body) {
     console.log('Telefone: ' + cleanPhone);
     console.log('Mensagem: "' + messageText + '"');
 
+    // PEGA O ESTADO ATUAL
     var state = userState.get(cleanPhone);
     if (!state) {
         state = {
@@ -519,25 +520,47 @@ async function processarMenu(cleanPhone, messageText, body) {
 
     console.log('Estado atual: nivel=' + state.nivel + ', service=' + state.service);
 
-    // Comando 0 - Volta ao menu principal
+    // ============================================================
+    // COMANDO 0 - VOLTA AO MENU PRINCIPAL (RESETA TUDO)
+    // ============================================================
     if (messageText === '0') {
         state.nivel = 'principal';
         state.service = null;
         userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
-        console.log('Voltou ao menu principal');
+        console.log('Voltou ao menu principal e resetou o estado');
         return;
     }
 
-    // Saudações
+    // ============================================================
+    // SAUDAÇÕES
+    // ============================================================
     var saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'teste'];
     if (saudacoes.indexOf(messageText.toLowerCase()) !== -1) {
+        // RESETA O ESTADO AO ENVIAR O MENU PRINCIPAL
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
         await sendReply(cleanPhone, await getMenuPrincipal());
         return;
     }
 
     // ============================================================
-    // SUBMENU - se já estiver no submenu
+    // VERIFICA SE É UM NÚMERO DE 1 A 7 (MENU PRINCIPAL)
+    // ============================================================
+    var numerosMenu = ['1', '2', '3', '4', '5', '6', '7'];
+    var isNumeroMenu = numerosMenu.indexOf(messageText) !== -1;
+
+    // SE FOR UM NÚMERO DE 1 A 7 E O ESTADO FOR SUBMENU, RESETA PARA PRINCIPAL
+    if (isNumeroMenu && state.nivel === 'submenu') {
+        console.log('USUARIO DIGITOU ' + messageText + ' NO SUBMENU - RESETANDO PARA PRINCIPAL');
+        state.nivel = 'principal';
+        state.service = null;
+        userState.set(cleanPhone, state);
+    }
+
+    // ============================================================
+    // SUBMENU - PROCESSAR OPÇÕES DO SUBMENU
     // ============================================================
     if (state.nivel === 'submenu') {
         console.log('ESTA NO SUBMENU - processando opcao: ' + messageText);
@@ -626,7 +649,7 @@ async function processarMenu(cleanPhone, messageText, body) {
             console.log('NOVO ESTADO: nivel=' + state.nivel + ', service=' + state.service);
             
             var submenuCompleto = await getSubmenu(serviceKey);
-            console.log('SUBMENU COMPLETO: ' + submenuCompleto);
+            console.log('SUBMENU: ' + submenuCompleto);
             
             await sendReply(cleanPhone, submenuCompleto);
             console.log('SUBMENU ENVIADO!');
