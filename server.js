@@ -646,7 +646,7 @@ Meu nome é *Moisés* e estou aqui para te ajudar!
         // Opção 6 - Avaliação gratuita
         if (messageText === '6') {
             const links = {
-                'visto_americano': 'https://getvisa.com.br/simulador-visto-americano',
+                'visto_americano': 'https://getvisa.com.br/simulador-visto-americano/',
                 'visto_canadense': 'https://getvisa.com.br/simulador-visto-canadense',
                 'visto_australiano': 'https://getvisa.com.br/simulador-visto-australiano',
                 'eta_uk': 'https://getvisa.com.br/simulador-eta-uk',
@@ -655,7 +655,7 @@ Meu nome é *Moisés* e estou aqui para te ajudar!
             };
             await sendReply(cleanPhone, `📊 *AVALIAÇÃO GRATUITA - ${getServiceName(service)}*
 
-🔗 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano'}
+🔗 ${links[service] || 'https://getvisa.com.br/simulador-visto-americano/'}
 
 ⏱️ Leva menos de 2 minutos!
 
