@@ -730,6 +730,7 @@
 const ETAPAS_CONFIG = {
     'formulario_enviado': { label: '📝 Formulário Enviado', color: '#3498db' },
     'analise_correcoes': { label: '🔍 Análise e Correções', color: '#f39c12' },
+    'abertura_processo': { label: '📋 Abertura do Processo', color: '#8e44ad' },
     'boleto_emitido': { label: '💰 Boleto Emitido', color: '#e67e22' },
     'boleto_pago': { label: '✅ Boleto Pago', color: '#27ae60' },
     'agendamento_realizado': { label: '📅 Agendamento Realizado', color: '#2980b9' },
@@ -739,8 +740,15 @@ const ETAPAS_CONFIG = {
 };
 
 const ETAPAS_ORDEM = [
-    'formulario_enviado', 'analise_correcoes', 'boleto_emitido', 'boleto_pago',
-    'agendamento_realizado', 'treinamento_realizado', 'entrevista_realizada', 'passaporte_retornado'
+    'formulario_enviado', 
+    'analise_correcoes', 
+    'abertura_processo', 
+    'boleto_emitido', 
+    'boleto_pago',
+    'agendamento_realizado', 
+    'treinamento_realizado', 
+    'entrevista_realizada', 
+    'passaporte_retornado'
 ];
 
 let clienteSelecionadoTimeline = null;
@@ -1213,46 +1221,37 @@ function renderizarTimeline(data) {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
         const dataValue = data[`data_${etapa}`];
         
-        // ============================================================
-        // LÓGICA CORRIGIDA: SÓ É CONCLUÍDA SE TIVER DATA
-        // ============================================================
-        const isConcluida = !!dataValue;  // ✅ TEM DATA = CONCLUÍDA
-        const isAtual = index === indexAtual && !isConcluida;  // ✅ ATUAL E SEM DATA = EM ANDAMENTO
-        const isPendente = index > indexAtual && !isConcluida;  // ✅ DEPOIS DA ATUAL = PENDENTE
+        // LÓGICA CORRIGIDA
+        const isConcluida = !!dataValue;
+        const isAtual = index === indexAtual && !isConcluida;
+        const isPendente = !isConcluida && !isAtual;
         
-        // ============================================================
-        // CORES CORRETAS
-        // ============================================================
-        let corBadge = '#e9ecef';  // Cinza (pendente)
+        let corBadge = '#e9ecef';
         let statusText = '⏳ Pendente';
         let statusClass = 'pendente';
+        let corTexto = '#999';
         
         if (isConcluida) {
-            corBadge = etapaInfo.color;  // Cor da etapa (verde)
+            corBadge = etapaInfo.color;
             statusText = '✅ Concluída';
             statusClass = 'concluida';
+            corTexto = '#27ae60';
         } else if (isAtual) {
-            corBadge = '#f39c12';  // Laranja (em andamento)
+            corBadge = '#f39c12';
             statusText = '🔄 Em andamento';
             statusClass = 'atual';
-        } else if (isPendente) {
-            corBadge = '#e9ecef';  // Cinza (pendente)
-            statusText = '⏳ Pendente';
-            statusClass = 'pendente';
+            corTexto = '#f39c12';
         }
         
-        // ============================================================
-        // RENDERIZAR ITEM
-        // ============================================================
         html += `
             <div class="timeline-item ${statusClass}">
                 <div class="timeline-badge" style="background-color: ${corBadge}; color: ${isPendente ? '#999' : 'white'};">
                     ${isConcluida ? '✓' : (isAtual ? '●' : (index + 1))}
                 </div>
                 <div class="timeline-content">
-                    <h6 style="${isAtual ? 'color: #f39c12; font-weight: bold;' : (isConcluida ? 'color: #27ae60;' : 'color: #999;')}">
+                    <h6 style="color: ${corTexto}; ${isAtual ? 'font-weight: bold;' : ''}">
                         ${etapaInfo.label || etapa}
-                        ${isAtual ? ' <span style="font-size:12px;background:#f39c12;color:white;padding:2px 8px;border-radius:12px;">ATUAL</span>' : ''}
+                        ${isAtual ? ' <span style="font-size:11px;background:#f39c12;color:white;padding:2px 8px;border-radius:12px;">ATUAL</span>' : ''}
                     </h6>
                     <small>${statusText}</small>
                     ${dataValue ? `<br><small class="text-muted">📅 ${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
@@ -1264,7 +1263,6 @@ function renderizarTimeline(data) {
     html += '</div>';
     container.innerHTML = html;
     
-    // Atualizar botão de avanço
     const isUltima = etapaAtual === 'passaporte_retornado';
     const btnAvancar = document.querySelector('#timeline-actions .btn-success');
     if (btnAvancar) {
