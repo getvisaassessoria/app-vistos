@@ -1062,16 +1062,53 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
 
 function gerarMensagemEtapa(etapa, nomeCliente) {
     const mensagens = {
-        'formulario_enviado': 'Ola ' + nomeCliente + '! Seu formulario DS-160 foi recebido com sucesso! Iniciamos a analise do seu processo. Proxima etapa: Analise e correcoes dos dados.',
-        'analise_correcoes': nomeCliente + ', estamos analisando seu processo! Nossa equipe esta revisando todos os dados do seu formulario. Em breve entraremos em contato com o proximo passo.',
-        'boleto_emitido': nomeCliente + ', boleto emitido! O boleto do consulado foi gerado com sucesso. Voce recebera o PDF por e-mail. Prazo de pagamento: 7 dias uteis.',
-        'boleto_pago': 'Boleto pago, ' + nomeCliente + '! Confirmamos o pagamento do seu boleto consular. Proxima etapa: Agendamento da entrevista.',
-        'agendamento_realizado': 'Entrevista agendada, ' + nomeCliente + '! Sua entrevista foi agendada com sucesso. Voce recebera todos os detalhes por e-mail e WhatsApp.',
-        'treinamento_realizado': 'Treinamento concluido, ' + nomeCliente + '! Excelente! Voce esta preparado para a entrevista.',
-        'entrevista_realizada': 'Entrevista realizada, ' + nomeCliente + '! Parabens por completar sua entrevista! Aguarde o retorno do seu passaporte.',
-        'passaporte_retornado': 'PARABENS, ' + nomeCliente + '! Seu passaporte com o visto foi retornado! Seu processo foi concluido com sucesso! Agradecemos por confiar na GetVisa Assessoria!'
+        'formulario_enviado': `📋 Olá ${nomeCliente}!\n\n` +
+                             `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
+                             `✅ Iniciamos a análise do seu processo.\n\n` +
+                             `📍 Próxima etapa: Análise e correções dos dados.\n\n` +
+                             `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,
+
+        'analise_correcoes': `🔍 Olá ${nomeCliente}!\n\n` +
+                            `Estamos analisando seu processo!\n\n` +
+                            `Nossa equipe está revisando todos os dados do seu formulário.\n\n` +
+                            `📱 Em breve entraremos em contato com o próximo passo.\n\n` +
+                            `Fique tranquilo(a), estamos cuidando de tudo!`,
+
+        'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
+                         `O boleto do consulado foi gerado com sucesso!\n\n` +
+                         `📧 Você receberá o PDF por e-mail.\n\n` +
+                         `⏰ Prazo de pagamento: 7 dias úteis.\n\n` +
+                         `⚠️ Não esqueça de pagar dentro do prazo!`,
+
+        'boleto_pago': `✅ Olá ${nomeCliente}!\n\n` +
+                      `Confirmamos o pagamento do seu boleto consular.\n\n` +
+                      `📍 Próxima etapa: Agendamento da entrevista.\n\n` +
+                      `🚀 Estamos avançando no seu processo!`,
+
+        'agendamento_realizado': `📅 Olá ${nomeCliente}!\n\n` +
+                                `Sua entrevista foi agendada com sucesso!\n\n` +
+                                `📧 Você receberá todos os detalhes por e-mail e WhatsApp.\n\n` +
+                                `🎯 Prepare-se, você está quase lá!`,
+
+        'treinamento_realizado': `🎓 Olá ${nomeCliente}!\n\n` +
+                                `Treinamento concluído com sucesso!\n\n` +
+                                `💪 Você está preparado para a entrevista.\n\n` +
+                                `Confie no seu potencial, você vai arrasar!`,
+
+        'entrevista_realizada': `🎯 Olá ${nomeCliente}!\n\n` +
+                               `Parabéns por completar sua entrevista!\n\n` +
+                               `📬 Aguarde o retorno do seu passaporte.\n\n` +
+                               `🙏 Estamos torcendo por você!`,
+
+        'passaporte_retornado': `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
+                               `Seu passaporte com o visto foi retornado!\n\n` +
+                               `✅ Seu processo foi concluído com sucesso!\n\n` +
+                               `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
+                               `✈️ Boa viagem! Vá realizar seus sonhos!`
     };
-    return mensagens[etapa] || nomeCliente + ', seu processo avancou para: ' + (ETAPAS[etapa] && ETAPAS[etapa].label || etapa);
+    
+    // Se a etapa não tiver mensagem personalizada, usar mensagem genérica
+    return mensagens[etapa] || `📌 ${nomeCliente}, seu processo avançou para: ${ETAPAS[etapa] ? ETAPAS[etapa].label : etapa}`;
 }
 
 function validateDS160(data) {
@@ -1948,6 +1985,7 @@ app.post('/api/painel/mover', async function(req, res) {
         if (!cliente.data) return res.status(404).json({ success: false, message: 'Cliente nao encontrado em clientes_novos' });
 
         if (destino === 'ativo') {
+            // 1. Inserir em clientes_ativos
             var insert = await supabase.from('clientes_ativos').insert({
                 telefone: cliente.data.telefone,
                 nome: cliente.data.nome,
@@ -1956,34 +1994,30 @@ app.post('/api/painel/mover', async function(req, res) {
             });
             if (insert.error) return res.status(500).json({ success: false, message: insert.error.message });
             
+            // 2. Criar etapa inicial
             try { 
                 await criarEtapaInicial(cliente.data.telefone); 
             } catch (err) { 
                 console.error('Erro ao criar etapa:', err); 
             }
             
-            // ============================================================
-            // 🔔 ENVIAR NOTIFICAÇÃO AUTOMÁTICA PARA O CLIENTE
-            // ============================================================
+            // 3. 🔔 NOTIFICAR CLIENTE (USANDO A FUNÇÃO EXISTENTE)
             try {
-                const nomeCliente = cliente.data.nome && !cliente.data.nome.startsWith('Cliente_') 
-                    ? cliente.data.nome.split(' ')[0] 
-                    : 'Cliente';
+                // Buscar a etapa que foi criada
+                const { data: etapa } = await supabase
+                    .from('etapas_processo')
+                    .select('etapa_atual')
+                    .eq('cliente_telefone', cliente.data.telefone)
+                    .maybeSingle();
                 
-                const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
-                               `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
-                               `📋 Status: Em andamento\n` +
-                               `📍 Etapa atual: Formulário recebido\n\n` +
-                               `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
-                               `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
-                               `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+                const etapaAtual = etapa ? etapa.etapa_atual : 'formulario_enviado';
                 
-                await enviarWhatsApp(cliente.data.telefone, mensagem);
-                console.log(`✅ Notificação automática enviada para ${telefone}`);
+                // USAR A FUNÇÃO EXISTENTE notificarClienteEtapa
+                await notificarClienteEtapa(cliente.data.telefone, etapaAtual);
+                console.log(`✅ Notificação de início enviada para ${telefone}`);
             } catch (err) {
-                console.error('❌ Erro ao enviar notificação automática:', err);
+                console.error('❌ Erro ao enviar notificação de início:', err);
             }
-            // ============================================================
             
         } else {
             // Destino: amigo
@@ -1993,17 +2027,6 @@ app.post('/api/painel/mover', async function(req, res) {
                 criado_em: cliente.data.data_contato
             });
             if (insert.error) return res.status(500).json({ success: false, message: insert.error.message });
-            
-            // 🔔 Notificar que foi marcado como amigo (opcional)
-            try {
-                const mensagem = `🔇 Olá! Você foi marcado como contato amigo no sistema GetVisa.\n\n` +
-                               `Isso significa que você não receberá mais notificações automáticas.\n\n` +
-                               `Se isso foi um engano, entre em contato conosco: https://wa.me/5521974601812`;
-                await enviarWhatsApp(cliente.data.telefone, mensagem);
-                console.log(`✅ Notificação de "amigo" enviada para ${telefone}`);
-            } catch (err) {
-                console.error('❌ Erro ao enviar notificação de amigo:', err);
-            }
         }
 
         await supabase.from('clientes_novos').delete().eq('telefone', telefone);
@@ -2011,7 +2034,7 @@ app.post('/api/painel/mover', async function(req, res) {
         res.json({ 
             success: true, 
             message: 'Cliente ' + telefone + ' movido para ' + destino,
-            notificacao_enviada: true
+            notificacao_enviada: destino === 'ativo'
         });
         
     } catch (error) {
@@ -2217,8 +2240,14 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
 
     if (updated.error) throw updated.error;
 
+    // 🔔 NOTIFICAR CLIENTE SOBRE O AVANÇO DA ETAPA
     if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
-        await notificarClienteEtapa(telefone, proximaEtapa);
+        try {
+            await notificarClienteEtapa(telefone, proximaEtapa);
+            console.log(`✅ Notificação de etapa enviada para ${telefone}: ${proximaEtapa}`);
+        } catch (err) {
+            console.error(`❌ Erro ao notificar cliente sobre etapa ${proximaEtapa}:`, err);
+        }
     }
 
     console.log('Cliente ' + telefone + ' avançou para: ' + proximaEtapa);
@@ -2364,6 +2393,236 @@ app.post('/api/test/webhook-manual', async function(req, res) {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ============ ROTAS ADMIN ============
+
+// 1. Teste do Z-API
+app.get('/api/test/zapi', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const testPhone = '21974601812';
+        const testMessage = '🧪 Teste de conexão Z-API - ' + new Date().toLocaleString('pt-BR');
+        
+        console.log(`📨 Testando Z-API para: ${testPhone}`);
+        const result = await enviarWhatsApp(testPhone, testMessage);
+        
+        res.json({
+            success: result,
+            message: result ? '✅ Mensagem enviada com sucesso!' : '❌ Falha ao enviar mensagem',
+            phone: testPhone,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Erro no teste Z-API:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 2. Verificar cliente
+app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const telefone = req.params.telefone;
+        console.log(`🔍 Verificando cliente: ${telefone}`);
+        
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        let etapa = null;
+        if (cliente) {
+            const { data: etapaData } = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefone)
+                .maybeSingle();
+            etapa = etapaData;
+        }
+        
+        res.json({
+            success: true,
+            telefone: telefone,
+            cliente: cliente || null,
+            etapa: etapa || null,
+            encontrado: !!cliente
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// 3. Notificar cliente
+app.post('/api/admin/notificar-cliente', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone } = req.body;
+        
+        if (!telefone) {
+            return res.status(400).json({ error: 'Telefone é obrigatório' });
+        }
+        
+        console.log(`📨 Enviando notificação para: ${telefone}`);
+        
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        
+        if (!cliente) {
+            return res.status(404).json({ 
+                error: 'Cliente não encontrado em clientes_ativos',
+                telefone: telefone
+            });
+        }
+        
+        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+            ? cliente.nome.split(' ')[0] 
+            : 'Cliente';
+        
+        const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                       `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                       `📋 Status: Em andamento\n` +
+                       `📍 Etapa atual: Formulário recebido\n\n` +
+                       `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                       `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                       `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+        
+        const enviado = await enviarWhatsApp(telefone, mensagem);
+        
+        res.json({
+            success: true,
+            telefone: telefone,
+            cliente: cliente.nome,
+            notificacao_enviada: enviado
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao notificar cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// 4. Mover cliente com notificação automática (versão melhorada do /api/painel/mover)
+app.post('/api/painel/mover-com-notificacao', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone, destino } = req.body;
+        
+        if (!telefone || !destino) {
+            return res.status(400).json({ error: 'Telefone e destino são obrigatórios' });
+        }
+        
+        const { data: cliente, error } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+        
+        if (!cliente) {
+            return res.status(404).json({ error: 'Cliente não encontrado em clientes_novos' });
+        }
+        
+        if (destino === 'ativo') {
+            const { data, error: insertError } = await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: cliente.telefone,
+                    nome: cliente.nome,
+                    criado_em: cliente.data_contato,
+                    atualizado_em: new Date().toISOString()
+                })
+                .select()
+                .single();
+            
+            if (insertError) {
+                return res.status(500).json({ error: insertError.message });
+            }
+            
+            try {
+                await criarEtapaInicial(cliente.telefone);
+            } catch (err) {
+                console.error('Erro ao criar etapa:', err);
+            }
+            
+            // Enviar notificação automática
+            try {
+                const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+                    ? cliente.nome.split(' ')[0] 
+                    : 'Cliente';
+                
+                const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
+                               `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
+                               `📋 Status: Em andamento\n` +
+                               `📍 Etapa atual: Formulário recebido\n\n` +
+                               `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                               `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
+                               `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
+                
+                await enviarWhatsApp(cliente.telefone, mensagem);
+            } catch (err) {
+                console.error('Erro ao enviar notificação:', err);
+            }
+            
+            await supabase.from('clientes_novos').delete().eq('telefone', telefone);
+            
+            res.json({
+                success: true,
+                message: 'Cliente movido para ATIVO com sucesso',
+                cliente: data,
+                notificacao_enviada: true
+            });
+        } else {
+            res.status(400).json({ error: 'Destino inválido. Use "ativo"' });
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao mover cliente:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+console.log('✅ Rotas admin carregadas com sucesso!');
 
 // ============ ROTA PARA NOTIFICAR CLIENTE MANUALMENTE ============
 app.post('/api/admin/notificar-cliente', async function(req, res) {
