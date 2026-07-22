@@ -1208,27 +1208,63 @@ function renderizarTimeline(data) {
         </div>
         <div class="timeline">
     `;
+    
     ETAPAS_ORDEM.forEach((etapa, index) => {
-        const isConcluida = index <= indexAtual;
-        const isAtual = index === indexAtual;
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
         const dataValue = data[`data_${etapa}`];
+        
+        // ============================================================
+        // LÓGICA CORRIGIDA: SÓ É CONCLUÍDA SE TIVER DATA
+        // ============================================================
+        const isConcluida = !!dataValue;  // ✅ TEM DATA = CONCLUÍDA
+        const isAtual = index === indexAtual && !isConcluida;  // ✅ ATUAL E SEM DATA = EM ANDAMENTO
+        const isPendente = index > indexAtual && !isConcluida;  // ✅ DEPOIS DA ATUAL = PENDENTE
+        
+        // ============================================================
+        // CORES CORRETAS
+        // ============================================================
+        let corBadge = '#e9ecef';  // Cinza (pendente)
+        let statusText = '⏳ Pendente';
+        let statusClass = 'pendente';
+        
+        if (isConcluida) {
+            corBadge = etapaInfo.color;  // Cor da etapa (verde)
+            statusText = '✅ Concluída';
+            statusClass = 'concluida';
+        } else if (isAtual) {
+            corBadge = '#f39c12';  // Laranja (em andamento)
+            statusText = '🔄 Em andamento';
+            statusClass = 'atual';
+        } else if (isPendente) {
+            corBadge = '#e9ecef';  // Cinza (pendente)
+            statusText = '⏳ Pendente';
+            statusClass = 'pendente';
+        }
+        
+        // ============================================================
+        // RENDERIZAR ITEM
+        // ============================================================
         html += `
-            <div class="timeline-item ${isConcluida ? 'concluida' : 'pendente'} ${isAtual ? 'atual' : ''}">
-                <div class="timeline-badge" style="background-color: ${isConcluida ? etapaInfo.color : '#e9ecef'}">
-                    ${isConcluida ? '✓' : index + 1}
+            <div class="timeline-item ${statusClass}">
+                <div class="timeline-badge" style="background-color: ${corBadge}; color: ${isPendente ? '#999' : 'white'};">
+                    ${isConcluida ? '✓' : (isAtual ? '●' : (index + 1))}
                 </div>
                 <div class="timeline-content">
-                    <h6>${etapaInfo.label || etapa}</h6>
-                    <small>${isAtual ? '🔄 Em andamento' : (isConcluida ? '✅ Concluída' : '⏳ Pendente')}</small>
-                    ${dataValue ? `<br><small class="text-muted">${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
+                    <h6 style="${isAtual ? 'color: #f39c12; font-weight: bold;' : (isConcluida ? 'color: #27ae60;' : 'color: #999;')}">
+                        ${etapaInfo.label || etapa}
+                        ${isAtual ? ' <span style="font-size:12px;background:#f39c12;color:white;padding:2px 8px;border-radius:12px;">ATUAL</span>' : ''}
+                    </h6>
+                    <small>${statusText}</small>
+                    ${dataValue ? `<br><small class="text-muted">📅 ${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
                 </div>
             </div>
         `;
     });
+    
     html += '</div>';
     container.innerHTML = html;
     
+    // Atualizar botão de avanço
     const isUltima = etapaAtual === 'passaporte_retornado';
     const btnAvancar = document.querySelector('#timeline-actions .btn-success');
     if (btnAvancar) {
@@ -1236,6 +1272,7 @@ function renderizarTimeline(data) {
         btnAvancar.textContent = isUltima ? '✅ Processo Finalizado' : '➡️ Avançar Etapa';
     }
 }
+
 
 async function avancarEtapa() {
     if (!clienteSelecionadoTimeline) { showToast('Selecione um cliente primeiro!', 'info'); return; }
