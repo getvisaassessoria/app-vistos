@@ -62,12 +62,13 @@ const BOAS_VINDAS_MESSAGES = {
 };
 
 const ETAPAS = {
-    'formulario_enviado': { id: 'formulario_enviado', label: 'Formulario Enviado', next: 'analise_correcoes', color: '#3498db' },
-    'analise_correcoes': { id: 'analise_correcoes', label: 'Analise e Correcoes', next: 'boleto_emitido', color: '#f39c12' },
+    'formulario_enviado': { id: 'formulario_enviado', label: 'Formulário Enviado', next: 'analise_correcoes', color: '#3498db' },
+    'analise_correcoes': { id: 'analise_correcoes', label: 'Análise e Correções', next: 'abertura_processo', color: '#f39c12' },
+    'abertura_processo': { id: 'abertura_processo', label: 'Abertura do Processo', next: 'boleto_emitido', color: '#8e44ad' },
     'boleto_emitido': { id: 'boleto_emitido', label: 'Boleto Emitido', next: 'boleto_pago', color: '#e67e22' },
     'boleto_pago': { id: 'boleto_pago', label: 'Boleto Pago', next: 'agendamento_realizado', color: '#27ae60' },
     'agendamento_realizado': { id: 'agendamento_realizado', label: 'Agendamento Realizado', next: 'treinamento_realizado', color: '#2980b9' },
-    'treinamento_realizado': { id: 'treinamento_realizado', label: 'Treinamento Concluido', next: 'entrevista_realizada', color: '#8e44ad' },
+    'treinamento_realizado': { id: 'treinamento_realizado', label: 'Treinamento Concluído', next: 'entrevista_realizada', color: '#8e44ad' },
     'entrevista_realizada': { id: 'entrevista_realizada', label: 'Entrevista Realizada', next: 'passaporte_retornado', color: '#2c3e50' },
     'passaporte_retornado': { id: 'passaporte_retornado', label: 'Passaporte Retornado', next: null, color: '#2ecc71' }
 };
@@ -1073,6 +1074,12 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
                             `Nossa equipe está revisando todos os dados do seu formulário.\n\n` +
                             `📱 Em breve entraremos em contato com o próximo passo.\n\n` +
                             `Fique tranquilo(a), estamos cuidando de tudo!`,
+
+        'abertura_processo': `📋 Olá ${nomeCliente}!\n\n` +
+                    `Seu processo foi aberto no consulado americano!\n\n` +
+                    `✅ O pagamento da taxa MRV foi confirmado.\n\n` +
+                    `📍 Próxima etapa: Emissão do boleto consular.\n\n` +
+                    `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,                    
 
         'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
                          `O boleto do consulado foi gerado com sucesso!\n\n` +
