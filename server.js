@@ -1620,6 +1620,26 @@ async function gerarPDF_DS160(data) {
 }
 
 // ============ ROTAS ============
+
+// ============ TRATAMENTO DE ERROS GLOBAL ============
+
+// Middleware para log de todas as requisições
+app.use((req, res, next) => {
+    console.log(`📨 ${req.method} ${req.url}`);
+    next();
+});
+
+// Middleware para capturar erros nas rotas
+app.use((err, req, res, next) => {
+    console.error('❌ ERRO GLOBAL:', err);
+    console.error('❌ Stack:', err.stack);
+    res.status(500).json({
+        erro: 'Erro interno do servidor',
+        mensagem: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+});
+
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('📨 WEBHOOK Z-API RECEBIDO');
     console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -2215,56 +2235,93 @@ app.post('/api/etapas/avancar', async function(req, res) {
 });
 
 async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
-    var etapaId = etapaAtual.etapa_atual;
-    var proximaEtapa = ETAPAS[etapaId] && ETAPAS[etapaId].next;
-
-    if (!proximaEtapa) {
-        return res.status(400).json({ erro: 'Cliente ja esta na ultima etapa' });
-    }
-
-    var historicoAtualizado = (etapaAtual.historico || []).concat([{
-        etapa: etapaId,
-        data: new Date().toISOString(),
-        nota: nota || 'Avanco manual',
-        observacao: observacao || 'Avancado pelo painel administrativo'
-    }]);
-
-    var dadosAtualizacao = {
-        etapa_atual: proximaEtapa,
-        data_atualizacao: new Date().toISOString(),
-        historico: historicoAtualizado
-    };
-
-    var campoData = 'data_' + proximaEtapa;
-    dadosAtualizacao[campoData] = new Date().toISOString();
-
-    var updated = await supabase
-        .from('etapas_processo')
-        .update(dadosAtualizacao)
-        .eq('cliente_telefone', telefone)
-        .select()
-        .single();
-
-    if (updated.error) throw updated.error;
-
-    // 🔔 NOTIFICAR CLIENTE SOBRE O AVANÇO DA ETAPA
-    if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
-        try {
-            await notificarClienteEtapa(telefone, proximaEtapa);
-            console.log(`✅ Notificação de etapa enviada para ${telefone}: ${proximaEtapa}`);
-        } catch (err) {
-            console.error(`❌ Erro ao notificar cliente sobre etapa ${proximaEtapa}:`, err);
+    try {
+        console.log('📌 processarAvanco iniciado para:', telefone);
+        
+        var etapaId = etapaAtual.etapa_atual;
+        console.log('📌 etapaId:', etapaId);
+        
+        var etapaInfo = ETAPAS[etapaId];
+        console.log('📌 etapaInfo:', JSON.stringify(etapaInfo));
+        
+        if (!etapaInfo) {
+            console.error('❌ Etapa não encontrada:', etapaId);
+            return res.status(400).json({ erro: 'Etapa não encontrada: ' + etapaId });
         }
+        
+        var proximaEtapa = etapaInfo.next;
+        console.log('📌 proximaEtapa:', proximaEtapa);
+
+        if (!proximaEtapa) {
+            return res.status(400).json({ erro: 'Cliente ja esta na ultima etapa' });
+        }
+
+        // Verificar se a etapa existe no ETAPAS
+        if (!ETAPAS[proximaEtapa]) {
+            console.error('❌ Próxima etapa não encontrada:', proximaEtapa);
+            return res.status(400).json({ erro: 'Próxima etapa não encontrada: ' + proximaEtapa });
+        }
+
+        var historicoAtualizado = (etapaAtual.historico || []).concat([{
+            etapa: etapaId,
+            data: new Date().toISOString(),
+            nota: nota || 'Avanco manual',
+            observacao: observacao || 'Avancado pelo painel administrativo'
+        }]);
+
+        var dadosAtualizacao = {
+            etapa_atual: proximaEtapa,
+            data_atualizacao: new Date().toISOString(),
+            historico: historicoAtualizado
+        };
+
+        var campoData = 'data_' + proximaEtapa;
+        console.log('📌 campoData:', campoData);
+        dadosAtualizacao[campoData] = new Date().toISOString();
+
+        console.log('📌 Atualizando para:', JSON.stringify(dadosAtualizacao));
+
+        var updated = await supabase
+            .from('etapas_processo')
+            .update(dadosAtualizacao)
+            .eq('cliente_telefone', telefone)
+            .select()
+            .single();
+
+        if (updated.error) {
+            console.error('❌ Erro no update:', updated.error);
+            throw updated.error;
+        }
+
+        console.log('✅ Update realizado com sucesso');
+
+        if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+            try {
+                await notificarClienteEtapa(telefone, proximaEtapa);
+                console.log(`✅ Notificação de etapa enviada para ${telefone}: ${proximaEtapa}`);
+            } catch (err) {
+                console.error(`❌ Erro ao notificar cliente:`, err);
+            }
+        }
+
+        console.log('✅ Cliente ' + telefone + ' avançou para: ' + proximaEtapa);
+
+        res.json({
+            sucesso: true,
+            etapa_anterior: etapaId,
+            etapa_atual: proximaEtapa,
+            dados: updated.data
+        });
+        
+    } catch (error) {
+        console.error('❌ ERRO em processarAvanco:', error);
+        console.error('❌ Stack:', error.stack);
+        res.status(500).json({ 
+            erro: 'Erro ao processar avanço', 
+            detalhe: error.message,
+            stack: error.stack 
+        });
     }
-
-    console.log('Cliente ' + telefone + ' avançou para: ' + proximaEtapa);
-
-    res.json({
-        sucesso: true,
-        etapa_anterior: etapaId,
-        etapa_atual: proximaEtapa,
-        dados: updated.data
-    });
 }
 
 app.get('/api/etapas/historico/:telefone', async function(req, res) {
