@@ -69,8 +69,9 @@ const ETAPAS = {
     'boleto_pago': { id: 'boleto_pago', label: 'Boleto Pago', next: 'agendamento_realizado', color: '#27ae60' },
     'agendamento_realizado': { id: 'agendamento_realizado', label: 'Agendamento Realizado', next: 'treinamento_realizado', color: '#2980b9' },
     'treinamento_realizado': { id: 'treinamento_realizado', label: 'Treinamento Concluído', next: 'entrevista_realizada', color: '#8e44ad' },
-    'entrevista_realizada': { id: 'entrevista_realizada', label: 'Entrevista Realizada', next: 'passaporte_retornado', color: '#2c3e50' },
-    'passaporte_retornado': { id: 'passaporte_retornado', label: 'Passaporte Retornado', next: null, color: '#2ecc71' }
+    'entrevista_realizada': { id: 'entrevista_realizada', label: '🎤 Entrevista Realizada', next: null, color: '#2c3e50' },
+    'passaporte_retornado': { id: 'passaporte_retornado', label: '✅ Passaporte Retornado (Aprovado)', next: null, color: '#2ecc71' },
+    'visto_recusado': { id: 'visto_recusado', label: '❌ Visto Recusado', next: null, color: '#ef4444' }
 };
 
 const RADIO_MAPPING = {
@@ -1046,6 +1047,12 @@ async function criarEtapaComCliente(cliente, telefone) {
 }
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
+    // ⚠️ NÃO ENVIAR NOTIFICAÇÃO PARA ENTREVISTA REALIZADA
+    if (novaEtapa === 'entrevista_realizada') {
+        console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa} (resultado é no ato da entrevista)`);
+        return;
+    }
+    
     try {
         const { data: cliente } = await supabase
             .from('clientes_ativos')
@@ -1054,6 +1061,13 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
             .single();
         const nomeCliente = cliente && cliente.nome || 'Cliente';
         const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
+        
+        // Se não tiver mensagem definida, não enviar
+        if (!mensagem) {
+            console.log(`⏭️ Sem mensagem definida para etapa: ${novaEtapa}`);
+            return;
+        }
+        
         await enviarWhatsApp(telefone, mensagem);
         console.log('Notificacao enviada para ' + telefone + ': ' + novaEtapa);
     } catch (error) {
@@ -1076,42 +1090,46 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
                             `Fique tranquilo(a), estamos cuidando de tudo!`,
 
         'abertura_processo': `📋 Olá ${nomeCliente}!\n\n` +
-                    `Seu processo foi aberto no consulado americano!\n\n` +
-                    `✅ O pagamento da taxa MRV foi confirmado.\n\n` +
-                    `📍 Próxima etapa: Emissão do boleto consular.\n\n` +
-                    `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,                    
+                             `Seu processo foi aberto no consulado americano!\n\n` +
+                             `✅ O pagamento da taxa MRV foi confirmado.\n\n` +
+                             `📍 Próxima etapa: Emissão do boleto consular.\n\n` +
+                             `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,
 
         'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
-                         `O boleto do consulado foi gerado com sucesso!\n\n` +
-                         `📧 Você receberá o PDF por e-mail.\n\n` +
-                         `⏰ Prazo de pagamento: 7 dias úteis.\n\n` +
-                         `⚠️ Não esqueça de pagar dentro do prazo!`,
+                          `O boleto do consulado foi gerado com sucesso!\n\n` +
+                          `📧 Você receberá o PDF por e-mail.\n\n` +
+                          `⏰ Prazo de pagamento: 7 dias úteis.\n\n` +
+                          `⚠️ Não esqueça de pagar dentro do prazo!`,
 
         'boleto_pago': `✅ Olá ${nomeCliente}!\n\n` +
-                      `Confirmamos o pagamento do seu boleto consular.\n\n` +
-                      `📍 Próxima etapa: Agendamento da entrevista.\n\n` +
-                      `🚀 Estamos avançando no seu processo!`,
+                       `Confirmamos o pagamento do seu boleto consular.\n\n` +
+                       `📍 Próxima etapa: Agendamento da entrevista.\n\n` +
+                       `🚀 Estamos avançando no seu processo!`,
 
         'agendamento_realizado': `📅 Olá ${nomeCliente}!\n\n` +
-                                `Sua entrevista foi agendada com sucesso!\n\n` +
-                                `📧 Você receberá todos os detalhes por e-mail e WhatsApp.\n\n` +
-                                `🎯 Prepare-se, você está quase lá!`,
+                                 `Sua entrevista foi agendada com sucesso!\n\n` +
+                                 `📧 Você receberá todos os detalhes por e-mail e WhatsApp.\n\n` +
+                                 `🎯 Prepare-se, você está quase lá!`,
 
         'treinamento_realizado': `🎓 Olá ${nomeCliente}!\n\n` +
-                                `Treinamento concluído com sucesso!\n\n` +
-                                `💪 Você está preparado para a entrevista.\n\n` +
-                                `Confie no seu potencial, você vai arrasar!`,
+                                 `Treinamento concluído com sucesso!\n\n` +
+                                 `💪 Você está preparado para a entrevista.\n\n` +
+                                 `Confie no seu potencial, você vai arrasar!`,
 
-        'entrevista_realizada': `🎯 Olá ${nomeCliente}!\n\n` +
-                               `Parabéns por completar sua entrevista!\n\n` +
-                               `📬 Aguarde o retorno do seu passaporte.\n\n` +
-                               `🙏 Estamos torcendo por você!`,
 
         'passaporte_retornado': `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
-                               `Seu passaporte com o visto foi retornado!\n\n` +
-                               `✅ Seu processo foi concluído com sucesso!\n\n` +
-                               `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
-                               `✈️ Boa viagem! Vá realizar seus sonhos!`
+                                `Seu passaporte com o visto foi retornado!\n\n` +
+                                `✅ Seu processo foi concluído com sucesso!\n\n` +
+                                `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
+                                `✈️ Boa viagem! Vá realizar seus sonhos!`,
+
+        'visto_recusado': `😔 Olá ${nomeCliente}!\n\n` +
+                          `Infelizmente seu visto foi recusado.\n\n` +
+                          `Não desanime! Vamos analisar o motivo da recusa e\n` +
+                          `identificar como podemos ajudar na próxima tentativa.\n\n` +
+                          `📱 Entre em contato conosco para uma análise gratuita:\n` +
+                          `https://wa.me/5521974601812\n\n` +
+                          `💪 Ainda há esperança! Estamos aqui para ajudar!`
     };
     
     // Se a etapa não tiver mensagem personalizada, usar mensagem genérica
@@ -3096,6 +3114,91 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
         res.status(500).json({ 
             success: false, 
             error: error.message 
+        });
+    }
+});
+
+// ============ ROTA PARA FINALIZAR PROCESSO (APROVADO/RECUSADO) ============
+app.post('/api/etapas/finalizar', async function(req, res) {
+    try {
+        var telefone = req.body.telefone;
+        var etapaFinal = req.body.etapa_final;
+        var nota = req.body.nota || 'Processo finalizado';
+        
+        if (!telefone || !etapaFinal) {
+            return res.status(400).json({ erro: 'Telefone e etapa_final são obrigatórios' });
+        }
+        
+        if (!['passaporte_retornado', 'visto_recusado'].includes(etapaFinal)) {
+            return res.status(400).json({ erro: 'Etapa final inválida. Use passaporte_retornado ou visto_recusado' });
+        }
+        
+        console.log(`📌 Finalizando processo para ${telefone} com: ${etapaFinal}`);
+        
+        // Buscar etapa atual
+        const { data: etapaAtual, error } = await supabase
+            .from('etapas_processo')
+            .select('*')
+            .eq('cliente_telefone', telefone)
+            .maybeSingle();
+        
+        if (error) {
+            return res.status(500).json({ erro: error.message });
+        }
+        
+        if (!etapaAtual) {
+            return res.status(404).json({ erro: 'Cliente não encontrado em etapas_processo' });
+        }
+        
+        // Atualizar para a etapa final
+        var historicoAtualizado = (etapaAtual.historico || []).concat([{
+            etapa: etapaAtual.etapa_atual,
+            data: new Date().toISOString(),
+            nota: nota,
+            observacao: `Processo finalizado com: ${etapaFinal === 'passaporte_retornado' ? '✅ APROVADO' : '❌ RECUSADO'}`
+        }]);
+        
+        var dadosAtualizacao = {
+            etapa_atual: etapaFinal,
+            data_atualizacao: new Date().toISOString(),
+            historico: historicoAtualizado
+        };
+        
+        var campoData = 'data_' + etapaFinal;
+        dadosAtualizacao[campoData] = new Date().toISOString();
+        
+        var updated = await supabase
+            .from('etapas_processo')
+            .update(dadosAtualizacao)
+            .eq('cliente_telefone', telefone)
+            .select()
+            .single();
+        
+        if (updated.error) {
+            throw updated.error;
+        }
+        
+        // 🔔 NOTIFICAR CLIENTE
+        if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+            try {
+                await notificarClienteEtapa(telefone, etapaFinal);
+                console.log(`✅ Notificação de finalização enviada para ${telefone}: ${etapaFinal}`);
+            } catch (err) {
+                console.error(`❌ Erro ao notificar:`, err);
+            }
+        }
+        
+        res.json({
+            sucesso: true,
+            etapa_atual: etapaFinal,
+            dados: updated.data
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao finalizar processo:', error);
+        res.status(500).json({ 
+            erro: 'Erro ao finalizar processo', 
+            detalhe: error.message 
         });
     }
 });
