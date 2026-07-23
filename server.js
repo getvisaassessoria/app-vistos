@@ -1751,32 +1751,25 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
 
             // 2. VERIFICAR FINALIZADO (PRIORIDADE MÁXIMA)
-            console.log('🔍 Verificando FINALIZADO...');
-            var finalizado = await supabase
-                .from('clientes_finalizados')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
+console.log('🔍 Verificando FINALIZADO...');
+console.log('🔍 Buscando no banco com telefone:', cleanPhone);
 
-            console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+// 🔥 TESTE DIRETO - VAI MOSTRAR O QUE ESTÁ ACONTECENDO
+const testeFinalizado = await supabase
+    .from('clientes_finalizados')
+    .select('*')
+    .eq('telefone', cleanPhone);
 
-            if (finalizado.data) {
-                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.data.nome);
-                
-                const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
-                const servico = finalizado.data.servico || 'processo';
-                const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
-                const observacoes = finalizado.data.observacoes || '';
-                
-                let msg = `👋 Olá ${nomeCliente}!\n\n`;
-                msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
-                if (observacoes) msg += `📝 ${observacoes}\n\n`;
-                msg += `📱 Como podemos ajudar você hoje?\n\n`;
-                msg += `💬 Fique à vontade para escrever sua dúvida.`;
-                
-                await sendReply(cleanPhone, msg);
-                return;
-            }
+console.log('🔍 TESTE DIRETO - Dados:', JSON.stringify(testeFinalizado.data));
+console.log('🔍 TESTE DIRETO - Erro:', testeFinalizado.error ? JSON.stringify(testeFinalizado.error) : 'NENHUM');
+
+var finalizado = await supabase
+    .from('clientes_finalizados')
+    .select('*')
+    .eq('telefone', cleanPhone)
+    .maybeSingle();
+
+console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
             // 3. VERIFICAR ATIVO
             console.log('🔍 Verificando ATIVO...');
