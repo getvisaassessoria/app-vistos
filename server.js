@@ -1767,6 +1767,7 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             // Verificar cliente ativo
 // Verificar cliente ativo
+// Verificar cliente ativo
 var ativo = await supabase
     .from('clientes_ativos')
     .select('*')
@@ -1776,22 +1777,9 @@ var ativo = await supabase
 if (ativo.data) {
     console.log('🔄 Cliente ATIVO: ' + cleanPhone);
     
-    let state = userState.get(cleanPhone);
-    if (!state) {
-        state = {
-            nivel: 'principal',
-            service: null,
-            nome: ativo.data.nome || null,
-            onboardingStep: ONBOARDING_STEPS.COMPLETO,
-            onboardingCompleto: true,
-            lastActivity: Date.now()
-        };
-        userState.set(cleanPhone, state);
-    }
-
-    // Buscar etapa atual
+    // Buscar etapa atual e se está finalizado
     var etapaMsg = '';
-    var etapaAtual = '';
+    var isFinalizado = false;
     try {
         var etapa = await supabase
             .from('etapas_processo')
@@ -1800,9 +1788,12 @@ if (ativo.data) {
             .maybeSingle();
 
         if (etapa.data) {
-            etapaAtual = etapa.data.etapa_atual;
-            var etapaInfo = ETAPAS[etapaAtual];
+            const etapaAtual = etapa.data.etapa_atual;
+            const etapaInfo = ETAPAS[etapaAtual];
             etapaMsg = etapaInfo ? etapaInfo.label : etapaAtual;
+            
+            // Verificar se é uma etapa final
+            isFinalizado = ['passaporte_retornado', 'visto_recusado', 'aguardando_passaporte'].includes(etapaAtual);
         }
     } catch (err) {
         console.log('Erro ao buscar etapa:', err);
@@ -1811,83 +1802,31 @@ if (ativo.data) {
     const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
     
     // ============================================================
-    // RESPOSTAS PARA CLIENTE ATIVO (SEM MENU)
+    // CLIENTE COM PROCESSO FINALIZADO
     // ============================================================
-    
-    // Verificar se é saudação
-    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
-    if (saudacoes.includes(messageText.toLowerCase())) {
-        let msg = `👋 Olá ${nomeCliente}! Que bom ver você de novo!\n\n`;
-        
-        if (etapaMsg) {
-            msg += `📌 Seu processo está em: **${etapaMsg}**\n\n`;
-        }
-        
-        msg += `📱 Qualquer dúvida, fale conosco: https://wa.me/5521974601812\n\n`;
-        msg += `💙 Estamos aqui para ajudar você!`;
+    if (isFinalizado) {
+        let msg = `👋 Olá ${nomeCliente}! Como podemos ajudar?\n\n`;
+        msg += `📱 Fique à vontade para escrever sua dúvida.`;
         
         await sendReply(cleanPhone, msg);
         return;
     }
     
-    // Verificar se é pergunta sobre status
-    const perguntasStatus = ['status', 'andamento', 'como vai', 'atualização', 'atualizacao', 'etapa', 'processo'];
-    if (perguntasStatus.some(p => messageText.toLowerCase().includes(p))) {
-        let msg = `📊 **Status do Processo**\n\n`;
-        msg += `👤 Cliente: ${nomeCliente}\n`;
-        msg += `📍 Etapa atual: ${etapaMsg || 'Em andamento'}\n\n`;
-        msg += `✅ Estamos trabalhando para agilizar seu processo.\n\n`;
-        msg += `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`;
-        
-        await sendReply(cleanPhone, msg);
-        return;
-    }
-    
-    // Verificar se é pergunta sobre documentos
-    const perguntasDocs = ['documento', 'documentos', 'papel', 'papeis', 'enviar', 'preciso'];
-    if (perguntasDocs.some(p => messageText.toLowerCase().includes(p))) {
-        let msg = `📄 **Documentos Necessários**\n\n`;
-        msg += `Para seu processo, você precisa ter:\n\n`;
-        msg += `✅ Passaporte válido\n`;
-        msg += `✅ Foto 5x7 recente\n`;
-        msg += `✅ Comprovante de renda\n`;
-        msg += `✅ Extratos bancários\n\n`;
-        msg += `📱 Dúvidas específicas? Fale conosco: https://wa.me/5521974601812`;
-        
-        await sendReply(cleanPhone, msg);
-        return;
-    }
-    
-    // Verificar se é pergunta sobre prazo
-    const perguntasPrazo = ['prazo', 'tempo', 'demora', 'dias', 'semanas', 'quanto tempo'];
-    if (perguntasPrazo.some(p => messageText.toLowerCase().includes(p))) {
-        let msg = `⏱️ **Prazo do Processo**\n\n`;
-        msg += `O prazo total estimado é de **30 a 40 dias**.\n\n`;
-        msg += `📌 Cada etapa tem seu próprio prazo:\n`;
-        msg += `• Análise: 2-3 dias\n`;
-        msg += `• Boleto: 7 dias para pagamento\n`;
-        msg += `• Agendamento: 1-8 semanas\n`;
-        msg += `• Retorno do passaporte: 5-7 dias\n\n`;
-        msg += `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`;
-        
-        await sendReply(cleanPhone, msg);
-        return;
-    }
-    
-    // Mensagem padrão para cliente ativo
-    let msg = `📌 ${nomeCliente}, seu processo está em andamento.\n\n`;
+    // ============================================================
+    // CLIENTE COM PROCESSO EM ANDAMENTO
+    // ============================================================
+    let msg = `👋 Olá ${nomeCliente}!\n\n`;
     
     if (etapaMsg) {
-        msg += `📍 Etapa atual: **${etapaMsg}**\n\n`;
+        msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
     }
     
-    msg += `📱 Qualquer dúvida, fale conosco: https://wa.me/5521974601812\n\n`;
-    msg += `💙 Estamos aqui para ajudar você!`;
+    msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
+    msg += `💬 Fique à vontade para perguntar, responderemos oportunamente.`;
     
     await sendReply(cleanPhone, msg);
     return;
 }
-
             var novo = await supabase
                 .from('clientes_novos')
                 .select('*')
