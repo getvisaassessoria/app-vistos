@@ -969,6 +969,53 @@ async function cadastrarCliente(telefone, nome) {
     return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
 
+// ============================================================
+// BUSCAR CLIENTE EM QUALQUER TABELA
+// ============================================================
+const clienteEncontrado = await buscarClienteEmQualquerTabela(cleanPhone);
+
+if (clienteEncontrado) {
+    const { tabela, dados } = clienteEncontrado;
+    console.log(`📌 Cliente encontrado em: ${tabela}`);
+    
+    // 1. Se for AMIGO
+    if (tabela === 'contatos_amigos') {
+        console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
+        return;
+    }
+    
+    // 2. Se for FINALIZADO
+    if (tabela === 'clientes_finalizados') {
+        console.log('✅ Cliente FINALIZADO:', dados.nome);
+        const nomeCliente = dados.nome ? dados.nome.split(' ')[0] : 'Cliente';
+        const servico = dados.servico || 'processo';
+        const dataFinal = dados.data_finalizacao ? new Date(dados.data_finalizacao).toLocaleDateString('pt-BR') : '';
+        const observacoes = dados.observacoes || '';
+        
+        let msg = `👋 Olá ${nomeCliente}!\n\n`;
+        msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
+        if (observacoes) msg += `📝 ${observacoes}\n\n`;
+        msg += `📱 Como podemos ajudar você hoje?\n\n`;
+        msg += `💬 Fique à vontade para escrever sua dúvida.`;
+        
+        await sendReply(cleanPhone, msg);
+        return;
+    }
+    
+    // 3. Se for ATIVO ou NOVO, chama o processamento normal
+    await processarMensagem(cleanPhone, messageText, body);
+    return;
+}
+
+// 4. Se não encontrou em nenhuma tabela, CRIA NOVO CLIENTE
+console.log('🆕 Criando novo cliente...');
+const resultado = await cadastrarCliente(cleanPhone, null);
+if (!resultado) {
+    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos.');
+    return;
+}
+await processarMensagem(cleanPhone, messageText, body);
+
 async function criarEtapaInicial(telefone) {
     try {
         const telefoneFormatado = formatarTelefone(telefone);
