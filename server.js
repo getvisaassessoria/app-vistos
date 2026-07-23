@@ -1735,6 +1735,11 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
 
+                        // ============================================================
+            // VERIFICAÇÕES DE CLIENTE (ORDEM CORRETA)
+            // ============================================================
+            
+            // 1. Verificar AMIGO
             var amigo = await supabase
                 .from('contatos_amigos')
                 .select('*')
@@ -1746,6 +1751,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // 2. Verificar FINALIZADO
             var finalizado = await supabase
                 .from('clientes_finalizados')
                 .select('*')
@@ -1754,108 +1760,78 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             if (finalizado.data) {
                 console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
-                const msgFinalizado = '🌟 Muito obrigado por confiar na GetVisa!\n\n' +
-                                     'Seu processo foi concluído com sucesso.\n\n' +
-                                     '📋 Serviço: ' + (finalizado.data.servico || 'não informado') + '\n' +
-                                     '📅 Finalizado em: ' + new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') + '\n\n' +
-                                     '⭐ Avalie nosso serviço: https://getvisa.com.br/avaliacao\n\n' +
-                                     'Estamos aqui para você sempre que precisar!\n\n' +
-                                     'Digite 0 para o MENU principal';
-                await sendReply(cleanPhone, msgFinalizado);
+                
+                const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
+                const servico = finalizado.data.servico || 'processo';
+                const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
+                const observacoes = finalizado.data.observacoes || '';
+                
+                let msg = `👋 Olá ${nomeCliente}!\n\n`;
+                msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
+                
+                if (observacoes) {
+                    msg += `📝 ${observacoes}\n\n`;
+                }
+                
+                msg += `📱 Como podemos ajudar você hoje?\n\n`;
+                msg += `💬 Fique à vontade para escrever sua dúvida.`;
+                
+                await sendReply(cleanPhone, msg);
                 return;
             }
 
-// ============================================================
-// VERIFICAR CLIENTE FINALIZADO (primeiro)
-// ============================================================
-var finalizado = await supabase
-    .from('clientes_finalizados')
-    .select('*')
-    .eq('telefone', cleanPhone)
-    .maybeSingle();
+            // 3. Verificar ATIVO
+            var ativo = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
 
-if (finalizado.data) {
-    console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
-    
-    const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
-    const servico = finalizado.data.servico || 'processo';
-    const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
-    const observacoes = finalizado.data.observacoes || '';
-    
-    let msg = `👋 Olá ${nomeCliente}!\n\n`;
-    msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
-    
-    if (observacoes) {
-        msg += `📝 ${observacoes}\n\n`;
-    }
-    
-    msg += `📱 Como podemos ajudar você hoje?\n\n`;
-    msg += `💬 Fique à vontade para escrever sua dúvida.`;
-    
-    await sendReply(cleanPhone, msg);
-    return;
-}
+            if (ativo.data) {
+                console.log('🔄 Cliente ATIVO: ' + cleanPhone);
+                
+                var etapaMsg = '';
+                var isFinalizado = false;
+                try {
+                    var etapa = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', cleanPhone)
+                        .maybeSingle();
 
-// Verificar cliente ativo
-var ativo = await supabase
-    .from('clientes_ativos')
-    .select('*')
-    .eq('telefone', cleanPhone)
-    .maybeSingle();
+                    if (etapa.data) {
+                        const etapaAtual = etapa.data.etapa_atual;
+                        const etapaInfo = ETAPAS[etapaAtual];
+                        etapaMsg = etapaInfo ? etapaInfo.label : etapaAtual;
+                        isFinalizado = ['passaporte_retornado', 'visto_recusado', 'aguardando_passaporte'].includes(etapaAtual);
+                    }
+                } catch (err) {
+                    console.log('Erro ao buscar etapa:', err);
+                }
 
-if (ativo.data) {
-    console.log('🔄 Cliente ATIVO: ' + cleanPhone);
-    
-    // Buscar etapa atual e se está finalizado
-    var etapaMsg = '';
-    var isFinalizado = false;
-    try {
-        var etapa = await supabase
-            .from('etapas_processo')
-            .select('etapa_atual')
-            .eq('cliente_telefone', cleanPhone)
-            .maybeSingle();
+                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
+                
+                if (isFinalizado) {
+                    let msg = `👋 Olá ${nomeCliente}! Como podemos ajudar?\n\n`;
+                    msg += `📱 Fique à vontade para escrever sua dúvida.`;
+                    await sendReply(cleanPhone, msg);
+                    return;
+                }
+                
+                let msg = `👋 Olá ${nomeCliente}!\n\n`;
+                
+                if (etapaMsg) {
+                    msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
+                }
+                
+                msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
+                msg += `💬 Fique à vontade para perguntar, responderemos oportunamente.`;
+                
+                await sendReply(cleanPhone, msg);
+                return;
+            }
 
-        if (etapa.data) {
-            const etapaAtual = etapa.data.etapa_atual;
-            const etapaInfo = ETAPAS[etapaAtual];
-            etapaMsg = etapaInfo ? etapaInfo.label : etapaAtual;
-            
-            // Verificar se é uma etapa final
-            isFinalizado = ['passaporte_retornado', 'visto_recusado', 'aguardando_passaporte'].includes(etapaAtual);
-        }
-    } catch (err) {
-        console.log('Erro ao buscar etapa:', err);
-    }
-
-    const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
-    
-    // ============================================================
-    // CLIENTE COM PROCESSO FINALIZADO
-    // ============================================================
-    if (isFinalizado) {
-        let msg = `👋 Olá ${nomeCliente}! Como podemos ajudar?\n\n`;
-        msg += `📱 Fique à vontade para escrever sua dúvida.`;
-        
-        await sendReply(cleanPhone, msg);
-        return;
-    }
-    
-    // ============================================================
-    // CLIENTE COM PROCESSO EM ANDAMENTO
-    // ============================================================
-    let msg = `👋 Olá ${nomeCliente}!\n\n`;
-    
-    if (etapaMsg) {
-        msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
-    }
-    
-    msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
-    msg += `💬 Fique à vontade para perguntar, responderemos oportunamente.`;
-    
-    await sendReply(cleanPhone, msg);
-    return;
-}
+            // 4. Verificar NOVO
             var novo = await supabase
                 .from('clientes_novos')
                 .select('*')
@@ -1884,6 +1860,7 @@ if (ativo.data) {
                 return;
             }
 
+            // 5. NOVO CLIENTE - Iniciar onboarding
             console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
 
             var resultado = await cadastrarCliente(cleanPhone, null);
@@ -1894,26 +1871,6 @@ if (ativo.data) {
 
             console.log('✅ Cliente cadastrado (sem nome), iniciando onboarding');
             await processarMensagem(cleanPhone, messageText, body);
-
-        } catch (error) {
-            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
-            console.error('Mensagem:', error.message);
-            console.error('Stack:', error.stack);
-
-            try {
-                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
-                if (phone) {
-                    var cleanPhone = phone.toString().replace(/\D/g, '');
-                    if (cleanPhone.length >= 10) {
-                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
-                    }
-                }
-            } catch (e) {
-                console.error('Falha ao enviar mensagem de erro:', e);
-            }
-        }
-    })();
-});
 
 // ============ ROTAS ADICIONAIS ============
 app.post('/api/submit-ds160', async function(req, res) {
