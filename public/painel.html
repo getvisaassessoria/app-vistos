@@ -649,30 +649,54 @@
     </div>
 
     <!-- TAB: ETAPAS (TIMELINE) -->
-    <div class="tab-content" id="tab-etapas">
-        <div class="table-container">
-            <div class="table-header">
-                <span style="font-weight:600;color:#1e293b;">📊 Timeline do Processo</span>
-                <div>
-                    <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()">
-                        <option value="">Selecione um cliente...</option>
-                    </select>
-                    <button class="btn btn-primary" onclick="carregarClientesParaTimeline()" style="margin-left:10px;">🔄 Atualizar</button>
+    <!-- TAB: ETAPAS (TIMELINE) -->
+<div class="tab-content" id="tab-etapas">
+    <div class="table-container">
+        <div class="table-header">
+            <span style="font-weight:600;color:#1e293b;">📊 Timeline do Processo</span>
+            <div>
+                <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()">
+                    <option value="">Selecione um cliente...</option>
+                </select>
+                <button class="btn btn-primary" onclick="carregarClientesParaTimeline()" style="margin-left:10px;">🔄 Atualizar</button>
+            </div>
+        </div>
+        <div id="timeline-container" style="padding:20px;">
+            <div class="empty">📊 Selecione um cliente para ver a timeline</div>
+        </div>
+        <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+            <div class="timeline-actions">
+                <input type="text" id="nota-avancar" placeholder="Nota sobre este avanço (opcional)">
+                <button class="btn btn-success" onclick="avancarEtapa()">➡️ Avançar Etapa</button>
+                <button class="btn btn-info" onclick="verHistorico()">📜 Ver Histórico</button>
+                <button class="btn btn-danger" onclick="fecharTimeline()">✕ Fechar</button>
+            </div>
+        </div>
+        
+        <!-- ========================================================== -->
+        <!-- CONTAINER DE DECISÃO (aparece após a entrevista)           -->
+        <!-- ========================================================== -->
+        <div id="decisao-container" style="display:none; padding:15px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <h4 style="margin:0;color:#1e293b;">🎤 Decisão da Entrevista</h4>
+                <p style="margin:0;color:#64748b;font-size:14px;">Qual foi o resultado da entrevista do cliente?</p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-success" onclick="finalizarProcesso('passaporte_retornado')">
+                        ✅ Visto Aprovado
+                    </button>
+                    <button class="btn btn-danger" onclick="finalizarProcesso('visto_recusado')">
+                        ❌ Visto Recusado
+                    </button>
                 </div>
-            </div>
-            <div id="timeline-container" style="padding:20px;">
-                <div class="empty">📊 Selecione um cliente para ver a timeline</div>
-            </div>
-            <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-                <div class="timeline-actions">
-                    <input type="text" id="nota-avancar" placeholder="Nota sobre este avanço (opcional)">
-                    <button class="btn btn-success" onclick="avancarEtapa()">➡️ Avançar Etapa</button>
-                    <button class="btn btn-info" onclick="verHistorico()">📜 Ver Histórico</button>
-                    <button class="btn btn-danger" onclick="fecharTimeline()">✕ Fechar</button>
+                <div style="margin-top:5px;">
+                    <input type="text" id="nota-finalizacao" placeholder="Observação sobre a decisão (opcional)" style="width:100%;padding:8px 15px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
                 </div>
             </div>
         </div>
+        <!-- ========================================================== -->
+        
     </div>
+</div>
 
     <!-- TAB: DASHBOARD -->
     <div class="tab-content" id="tab-dashboard">
@@ -736,7 +760,8 @@ const ETAPAS_CONFIG = {
     'agendamento_realizado': { label: '📅 Agendamento Realizado', color: '#2980b9' },
     'treinamento_realizado': { label: '🎯 Treinamento Concluído', color: '#8e44ad' },
     'entrevista_realizada': { label: '🎤 Entrevista Realizada', color: '#2c3e50' },
-    'passaporte_retornado': { label: '📫 Passaporte Retornado', color: '#2ecc71' }
+    'passaporte_retornado': { label: '✅ Passaporte Retornado (Aprovado)', color: '#2ecc71' },
+    'visto_recusado': { label: '❌ Visto Recusado', color: '#ef4444' }
 };
 
 const ETAPAS_ORDEM = [
@@ -747,8 +772,7 @@ const ETAPAS_ORDEM = [
     'boleto_pago',
     'agendamento_realizado', 
     'treinamento_realizado', 
-    'entrevista_realizada', 
-    'passaporte_retornado'
+    'entrevista_realizada'
 ];
 
 let clienteSelecionadoTimeline = null;
@@ -1209,22 +1233,26 @@ function renderizarTimeline(data) {
     const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
     if (cliente) nomeCliente = cliente.nome || 'Cliente';
     
+    // Verificar se é uma etapa final (aprovado/recusado)
+    const isFinalizada = ['passaporte_retornado', 'visto_recusado'].includes(etapaAtual);
+    
     let html = `
         <div style="margin-bottom:15px;">
             <h4>📋 Timeline - ${nomeCliente}</h4>
             <small class="text-muted">Etapa atual: <strong>${ETAPAS_CONFIG[etapaAtual]?.label || etapaAtual}</strong></small>
+            ${isFinalizada ? ' <span style="background:#10b981;color:white;padding:2px 10px;border-radius:12px;font-size:12px;">✅ PROCESSO FINALIZADO</span>' : ''}
         </div>
         <div class="timeline">
     `;
     
+    // Mostrar etapas normais (até entrevista)
     ETAPAS_ORDEM.forEach((etapa, index) => {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
         const dataValue = data[`data_${etapa}`];
         
-        // LÓGICA CORRIGIDA
         const isConcluida = !!dataValue;
-        const isAtual = index === indexAtual && !isConcluida;
-        const isPendente = !isConcluida && !isAtual;
+        const isAtual = index === indexAtual && !isConcluida && !isFinalizada;
+        const isPendente = !isConcluida && !isAtual && !isFinalizada;
         
         let corBadge = '#e9ecef';
         let statusText = '⏳ Pendente';
@@ -1260,14 +1288,128 @@ function renderizarTimeline(data) {
         `;
     });
     
+    // Se o processo já foi finalizado, mostrar a etapa final
+    if (isFinalizada) {
+        const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual, color: '#6c757d' };
+        const dataValue = data[`data_${etapaAtual}`];
+        const isAprovado = etapaAtual === 'passaporte_retornado';
+        
+        html += `
+            <div class="timeline-item concluida">
+                <div class="timeline-badge" style="background-color: ${etapaInfo.color}; color: white;">
+                    ${isAprovado ? '🎉' : '❌'}
+                </div>
+                <div class="timeline-content">
+                    <h6 style="color: ${isAprovado ? '#27ae60' : '#ef4444'}; font-weight: bold;">
+                        ${etapaInfo.label || etapaAtual}
+                        <span style="font-size:11px;background:${isAprovado ? '#27ae60' : '#ef4444'};color:white;padding:2px 8px;border-radius:12px;margin-left:5px;">
+                            ${isAprovado ? '✅ APROVADO' : '❌ RECUSADO'}
+                        </span>
+                    </h6>
+                    <small>✅ Concluída</small>
+                    ${dataValue ? `<br><small class="text-muted">📅 ${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
     html += '</div>';
     container.innerHTML = html;
     
-    const isUltima = etapaAtual === 'passaporte_retornado';
+    // Mostrar/Esconder botões de decisão
+    const isEntrevista = etapaAtual === 'entrevista_realizada' && !isFinalizada;
+    const decisaoContainer = document.getElementById('decisao-container');
+    if (decisaoContainer) {
+        decisaoContainer.style.display = isEntrevista ? 'block' : 'none';
+    }
+    
+    // Atualizar botão de avanço
     const btnAvancar = document.querySelector('#timeline-actions .btn-success');
     if (btnAvancar) {
-        btnAvancar.disabled = isUltima;
-        btnAvancar.textContent = isUltima ? '✅ Processo Finalizado' : '➡️ Avançar Etapa';
+        if (isFinalizada) {
+            btnAvancar.disabled = true;
+            btnAvancar.textContent = '✅ Processo Finalizado';
+        } else if (isEntrevista) {
+            btnAvancar.disabled = true;
+            btnAvancar.textContent = '🎤 Aguardando Decisão';
+        } else {
+            btnAvancar.disabled = false;
+            btnAvancar.textContent = '➡️ Avançar Etapa';
+        }
+    }
+}
+
+// ============================================================
+//  FINALIZAR PROCESSO (APROVADO/RECUSADO)
+// ============================================================
+// ============================================================
+//  FINALIZAR PROCESSO (APROVADO/RECUSADO)
+// ============================================================
+async function finalizarProcesso(etapaFinal) {
+    if (!clienteSelecionadoTimeline) {
+        showToast('Selecione um cliente primeiro!', 'info');
+        return;
+    }
+    
+    const nomeEtapa = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
+    
+    // Se for aprovação, perguntar se o passaporte já chegou
+    if (etapaFinal === 'passaporte_retornado') {
+        const passaporteChegou = confirm(
+            '✅ O passaporte do cliente JÁ CHEGOU?\n\n' +
+            'Clique em "OK" se já chegou (vai para Passaporte Retornado)\n' +
+            'Clique em "Cancelar" se ainda não chegou (vai para Aguardando Passaporte)'
+        );
+        
+        if (!passaporteChegou) {
+            etapaFinal = 'aguardando_passaporte';
+        }
+    }
+    
+    if (!confirm(`Tem certeza que deseja finalizar o processo com "${ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal}"?`)) {
+        return;
+    }
+    
+    const notaInput = document.getElementById('nota-finalizacao');
+    const nota = notaInput ? notaInput.value : 'Processo finalizado';
+    
+    try {
+        showToast('⏳ Processando...', 'info');
+        
+        const response = await fetch('/api/etapas/finalizar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telefone: clienteSelecionadoTimeline,
+                etapa_final: etapaFinal,
+                nota: nota || 'Processo finalizado'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.sucesso) {
+            const nomeEtapaFinal = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
+            showToast(`✅ Processo finalizado: ${nomeEtapaFinal}`, 'success');
+            
+            // Limpar campo de nota
+            if (notaInput) notaInput.value = '';
+            
+            // Recarregar timeline
+            await carregarTimeline(clienteSelecionadoTimeline);
+            await carregarDados();
+            
+            // Esconder container de decisão
+            const decisaoContainer = document.getElementById('decisao-container');
+            if (decisaoContainer) {
+                decisaoContainer.style.display = 'none';
+            }
+        } else {
+            showToast(`❌ Erro: ${data.erro || data.detalhe || 'Erro desconhecido'}`, 'error');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao finalizar:', error);
+        showToast('❌ Erro ao finalizar processo', 'error');
     }
 }
 
