@@ -20,7 +20,10 @@ const supabase = createClient(
     process.env.SUPABASE_ANON_KEY
 );
 
-// ============ CONSTANTES ============
+// ============================================================
+// CONSTANTES
+// ============================================================
+
 const ONBOARDING_STEPS = {
     SAUDACAO: 'saudacao',
     AGUARDANDO_NOME: 'aguardando_nome',
@@ -141,7 +144,10 @@ const INTENT_KEYWORDS = {
     'iniciar_processo': ['quero fazer o visto', 'quero visto', 'iniciar processo', 'comecar', 'quero comecar', 'vou fazer']
 };
 
-// ============ ESTADO DO USUÁRIO ============
+// ============================================================
+// ESTADO DO USUÁRIO
+// ============================================================
+
 const userState = new Map();
 
 setInterval(() => {
@@ -153,7 +159,10 @@ setInterval(() => {
     }
 }, 60 * 1000);
 
-// ============ FUNÇÕES AUXILIARES ============
+// ============================================================
+// FUNÇÕES AUXILIARES
+// ============================================================
+
 function limparTelefone(telefone) {
     if (!telefone) return null;
     const limpo = telefone.toString().replace(/\D/g, '');
@@ -380,7 +389,10 @@ function getRespostaSubmenu(servico, opcao) {
     return resposta;
 }
 
-// ============ FUNÇÕES DE MENU ============
+// ============================================================
+// FUNÇÕES DE MENU
+// ============================================================
+
 async function getMenuPrincipal() {
     return '🌟 GETVISA - ASSESSORIA EM VISTOS\n\n' +
            'Escolha o serviço desejado:\n\n' +
@@ -420,13 +432,15 @@ function getSubmenu(service) {
         'Digite o número da opção (1-7)';
 }
 
-// ============ FUNÇÕES DE ONBOARDING ============
+// ============================================================
+// FUNÇÕES DE ONBOARDING
+// ============================================================
+
 async function processarOnboarding(cleanPhone, messageText, state) {
     console.log('=== PROCESSANDO ONBOARDING ===');
     console.log('Passo atual: ' + state.onboardingStep);
     console.log('Mensagem: "' + messageText + '"');
     
-    // Bloquear comandos de escape durante o onboarding
     const escapeCommands = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (escapeCommands.includes(messageText.toLowerCase().trim())) {
         await sendReply(cleanPhone, '👋 Antes de continuar, preciso saber seu nome para te atender melhor!\n\n' +
@@ -447,7 +461,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             break;
             
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
-            // Validar nome
             const nomeValidado = validarNome(messageText);
             
             if (!nomeValidado) {
@@ -458,7 +471,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             
             const nomeFormatado = formatarNome(messageText);
             
-            // SALVAR NO BANCO COM O NOME CORRETO
             try {
                 const { data, error } = await supabase
                     .from('clientes_novos')
@@ -481,13 +493,11 @@ async function processarOnboarding(cleanPhone, messageText, state) {
                 console.error('Erro ao atualizar cliente:', err);
             }
             
-            // Atualizar estado
             state.nome = nomeFormatado;
             state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
             state.onboardingCompleto = true;
             userState.set(cleanPhone, state);
             
-            // Enviar confirmação com menu
             const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
                               nomeFormatado.split(' ')[0] +
                               getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
@@ -499,7 +509,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             break;
             
         default:
-            // Fallback: reiniciar onboarding
             console.log('⚠️ Fallback - reiniciando onboarding');
             state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
             state.onboardingCompleto = false;
@@ -509,16 +518,16 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     }
 }
 
-// ============ FUNÇÃO PRINCIPAL DE PROCESSAMENTO ============
+// ============================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO
+// ============================================================
+
 async function processarMensagem(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENSAGEM ===');
     console.log('Phone: ' + cleanPhone);
     console.log('Message: "' + messageText + '"');
     
     try {
-        // ============================================================
-        // PASSO 1: BUSCAR CLIENTE NO BANCO
-        // ============================================================
         let clienteDB = null;
         try {
             const { data, error } = await supabase
@@ -542,9 +551,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
             console.log('  - Onboarding completo:', clienteDB.onboarding_completo || false);
         }
         
-        // ============================================================
-        // PASSO 2: VERIFICAR SE NOME É VÁLIDO
-        // ============================================================
         function isNomeValido(nome) {
             if (!nome) return false;
             if (typeof nome !== 'string') return false;
@@ -560,12 +566,8 @@ async function processarMensagem(cleanPhone, messageText, body) {
             return true;
         }
         
-        // ============================================================
-        // PASSO 3: CRIAR OU RECUPERAR ESTADO
-        // ============================================================
         let state = userState.get(cleanPhone);
         
-        // Se não tem estado ou estado inválido, recriar
         if (!state || (state.nome && !isNomeValido(state.nome))) {
             console.log('🔄 Criando/recriando estado para:', cleanPhone);
             
@@ -578,7 +580,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
                     onboardingCompleto = !!(clienteDB.onboarding_completo === true);
                     console.log('✅ Nome válido do banco:', nomeExistente);
                 } else if (clienteDB.nome) {
-                    // Nome inválido - limpar
                     console.log('⚠️ Nome inválido no banco, removendo:', clienteDB.nome);
                     try {
                         await supabase
@@ -618,9 +619,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
             onboardingCompleto: state.onboardingCompleto
         });
         
-        // ============================================================
-        // PASSO 4: VERIFICAR ONBOARDING - PRIORIDADE MÁXIMA
-        // ============================================================
         const precisaOnboarding = !state.onboardingCompleto || 
                                   !isNomeValido(state.nome) || 
                                   state.onboardingStep !== ONBOARDING_STEPS.COMPLETO;
@@ -628,7 +626,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
         if (precisaOnboarding) {
             console.log('🔄 INICIANDO ONBOARDING');
             
-            // Se já tem nome válido mas onboarding não está completo, corrigir
             if (isNomeValido(state.nome) && !state.onboardingCompleto) {
                 console.log('✅ Nome válido encontrado, corrigindo onboarding');
                 state.onboardingCompleto = true;
@@ -653,17 +650,12 @@ async function processarMensagem(cleanPhone, messageText, body) {
                 return;
             }
             
-            // Se não tem nome, iniciar onboarding
             await processarOnboarding(cleanPhone, messageText, state);
             return;
         }
         
-        // ============================================================
-        // PASSO 5: ONBOARDING COMPLETO - PROCESSAR MENU
-        // ============================================================
         console.log('✅ Onboarding completo, processando menu');
         
-        // COMANDO 0 - VOLTA AO MENU PRINCIPAL
         if (messageText === '0') {
             state.nivel = 'principal';
             state.service = null;
@@ -672,7 +664,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
             return;
         }
         
-        // COMANDOS DE RESET
         const resetCommands = ['menu', 'menu principal', 'inicio', 'comecar', 'voltar', 'principal'];
         if (resetCommands.includes(messageText.toLowerCase())) {
             state.nivel = 'principal';
@@ -682,7 +673,6 @@ async function processarMensagem(cleanPhone, messageText, body) {
             return;
         }
         
-        // SAUDAÇÕES
         const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
         if (saudacoes.includes(messageText.toLowerCase())) {
             const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
@@ -706,13 +696,11 @@ async function processarMensagem(cleanPhone, messageText, body) {
             return;
         }
         
-        // PROCESSAR POR NÍVEL
         if (state.nivel === 'submenu' && state.service) {
             await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
         } else if (state.nivel === 'principal') {
             await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
         } else {
-            // Fallback
             state.nivel = 'principal';
             state.service = null;
             userState.set(cleanPhone, state);
@@ -726,7 +714,10 @@ async function processarMensagem(cleanPhone, messageText, body) {
     }
 }
 
-// ============ FUNÇÕES DE PROCESSAMENTO DE MENU ============
+// ============================================================
+// FUNÇÕES DE PROCESSAMENTO DE MENU
+// ============================================================
+
 async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     console.log('=== MENU PRINCIPAL ===');
     
@@ -739,7 +730,6 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         '6': 'passaporte'
     };
     
-    // Se escolheu um serviço (1-6)
     if (servicoMap[messageText]) {
         const serviceKey = servicoMap[messageText];
         console.log('Entrando no submenu de: ' + serviceKey);
@@ -753,7 +743,6 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
-    // Opção 7 - Ajuda
     if (messageText === '7') {
         const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
                         '👨‍💼 Moisés - Especialista em Vistos\n\n' +
@@ -766,7 +755,6 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
-    // Detectar intenção
     const intent = detectIntent(messageText);
     if (intent) {
         const resposta = getRespostaIntencao(intent, state.service);
@@ -774,7 +762,6 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
-    // Mensagem não reconhecida
     const erroMsg = '❌ Opção não reconhecida!\n\n' +
                    'Por favor, escolha uma das opções:\n\n' +
                    await getMenuPrincipal();
@@ -907,7 +894,10 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
     await sendReply(cleanPhone, erroMsg);
 }
 
-// ============ FUNÇÕES DE ENVIO ============
+// ============================================================
+// FUNÇÕES DE ENVIO
+// ============================================================
+
 async function enviarWhatsApp(telefone, mensagem) {
     try {
         const instance = process.env.ZAPI_INSTANCE;
@@ -940,7 +930,10 @@ async function sendReply(phone, message) {
     return enviarWhatsApp(phone, message);
 }
 
-// ============ FUNÇÕES DE BANCO DE DADOS ============
+// ============================================================
+// FUNÇÕES DE BANCO DE DADOS
+// ============================================================
+
 async function cadastrarCliente(telefone, nome) {
     console.log('📝 Cadastrando cliente:', telefone);
     
@@ -951,7 +944,6 @@ async function cadastrarCliente(telefone, nome) {
         onboarding_completo: false
     };
     
-    // Só adiciona nome se for fornecido e for válido
     if (nome && nome !== 'Cliente' && !nome.startsWith('Cliente_')) {
         dadosCliente.nome = nome;
         console.log('  - Com nome:', nome);
@@ -1047,7 +1039,6 @@ async function criarEtapaComCliente(cliente, telefone) {
 }
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
-    // ⚠️ NÃO ENVIAR NOTIFICAÇÃO PARA ENTREVISTA REALIZADA
     if (novaEtapa === 'entrevista_realizada') {
         console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa} (resultado é no ato da entrevista)`);
         return;
@@ -1062,7 +1053,6 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
         const nomeCliente = cliente && cliente.nome || 'Cliente';
         const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
         
-        // Se não tiver mensagem definida, não enviar
         if (!mensagem) {
             console.log(`⏭️ Sem mensagem definida para etapa: ${novaEtapa}`);
             return;
@@ -1115,7 +1105,6 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
                                  `💪 Você está preparado para a entrevista.\n\n` +
                                  `Confie no seu potencial, você vai arrasar!`,
 
-
         'passaporte_retornado': `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
                                 `Seu passaporte com o visto foi retornado!\n\n` +
                                 `✅ Seu processo foi concluído com sucesso!\n\n` +
@@ -1131,7 +1120,6 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
                                 `💪 Isso não muda o seu objetivo. Vamos trabalhar juntos para reverter esse cenário!`
     };
     
-    // Se a etapa não tiver mensagem personalizada, usar mensagem genérica
     return mensagens[etapa] || `📌 ${nomeCliente}, seu processo avançou para: ${ETAPAS[etapa] ? ETAPAS[etapa].label : etapa}`;
 }
 
@@ -1162,7 +1150,10 @@ function validateDS160(data) {
     return { isValid: errors.length === 0, errors: errors };
 }
 
-// ============ FUNÇÕES DE PDF ============
+// ============================================================
+// FUNÇÕES DE PDF
+// ============================================================
+
 async function gerarPDF_DS160(data) {
     return new Promise(function(resolve, reject) {
         var doc = new PDFDocument({ margin: 50 });
@@ -1636,17 +1627,15 @@ async function gerarPDF_DS160(data) {
     });
 }
 
-// ============ ROTAS ============
+// ============================================================
+// MIDDLEWARES
+// ============================================================
 
-// ============ TRATAMENTO DE ERROS GLOBAL ============
-
-// Middleware para log de todas as requisições
 app.use((req, res, next) => {
     console.log(`📨 ${req.method} ${req.url}`);
     next();
 });
 
-// Middleware para capturar erros nas rotas
 app.use((err, req, res, next) => {
     console.error('❌ ERRO GLOBAL:', err);
     console.error('❌ Stack:', err.stack);
@@ -1656,6 +1645,10 @@ app.use((err, req, res, next) => {
         stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
 });
+
+// ============================================================
+// ROTAS PRINCIPAIS
+// ============================================================
 
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('📨 WEBHOOK Z-API RECEBIDO');
@@ -1735,11 +1728,9 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
 
-                        // ============================================================
-            // VERIFICAÇÕES DE CLIENTE (ORDEM CORRETA)
-            // ============================================================
-            
-            // 1. Verificar AMIGO
+            console.log('🔍 Verificando cliente:', cleanPhone);
+
+            // 1. AMIGO
             var amigo = await supabase
                 .from('contatos_amigos')
                 .select('*')
@@ -1747,11 +1738,11 @@ app.post('/api/webhook/zapi', function(req, res) {
                 .maybeSingle();
 
             if (amigo.data) {
-                console.log('👤 Contato AMIGO: ' + cleanPhone + ' - SILÊNCIO TOTAL');
+                console.log('👤 Contato AMIGO');
                 return;
             }
 
-            // 2. Verificar FINALIZADO
+            // 2. FINALIZADO (PRIORIDADE MÁXIMA)
             var finalizado = await supabase
                 .from('clientes_finalizados')
                 .select('*')
@@ -1759,7 +1750,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 .maybeSingle();
 
             if (finalizado.data) {
-                console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
+                console.log('✅ Cliente FINALIZADO:', finalizado.data.nome);
                 
                 const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
                 const servico = finalizado.data.servico || 'processo';
@@ -1768,11 +1759,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 
                 let msg = `👋 Olá ${nomeCliente}!\n\n`;
                 msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
-                
-                if (observacoes) {
-                    msg += `📝 ${observacoes}\n\n`;
-                }
-                
+                if (observacoes) msg += `📝 ${observacoes}\n\n`;
                 msg += `📱 Como podemos ajudar você hoje?\n\n`;
                 msg += `💬 Fique à vontade para escrever sua dúvida.`;
                 
@@ -1780,7 +1767,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // 3. Verificar ATIVO
+            // 3. ATIVO
             var ativo = await supabase
                 .from('clientes_ativos')
                 .select('*')
@@ -1788,50 +1775,12 @@ app.post('/api/webhook/zapi', function(req, res) {
                 .maybeSingle();
 
             if (ativo.data) {
-                console.log('🔄 Cliente ATIVO: ' + cleanPhone);
-                
-                var etapaMsg = '';
-                var isFinalizado = false;
-                try {
-                    var etapa = await supabase
-                        .from('etapas_processo')
-                        .select('etapa_atual')
-                        .eq('cliente_telefone', cleanPhone)
-                        .maybeSingle();
-
-                    if (etapa.data) {
-                        const etapaAtual = etapa.data.etapa_atual;
-                        const etapaInfo = ETAPAS[etapaAtual];
-                        etapaMsg = etapaInfo ? etapaInfo.label : etapaAtual;
-                        isFinalizado = ['passaporte_retornado', 'visto_recusado', 'aguardando_passaporte'].includes(etapaAtual);
-                    }
-                } catch (err) {
-                    console.log('Erro ao buscar etapa:', err);
-                }
-
-                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
-                
-                if (isFinalizado) {
-                    let msg = `👋 Olá ${nomeCliente}! Como podemos ajudar?\n\n`;
-                    msg += `📱 Fique à vontade para escrever sua dúvida.`;
-                    await sendReply(cleanPhone, msg);
-                    return;
-                }
-                
-                let msg = `👋 Olá ${nomeCliente}!\n\n`;
-                
-                if (etapaMsg) {
-                    msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
-                }
-                
-                msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
-                msg += `💬 Fique à vontade para perguntar, responderemos oportunamente.`;
-                
-                await sendReply(cleanPhone, msg);
+                console.log('🔄 Cliente ATIVO:', ativo.data.nome);
+                await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
-            // 4. Verificar NOVO
+            // 4. NOVO
             var novo = await supabase
                 .from('clientes_novos')
                 .select('*')
@@ -1839,40 +1788,30 @@ app.post('/api/webhook/zapi', function(req, res) {
                 .maybeSingle();
 
             if (novo.data) {
-                console.log('👤 Cliente NOVO já cadastrado: ' + cleanPhone);
-                
-                if (novo.data.nome && novo.data.onboarding_completo) {
-                    let state = userState.get(cleanPhone);
-                    if (!state) {
-                        state = {
-                            nivel: 'principal',
-                            service: null,
-                            nome: novo.data.nome,
-                            onboardingStep: ONBOARDING_STEPS.COMPLETO,
-                            onboardingCompleto: true,
-                            lastActivity: Date.now()
-                        };
-                        userState.set(cleanPhone, state);
-                    }
-                }
-                
+                console.log('👤 Cliente NOVO:', novo.data.nome);
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
-            // 5. NOVO CLIENTE - Iniciar onboarding
-            console.log('🆕 NOVO CLIENTE: ' + cleanPhone);
-
+            // 5. CRIA NOVO CLIENTE
+            console.log('🆕 Criando novo cliente...');
             var resultado = await cadastrarCliente(cleanPhone, null);
             if (!resultado) {
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos.');
                 return;
             }
-
-            console.log('✅ Cliente cadastrado (sem nome), iniciando onboarding');
             await processarMensagem(cleanPhone, messageText, body);
 
-// ============ ROTAS ADICIONAIS ============
+        } catch (error) {
+            console.error('❌ Erro no processamento do webhook:', error);
+        }
+    })();
+});
+
+// ============================================================
+// ROTAS DE FORMULÁRIO
+// ============================================================
+
 app.post('/api/submit-ds160', async function(req, res) {
     var data = req.body;
 
@@ -1989,7 +1928,10 @@ app.post('/api/submit-ds160', async function(req, res) {
     })();
 });
 
-// ============ ROTAS DE PAINEL ============
+// ============================================================
+// ROTAS DE PAINEL
+// ============================================================
+
 app.get('/api/painel/pendentes', async function(req, res) {
     try {
         var pendentes = await supabase.from('clientes_novos').select('*').order('data_contato', { ascending: false });
@@ -2027,7 +1969,6 @@ app.post('/api/painel/mover', async function(req, res) {
         if (!cliente.data) return res.status(404).json({ success: false, message: 'Cliente nao encontrado em clientes_novos' });
 
         if (destino === 'ativo') {
-            // 1. Inserir em clientes_ativos
             var insert = await supabase.from('clientes_ativos').insert({
                 telefone: cliente.data.telefone,
                 nome: cliente.data.nome,
@@ -2036,16 +1977,13 @@ app.post('/api/painel/mover', async function(req, res) {
             });
             if (insert.error) return res.status(500).json({ success: false, message: insert.error.message });
             
-            // 2. Criar etapa inicial
             try { 
                 await criarEtapaInicial(cliente.data.telefone); 
             } catch (err) { 
                 console.error('Erro ao criar etapa:', err); 
             }
             
-            // 3. 🔔 NOTIFICAR CLIENTE (USANDO A FUNÇÃO EXISTENTE)
             try {
-                // Buscar a etapa que foi criada
                 const { data: etapa } = await supabase
                     .from('etapas_processo')
                     .select('etapa_atual')
@@ -2053,8 +1991,6 @@ app.post('/api/painel/mover', async function(req, res) {
                     .maybeSingle();
                 
                 const etapaAtual = etapa ? etapa.etapa_atual : 'formulario_enviado';
-                
-                // USAR A FUNÇÃO EXISTENTE notificarClienteEtapa
                 await notificarClienteEtapa(cliente.data.telefone, etapaAtual);
                 console.log(`✅ Notificação de início enviada para ${telefone}`);
             } catch (err) {
@@ -2062,7 +1998,6 @@ app.post('/api/painel/mover', async function(req, res) {
             }
             
         } else {
-            // Destino: amigo
             var insert = await supabase.from('contatos_amigos').insert({
                 telefone: cliente.data.telefone,
                 nome: cliente.data.nome,
@@ -2112,7 +2047,6 @@ app.post('/api/painel/mover-varios', async function(req, res) {
                         atualizado_em: new Date().toISOString()
                     });
                     
-                    // 🔔 Notificar cada cliente movido
                     try {
                         const nomeCliente = cliente.data.nome && !cliente.data.nome.startsWith('Cliente_') 
                             ? cliente.data.nome.split(' ')[0] 
@@ -2157,6 +2091,10 @@ app.post('/api/painel/mover-varios', async function(req, res) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
+// ============================================================
+// ROTAS DE ETAPAS
+// ============================================================
 
 app.get('/api/etapas/cliente/:telefone', async function(req, res) {
     try {
@@ -2271,7 +2209,6 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
             return res.status(400).json({ erro: 'Cliente ja esta na ultima etapa' });
         }
 
-        // Verificar se a etapa existe no ETAPAS
         if (!ETAPAS[proximaEtapa]) {
             console.error('❌ Próxima etapa não encontrada:', proximaEtapa);
             return res.status(400).json({ erro: 'Próxima etapa não encontrada: ' + proximaEtapa });
@@ -2397,6 +2334,10 @@ app.get('/api/etapas/estatisticas', async function(req, res) {
     }
 });
 
+// ============================================================
+// ROTAS DE CLIENTES
+// ============================================================
+
 app.get('/api/clientes/ativos', async function(req, res) {
     try {
         var result = await supabase
@@ -2443,6 +2384,10 @@ app.get('/api/clientes/listar', async function(req, res) {
     }
 });
 
+// ============================================================
+// ROTAS DE TESTE
+// ============================================================
+
 app.post('/api/test/webhook-manual', async function(req, res) {
     console.log('TESTE MANUAL');
     console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -2473,7 +2418,9 @@ app.post('/api/test/webhook-manual', async function(req, res) {
     }
 });
 
-// ============ ROTAS ADMIN ============
+// ============================================================
+// ROTAS ADMIN
+// ============================================================
 
 // 1. Teste do Z-API
 app.get('/api/test/zapi', async function(req, res) {
@@ -2504,290 +2451,7 @@ app.get('/api/test/zapi', async function(req, res) {
     }
 });
 
-// 2. Verificar cliente
-app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const telefone = req.params.telefone;
-        console.log(`🔍 Verificando cliente: ${telefone}`);
-        
-        const { data: cliente, error } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        let etapa = null;
-        if (cliente) {
-            const { data: etapaData } = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefone)
-                .maybeSingle();
-            etapa = etapaData;
-        }
-        
-        res.json({
-            success: true,
-            telefone: telefone,
-            cliente: cliente || null,
-            etapa: etapa || null,
-            encontrado: !!cliente
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao verificar cliente:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-// 3. Notificar cliente
-app.post('/api/admin/notificar-cliente', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { telefone } = req.body;
-        
-        if (!telefone) {
-            return res.status(400).json({ error: 'Telefone é obrigatório' });
-        }
-        
-        console.log(`📨 Enviando notificação para: ${telefone}`);
-        
-        const { data: cliente, error } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
-        
-        if (!cliente) {
-            return res.status(404).json({ 
-                error: 'Cliente não encontrado em clientes_ativos',
-                telefone: telefone
-            });
-        }
-        
-        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
-            ? cliente.nome.split(' ')[0] 
-            : 'Cliente';
-        
-        const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
-                       `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
-                       `📋 Status: Em andamento\n` +
-                       `📍 Etapa atual: Formulário recebido\n\n` +
-                       `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
-                       `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
-                       `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
-        
-        const enviado = await enviarWhatsApp(telefone, mensagem);
-        
-        res.json({
-            success: true,
-            telefone: telefone,
-            cliente: cliente.nome,
-            notificacao_enviada: enviado
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao notificar cliente:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-// 4. Mover cliente com notificação automática (versão melhorada do /api/painel/mover)
-app.post('/api/painel/mover-com-notificacao', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { telefone, destino } = req.body;
-        
-        if (!telefone || !destino) {
-            return res.status(400).json({ error: 'Telefone e destino são obrigatórios' });
-        }
-        
-        const { data: cliente, error } = await supabase
-            .from('clientes_novos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
-        
-        if (!cliente) {
-            return res.status(404).json({ error: 'Cliente não encontrado em clientes_novos' });
-        }
-        
-        if (destino === 'ativo') {
-            const { data, error: insertError } = await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: cliente.telefone,
-                    nome: cliente.nome,
-                    criado_em: cliente.data_contato,
-                    atualizado_em: new Date().toISOString()
-                })
-                .select()
-                .single();
-            
-            if (insertError) {
-                return res.status(500).json({ error: insertError.message });
-            }
-            
-            try {
-                await criarEtapaInicial(cliente.telefone);
-            } catch (err) {
-                console.error('Erro ao criar etapa:', err);
-            }
-            
-            // Enviar notificação automática
-            try {
-                const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
-                    ? cliente.nome.split(' ')[0] 
-                    : 'Cliente';
-                
-                const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
-                               `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
-                               `📋 Status: Em andamento\n` +
-                               `📍 Etapa atual: Formulário recebido\n\n` +
-                               `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
-                               `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
-                               `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
-                
-                await enviarWhatsApp(cliente.telefone, mensagem);
-            } catch (err) {
-                console.error('Erro ao enviar notificação:', err);
-            }
-            
-            await supabase.from('clientes_novos').delete().eq('telefone', telefone);
-            
-            res.json({
-                success: true,
-                message: 'Cliente movido para ATIVO com sucesso',
-                cliente: data,
-                notificacao_enviada: true
-            });
-        } else {
-            res.status(400).json({ error: 'Destino inválido. Use "ativo"' });
-        }
-        
-    } catch (error) {
-        console.error('❌ Erro ao mover cliente:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-console.log('✅ Rotas admin carregadas com sucesso!');
-
-// ============ ROTA PARA NOTIFICAR CLIENTE MANUALMENTE ============
-app.post('/api/admin/notificar-cliente', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { telefone } = req.body;
-        
-        if (!telefone) {
-            return res.status(400).json({ error: 'Telefone é obrigatório' });
-        }
-        
-        console.log(`📨 Enviando notificação manual para: ${telefone}`);
-        
-        // Limpar telefone para busca
-        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-        
-        // Buscar cliente em clientes_ativos
-        const { data: cliente, error } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
-        
-        if (!cliente) {
-            // Tentar buscar com telefone limpo
-            const { data: clienteLimpo } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', telefoneLimpo)
-                .maybeSingle();
-            
-            if (!clienteLimpo) {
-                return res.status(404).json({ 
-                    error: 'Cliente não encontrado em clientes_ativos',
-                    telefone_buscado: telefone,
-                    telefone_limpo: telefoneLimpo
-                });
-            }
-            
-            // Se encontrou com telefone limpo, usar esse
-            cliente = clienteLimpo;
-        }
-        
-        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
-            ? cliente.nome.split(' ')[0] 
-            : 'Cliente';
-        
-        const mensagem = `🎉 Olá ${nomeCliente}!\n\n` +
-                       `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
-                       `📋 Status: Em andamento\n` +
-                       `📍 Etapa atual: Formulário recebido\n\n` +
-                       `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
-                       `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812\n\n` +
-                       `🌟 Estamos aqui para ajudar você a realizar seu sonho de viajar!`;
-        
-        const enviado = await enviarWhatsApp(telefone, mensagem);
-        
-        res.json({
-            success: true,
-            telefone: telefone,
-            cliente: {
-                nome: cliente.nome,
-                criado_em: cliente.criado_em
-            },
-            notificacao_enviada: enviado,
-            mensagem: mensagem
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao notificar cliente:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-// ============ ROTA PARA VERIFICAR STATUS DO CLIENTE ============
+// 2. Verificar cliente (versão completa)
 app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
     try {
         const adminKey = req.headers['x-admin-key'];
@@ -2800,7 +2464,6 @@ app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
         
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
         
-        // Buscar em todas as tabelas
         const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
         const results = {};
         
@@ -2815,7 +2478,6 @@ app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
                 results[table] = data;
             }
             
-            // Tentar com telefone limpo
             if (!results[table]) {
                 const { data: dataLimpo } = await supabase
                     .from(table)
@@ -2829,7 +2491,6 @@ app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
             }
         }
         
-        // Buscar etapa se estiver em clientes_ativos
         let etapa = null;
         if (results['clientes_ativos']) {
             const { data } = await supabase
@@ -2868,83 +2529,6 @@ app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
     }
 });
 
-// ============ ROTAS ADMIN ============
-
-// 1. Teste do Z-API
-app.get('/api/test/zapi', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const testPhone = '21974601812';
-        const testMessage = '🧪 Teste de conexão Z-API - ' + new Date().toLocaleString('pt-BR');
-        
-        console.log(`📨 Testando Z-API para: ${testPhone}`);
-        const result = await enviarWhatsApp(testPhone, testMessage);
-        
-        res.json({
-            success: result,
-            message: result ? '✅ Mensagem enviada com sucesso!' : '❌ Falha ao enviar mensagem',
-            phone: testPhone,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('❌ Erro no teste Z-API:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// 2. Verificar cliente
-app.get('/api/admin/verificar-cliente/:telefone', async function(req, res) {
-    try {
-        const adminKey = req.headers['x-admin-key'];
-        if (adminKey !== ADMIN_API_KEY) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const telefone = req.params.telefone;
-        console.log(`🔍 Verificando cliente: ${telefone}`);
-        
-        // Buscar em clientes_ativos
-        const { data: ativo, error: ativoError } = await supabase
-            .from('clientes_ativos')
-            .select('*')
-            .eq('telefone', telefone)
-            .maybeSingle();
-        
-        // Buscar etapa
-        let etapa = null;
-        if (ativo) {
-            const { data: etapaData } = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefone)
-                .maybeSingle();
-            etapa = etapaData;
-        }
-        
-        res.json({
-            success: true,
-            telefone: telefone,
-            cliente: ativo || null,
-            etapa: etapa || null,
-            encontrado: !!ativo
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao verificar cliente:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
 // 3. Notificar cliente
 app.post('/api/admin/notificar-cliente', async function(req, res) {
     try {
@@ -2961,30 +2545,38 @@ app.post('/api/admin/notificar-cliente', async function(req, res) {
         
         console.log(`📨 Enviando notificação para: ${telefone}`);
         
-        // Buscar cliente
-        const { data: cliente, error } = await supabase
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        
+        let cliente = null;
+        const { data: clienteAtivo } = await supabase
             .from('clientes_ativos')
             .select('*')
             .eq('telefone', telefone)
             .maybeSingle();
         
-        if (error) {
-            return res.status(500).json({ error: error.message });
+        if (clienteAtivo) {
+            cliente = clienteAtivo;
+        } else {
+            const { data: clienteLimpo } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', telefoneLimpo)
+                .maybeSingle();
+            cliente = clienteLimpo;
         }
         
         if (!cliente) {
             return res.status(404).json({ 
                 error: 'Cliente não encontrado em clientes_ativos',
-                telefone: telefone
+                telefone_buscado: telefone,
+                telefone_limpo: telefoneLimpo
             });
         }
         
-        // Nome do cliente
         const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
             ? cliente.nome.split(' ')[0] 
             : 'Cliente';
         
-        // Mensagem padrão
         const texto = mensagem || `🎉 Olá ${nomeCliente}!\n\n` +
                      `Seu processo foi iniciado com sucesso na GetVisa Assessoria!\n\n` +
                      `📋 Status: Em andamento\n` +
@@ -2998,7 +2590,10 @@ app.post('/api/admin/notificar-cliente', async function(req, res) {
         res.json({
             success: true,
             telefone: telefone,
-            cliente: cliente.nome,
+            cliente: {
+                nome: cliente.nome,
+                criado_em: cliente.criado_em
+            },
             notificacao_enviada: enviado,
             mensagem: texto
         });
@@ -3012,7 +2607,7 @@ app.post('/api/admin/notificar-cliente', async function(req, res) {
     }
 });
 
-// 4. Mover cliente com notificação (versão melhorada)
+// 4. Mover cliente com notificação automática
 app.post('/api/painel/mover-com-notificacao', async function(req, res) {
     try {
         const adminKey = req.headers['x-admin-key'];
@@ -3026,7 +2621,6 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
             return res.status(400).json({ error: 'Telefone e destino são obrigatórios' });
         }
         
-        // Buscar em clientes_novos
         const { data: cliente, error } = await supabase
             .from('clientes_novos')
             .select('*')
@@ -3044,7 +2638,6 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
         let resultado = {};
         
         if (destino === 'ativo') {
-            // Mover para ativo
             const { data, error: insertError } = await supabase
                 .from('clientes_ativos')
                 .insert({
@@ -3062,14 +2655,12 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
             
             resultado = data;
             
-            // Criar etapa
             try {
                 await criarEtapaInicial(cliente.telefone);
             } catch (err) {
                 console.error('Erro ao criar etapa:', err);
             }
             
-            // Enviar notificação
             if (enviar_notificacao !== false) {
                 try {
                     const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
@@ -3092,7 +2683,6 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
                 }
             }
             
-            // Remover de clientes_novos
             await supabase.from('clientes_novos').delete().eq('telefone', telefone);
             
             res.json({
@@ -3115,8 +2705,7 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
     }
 });
 
-// ============ ROTA PARA FINALIZAR PROCESSO (APROVADO/RECUSADO) ============
-// ============ ROTA PARA FINALIZAR E MOVER PARA FINALIZADOS ============
+// 5. Finalizar processo (mover para finalizados)
 app.post('/api/clientes/finalizar', async function(req, res) {
     try {
         var telefone = req.body.telefone;
@@ -3131,7 +2720,6 @@ app.post('/api/clientes/finalizar', async function(req, res) {
         
         console.log(`📌 Finalizando cliente ${telefone}: ${resultado}`);
         
-        // Buscar dados do cliente em clientes_ativos
         const { data: cliente, error } = await supabase
             .from('clientes_ativos')
             .select('*')
@@ -3146,14 +2734,6 @@ app.post('/api/clientes/finalizar', async function(req, res) {
             return res.status(404).json({ erro: 'Cliente não encontrado em clientes_ativos' });
         }
         
-        // Buscar etapa atual
-        const { data: etapa, error: etapaError } = await supabase
-            .from('etapas_processo')
-            .select('etapa_atual, data_inicio')
-            .eq('cliente_telefone', telefone)
-            .maybeSingle();
-        
-        // Inserir em clientes_finalizados
         const { data: finalizado, error: insertError } = await supabase
             .from('clientes_finalizados')
             .insert({
@@ -3171,7 +2751,6 @@ app.post('/api/clientes/finalizar', async function(req, res) {
             .single();
         
         if (insertError) {
-            // Se já existe, atualizar
             const { data: updateData, error: updateError } = await supabase
                 .from('clientes_finalizados')
                 .update({
@@ -3190,19 +2769,16 @@ app.post('/api/clientes/finalizar', async function(req, res) {
             finalizado = updateData;
         }
         
-        // Remover de clientes_ativos
         await supabase
             .from('clientes_ativos')
             .delete()
             .eq('telefone', telefone);
         
-        // Remover de clientes_novos (se estiver lá)
         await supabase
             .from('clientes_novos')
             .delete()
             .eq('telefone', telefone);
         
-        // Remover de contatos_amigos (se estiver lá)
         await supabase
             .from('contatos_amigos')
             .delete()
@@ -3225,8 +2801,16 @@ app.post('/api/clientes/finalizar', async function(req, res) {
     }
 });
 
+// ============================================================
+// HEALTH CHECKS
+// ============================================================
+
 app.get('/health', function(req, res) { res.status(200).send('OK'); });
 app.get('/ping', function(req, res) { res.status(200).send('ok'); });
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
 
 app.listen(PORT, '0.0.0.0', function() {
     console.log('Servidor rodando na porta ' + PORT);
