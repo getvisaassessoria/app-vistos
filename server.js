@@ -2938,6 +2938,48 @@ app.post('/api/clientes/finalizar', async function(req, res) {
 });
 
 // ============================================================
+// ROTA DE TESTE - VERIFICAR CONEXÃO COM O BANCO
+// ============================================================
+app.get('/api/test/banco', async function(req, res) {
+    try {
+        console.log('🔍 TESTANDO CONEXÃO COM O BANCO...');
+        
+        // Tentar contar registros em clientes_finalizados
+        const { count, error } = await supabase
+            .from('clientes_finalizados')
+            .select('*', { count: 'exact', head: true });
+        
+        console.log('📊 Total de registros em clientes_finalizados:', count);
+        console.log('📊 Erro:', error);
+        
+        // Tentar buscar todos os registros
+        const { data, error2 } = await supabase
+            .from('clientes_finalizados')
+            .select('*');
+        
+        console.log('📊 Dados:', data);
+        console.log('📊 Erro2:', error2);
+        
+        // Verificar a URL do Supabase
+        console.log('📊 SUPABASE_URL:', process.env.SUPABASE_URL);
+        
+        res.json({
+            success: true,
+            total_registros: count,
+            dados: data,
+            erro: error,
+            supabase_url: process.env.SUPABASE_URL,
+            supabase_key: process.env.SUPABASE_ANON_KEY ? '✅ CONFIGURADA' : '❌ NÃO CONFIGURADA'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro no teste:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// ============================================================
 // HEALTH CHECKS
 // ============================================================
 
