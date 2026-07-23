@@ -1750,26 +1750,65 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // 2. VERIFICAR FINALIZADO (PRIORIDADE MÁXIMA)
+          // 2. VERIFICAR FINALIZADO (PRIORIDADE MÁXIMA) - BUSCA EM MÚLTIPLOS FORMATOS
 console.log('🔍 Verificando FINALIZADO...');
 console.log('🔍 Buscando no banco com telefone:', cleanPhone);
 
-// 🔥 TESTE DIRETO - VAI MOSTRAR O QUE ESTÁ ACONTECENDO
-const testeFinalizado = await supabase
+// Tentar diferentes formatos
+let finalizado = null;
+
+// Formato 1: telefone limpo
+const { data: data1, error: error1 } = await supabase
     .from('clientes_finalizados')
     .select('*')
     .eq('telefone', cleanPhone);
 
-console.log('🔍 TESTE DIRETO - Dados:', JSON.stringify(testeFinalizado.data));
-console.log('🔍 TESTE DIRETO - Erro:', testeFinalizado.error ? JSON.stringify(testeFinalizado.error) : 'NENHUM');
+console.log('🔍 Formato 1 (limpo):', data1 ? data1.length : 0, 'registros');
 
-var finalizado = await supabase
-    .from('clientes_finalizados')
-    .select('*')
-    .eq('telefone', cleanPhone)
-    .maybeSingle();
+if (data1 && data1.length > 0) {
+    finalizado = data1[0];
+}
 
-console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+// Formato 2: com parênteses
+if (!finalizado) {
+    const telefoneFormatado = `(${cleanPhone.substring(0,2)}) ${cleanPhone.substring(2,7)}-${cleanPhone.substring(7,11)}`;
+    console.log('🔍 Formato 2 (parênteses):', telefoneFormatado);
+    
+    const { data: data2, error: error2 } = await supabase
+        .from('clientes_finalizados')
+        .select('*')
+        .eq('telefone', telefoneFormatado);
+    
+    console.log('🔍 Formato 2 resultado:', data2 ? data2.length : 0, 'registros');
+    
+    if (data2 && data2.length > 0) {
+        finalizado = data2[0];
+    }
+}
+
+// Formato 3: LIKE (busca parcial)
+if (!finalizado) {
+    console.log('🔍 Formato 3 (LIKE): buscando por %97460%');
+    
+    const { data: data3, error: error3 } = await supabase
+        .from('clientes_finalizados')
+        .select('*')
+        .like('telefone', '%97460%');
+    
+    console.log('🔍 Formato 3 resultado:', data3 ? data3.length : 0, 'registros');
+    
+    if (data3 && data3.length > 0) {
+        finalizado = data3[0];
+    }
+}
+
+console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+console.log('📌 Dados:', finalizado ? JSON.stringify(finalizado) : 'NENHUM');
+
+if (finalizado) {
+    console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
+    // ... resto do código
+}
 
             // 3. VERIFICAR ATIVO
             console.log('🔍 Verificando ATIVO...');
