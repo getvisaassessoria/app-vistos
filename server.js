@@ -49,14 +49,14 @@ const BOAS_VINDAS_MESSAGES = {
         parte1: [
             '😊 Prazer, ',
             '🌟 Muito prazer, ',
-            '✨ Que nome bonito, ',
+            '✨ Tudo bem? ',
             '🎯 Ótimo, '
         ],
         parte2: [
-            '! Agora sim posso te ajudar da melhor forma.\n\nVamos lá: como posso ajudar hoje? Escolha uma opção:\n\n',
-            '! Estou aqui para realizar o sonho da sua viagem!\n\nEm que posso te ajudar? Escolha:\n\n',
+            '! Agora podemos te ajudar da melhor forma.\n\nVamos lá: como posso ajudar hoje? Escolha uma opção:\n\n',
+            '! Estamos aqui para realizar o sonho da sua viagem!\n\nEm que podemos te ajudar? Escolha:\n\n',
             '! Vamos encontrar a melhor solução para você!\n\nO que você precisa? Escolha uma opção:\n\n',
-            '! Preparado(a) para começar essa jornada?\n\nComo posso te ajudar? Escolha:\n\n'
+            '! Preparado(a) para começar essa jornada?\n\nComo podemos te ajudar? Escolha:\n\n'
         ]
     }
 };
@@ -1091,15 +1091,14 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
 
         'abertura_processo': `📋 Olá ${nomeCliente}!\n\n` +
                              `Seu processo foi aberto no consulado americano!\n\n` +
-                             `✅ O pagamento da taxa MRV foi confirmado.\n\n` +
                              `📍 Próxima etapa: Emissão do boleto consular.\n\n` +
                              `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,
 
         'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
                           `O boleto do consulado foi gerado com sucesso!\n\n` +
                           `📧 Você receberá o PDF por e-mail.\n\n` +
-                          `⏰ Prazo de pagamento: 7 dias úteis.\n\n` +
-                          `⚠️ Não esqueça de pagar dentro do prazo!`,
+                          `⏰ Não esqueça de pagar dentro do prazo!\n\n` +
+                          `⚠️ Aguardamos o pagamento para fazer o agendamento`,
 
         'boleto_pago': `✅ Olá ${nomeCliente}!\n\n` +
                        `Confirmamos o pagamento do seu boleto consular.\n\n` +
@@ -1108,8 +1107,8 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
 
         'agendamento_realizado': `📅 Olá ${nomeCliente}!\n\n` +
                                  `Sua entrevista foi agendada com sucesso!\n\n` +
-                                 `📧 Você receberá todos os detalhes por e-mail e WhatsApp.\n\n` +
-                                 `🎯 Prepare-se, você está quase lá!`,
+                                 `📧 Você receberá todos os detalhes por WhatsApp.\n\n` +
+                                 `🎯 Vamos agendar o treinamento/exclarecimentos para a entrevista?`,
 
         'treinamento_realizado': `🎓 Olá ${nomeCliente}!\n\n` +
                                  `Treinamento concluído com sucesso!\n\n` +
@@ -1124,12 +1123,12 @@ function gerarMensagemEtapa(etapa, nomeCliente) {
                                 `✈️ Boa viagem! Vá realizar seus sonhos!`,
 
         'visto_recusado': `😔 Olá ${nomeCliente}!\n\n` +
-                          `Infelizmente seu visto foi recusado.\n\n` +
-                          `Não desanime! Vamos analisar o motivo da recusa e\n` +
-                          `identificar como podemos ajudar na próxima tentativa.\n\n` +
-                          `📱 Entre em contato conosco para uma análise gratuita:\n` +
-                          `https://wa.me/5521974601812\n\n` +
-                          `💪 Ainda há esperança! Estamos aqui para ajudar!`
+                                `Sabemos que essa notícia dói, ainda mais depois de tanta dedicação na preparação.\n\n` +
+                                `É importante entender: a decisão final do visto acontece no momento da entrevista, e depende muito da avaliação pessoal do oficial consular naquele instante — algo que vai além da documentação e da preparação, por mais completa que tenha sido.\n\n` +
+                                `🔍 Vamos analisar com você os detalhes da entrevista para entender o que pesou na decisão e ajustar a estratégia para a próxima tentativa.\n\n` +
+                                `📱 Fale com a gente agora para uma análise gratuita:\n` +
+                                `https://wa.me/5521974601812\n\n` +
+                                `💪 Isso não muda o seu objetivo. Vamos trabalhar juntos para reverter esse cenário!`
     };
     
     // Se a etapa não tiver mensagem personalizada, usar mensagem genérica
@@ -1766,55 +1765,128 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            var ativo = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
+            // Verificar cliente ativo
+// Verificar cliente ativo
+var ativo = await supabase
+    .from('clientes_ativos')
+    .select('*')
+    .eq('telefone', cleanPhone)
+    .maybeSingle();
 
-            if (ativo.data) {
-                console.log('🔄 Cliente ATIVO: ' + cleanPhone);
-                
-                let state = userState.get(cleanPhone);
-                if (!state) {
-                    state = {
-                        nivel: 'principal',
-                        service: null,
-                        nome: ativo.data.nome || null,
-                        onboardingStep: ONBOARDING_STEPS.COMPLETO,
-                        onboardingCompleto: true,
-                        lastActivity: Date.now()
-                    };
-                    userState.set(cleanPhone, state);
-                }
+if (ativo.data) {
+    console.log('🔄 Cliente ATIVO: ' + cleanPhone);
+    
+    let state = userState.get(cleanPhone);
+    if (!state) {
+        state = {
+            nivel: 'principal',
+            service: null,
+            nome: ativo.data.nome || null,
+            onboardingStep: ONBOARDING_STEPS.COMPLETO,
+            onboardingCompleto: true,
+            lastActivity: Date.now()
+        };
+        userState.set(cleanPhone, state);
+    }
 
-                var etapaMsg = '';
-                try {
-                    var etapa = await supabase
-                        .from('etapas_processo')
-                        .select('etapa_atual')
-                        .eq('cliente_telefone', cleanPhone)
-                        .maybeSingle();
+    // Buscar etapa atual
+    var etapaMsg = '';
+    var etapaAtual = '';
+    try {
+        var etapa = await supabase
+            .from('etapas_processo')
+            .select('etapa_atual')
+            .eq('cliente_telefone', cleanPhone)
+            .maybeSingle();
 
-                    if (etapa.data) {
-                        var etapaInfo = ETAPAS[etapa.data.etapa_atual];
-                        etapaMsg = '\n📍 Etapa atual: ' + (etapaInfo && etapaInfo.label || etapa.data.etapa_atual);
-                    }
-                } catch (err) {
-                    console.log('Erro ao buscar etapa:', err);
-                }
+        if (etapa.data) {
+            etapaAtual = etapa.data.etapa_atual;
+            var etapaInfo = ETAPAS[etapaAtual];
+            etapaMsg = etapaInfo ? etapaInfo.label : etapaAtual;
+        }
+    } catch (err) {
+        console.log('Erro ao buscar etapa:', err);
+    }
 
-                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
-                const msgAtivo = '👋 Olá ' + nomeCliente + '!\n\n' +
-                                'Seu processo está em andamento.' + etapaMsg + '\n' +
-                                '📊 Status: ' + (ativo.data.status || 'em_processo') + '\n\n' +
-                                'Como posso ajudar?\n\n' +
-                                'Digite 0 para o MENU principal';
-                await sendReply(cleanPhone, msgAtivo);
-                
-                await processarMensagem(cleanPhone, messageText, body);
-                return;
-            }
+    const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
+    
+    // ============================================================
+    // RESPOSTAS PARA CLIENTE ATIVO (SEM MENU)
+    // ============================================================
+    
+    // Verificar se é saudação
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
+    if (saudacoes.includes(messageText.toLowerCase())) {
+        let msg = `👋 Olá ${nomeCliente}! Que bom ver você de novo!\n\n`;
+        
+        if (etapaMsg) {
+            msg += `📌 Seu processo está em: **${etapaMsg}**\n\n`;
+        }
+        
+        msg += `📱 Qualquer dúvida, fale conosco: https://wa.me/5521974601812\n\n`;
+        msg += `💙 Estamos aqui para ajudar você!`;
+        
+        await sendReply(cleanPhone, msg);
+        return;
+    }
+    
+    // Verificar se é pergunta sobre status
+    const perguntasStatus = ['status', 'andamento', 'como vai', 'atualização', 'atualizacao', 'etapa', 'processo'];
+    if (perguntasStatus.some(p => messageText.toLowerCase().includes(p))) {
+        let msg = `📊 **Status do Processo**\n\n`;
+        msg += `👤 Cliente: ${nomeCliente}\n`;
+        msg += `📍 Etapa atual: ${etapaMsg || 'Em andamento'}\n\n`;
+        msg += `✅ Estamos trabalhando para agilizar seu processo.\n\n`;
+        msg += `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`;
+        
+        await sendReply(cleanPhone, msg);
+        return;
+    }
+    
+    // Verificar se é pergunta sobre documentos
+    const perguntasDocs = ['documento', 'documentos', 'papel', 'papeis', 'enviar', 'preciso'];
+    if (perguntasDocs.some(p => messageText.toLowerCase().includes(p))) {
+        let msg = `📄 **Documentos Necessários**\n\n`;
+        msg += `Para seu processo, você precisa ter:\n\n`;
+        msg += `✅ Passaporte válido\n`;
+        msg += `✅ Foto 5x7 recente\n`;
+        msg += `✅ Comprovante de renda\n`;
+        msg += `✅ Extratos bancários\n\n`;
+        msg += `📱 Dúvidas específicas? Fale conosco: https://wa.me/5521974601812`;
+        
+        await sendReply(cleanPhone, msg);
+        return;
+    }
+    
+    // Verificar se é pergunta sobre prazo
+    const perguntasPrazo = ['prazo', 'tempo', 'demora', 'dias', 'semanas', 'quanto tempo'];
+    if (perguntasPrazo.some(p => messageText.toLowerCase().includes(p))) {
+        let msg = `⏱️ **Prazo do Processo**\n\n`;
+        msg += `O prazo total estimado é de **30 a 40 dias**.\n\n`;
+        msg += `📌 Cada etapa tem seu próprio prazo:\n`;
+        msg += `• Análise: 2-3 dias\n`;
+        msg += `• Boleto: 7 dias para pagamento\n`;
+        msg += `• Agendamento: 1-8 semanas\n`;
+        msg += `• Retorno do passaporte: 5-7 dias\n\n`;
+        msg += `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`;
+        
+        await sendReply(cleanPhone, msg);
+        return;
+    }
+    
+    // Mensagem padrão para cliente ativo
+    let msg = `📌 ${nomeCliente}, seu processo está em andamento.\n\n`;
+    
+    if (etapaMsg) {
+        msg += `📍 Etapa atual: **${etapaMsg}**\n\n`;
+    }
+    
+    msg += `📱 Qualquer dúvida, fale conosco: https://wa.me/5521974601812\n\n`;
+    msg += `💙 Estamos aqui para ajudar você!`;
+    
+    await sendReply(cleanPhone, msg);
+    return;
+}
 
             var novo = await supabase
                 .from('clientes_novos')
