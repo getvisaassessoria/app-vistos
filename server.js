@@ -1776,7 +1776,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE COM LOGS
+            // VERIFICAÇÕES DE CLIENTE - SIMPLES E DIRETA
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
@@ -1797,65 +1797,33 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-          // 2. VERIFICAR FINALIZADO (PRIORIDADE MÁXIMA) - BUSCA EM MÚLTIPLOS FORMATOS
-console.log('🔍 Verificando FINALIZADO...');
-console.log('🔍 Buscando no banco com telefone:', cleanPhone);
+            // 2. VERIFICAR FINALIZADO
+            console.log('🔍 Verificando FINALIZADO...');
+            var finalizado = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
 
-// Tentar diferentes formatos
-let finalizado = null;
+            console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
-// Formato 1: telefone limpo
-const { data: data1, error: error1 } = await supabase
-    .from('clientes_finalizados')
-    .select('*')
-    .eq('telefone', cleanPhone);
-
-console.log('🔍 Formato 1 (limpo):', data1 ? data1.length : 0, 'registros');
-
-if (data1 && data1.length > 0) {
-    finalizado = data1[0];
-}
-
-// Formato 2: com parênteses
-if (!finalizado) {
-    const telefoneFormatado = `(${cleanPhone.substring(0,2)}) ${cleanPhone.substring(2,7)}-${cleanPhone.substring(7,11)}`;
-    console.log('🔍 Formato 2 (parênteses):', telefoneFormatado);
-    
-    const { data: data2, error: error2 } = await supabase
-        .from('clientes_finalizados')
-        .select('*')
-        .eq('telefone', telefoneFormatado);
-    
-    console.log('🔍 Formato 2 resultado:', data2 ? data2.length : 0, 'registros');
-    
-    if (data2 && data2.length > 0) {
-        finalizado = data2[0];
-    }
-}
-
-// Formato 3: LIKE (busca parcial)
-if (!finalizado) {
-    console.log('🔍 Formato 3 (LIKE): buscando por %97460%');
-    
-    const { data: data3, error: error3 } = await supabase
-        .from('clientes_finalizados')
-        .select('*')
-        .like('telefone', '%97460%');
-    
-    console.log('🔍 Formato 3 resultado:', data3 ? data3.length : 0, 'registros');
-    
-    if (data3 && data3.length > 0) {
-        finalizado = data3[0];
-    }
-}
-
-console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-console.log('📌 Dados:', finalizado ? JSON.stringify(finalizado) : 'NENHUM');
-
-if (finalizado) {
-    console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
-    // ... resto do código
-}
+            if (finalizado.data) {
+                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.data.nome);
+                
+                const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
+                const servico = finalizado.data.servico || 'processo';
+                const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
+                const observacoes = finalizado.data.observacoes || '';
+                
+                let msg = `👋 Olá ${nomeCliente}!\n\n`;
+                msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
+                if (observacoes) msg += `📝 ${observacoes}\n\n`;
+                msg += `📱 Como podemos ajudar você hoje?\n\n`;
+                msg += `💬 Fique à vontade para escrever sua dúvida.`;
+                
+                await sendReply(cleanPhone, msg);
+                return;
+            }
 
             // 3. VERIFICAR ATIVO
             console.log('🔍 Verificando ATIVO...');
