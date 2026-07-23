@@ -1727,30 +1727,41 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
+            
+            // ============================================================
+            // VERIFICAÇÕES DE CLIENTE COM LOGS
+            // ============================================================
+            
+            console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
+            console.log('📱 Telefone:', cleanPhone);
 
-            console.log('🔍 Verificando cliente:', cleanPhone);
-
-            // 1. AMIGO
+            // 1. VERIFICAR AMIGO
+            console.log('🔍 Verificando AMIGO...');
             var amigo = await supabase
                 .from('contatos_amigos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
+            console.log('📌 Resultado AMIGO:', amigo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (amigo.data) {
-                console.log('👤 Contato AMIGO');
+                console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
                 return;
             }
 
-            // 2. FINALIZADO (PRIORIDADE MÁXIMA)
+            // 2. VERIFICAR FINALIZADO (PRIORIDADE MÁXIMA)
+            console.log('🔍 Verificando FINALIZADO...');
             var finalizado = await supabase
                 .from('clientes_finalizados')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
+            console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (finalizado.data) {
-                console.log('✅ Cliente FINALIZADO:', finalizado.data.nome);
+                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.data.nome);
                 
                 const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
                 const servico = finalizado.data.servico || 'processo';
@@ -1767,43 +1778,89 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // 3. ATIVO
+            // 3. VERIFICAR ATIVO
+            console.log('🔍 Verificando ATIVO...');
             var ativo = await supabase
                 .from('clientes_ativos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
+            console.log('📌 Resultado ATIVO:', ativo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (ativo.data) {
-                console.log('🔄 Cliente ATIVO:', ativo.data.nome);
-                await processarMensagem(cleanPhone, messageText, body);
+                console.log('🔄 Cliente ATIVO encontrado:', ativo.data.nome);
+                
+                // Buscar etapa atual
+                var etapaMsg = '';
+                try {
+                    var etapa = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', cleanPhone)
+                        .maybeSingle();
+                    if (etapa.data) {
+                        var etapaInfo = ETAPAS[etapa.data.etapa_atual];
+                        etapaMsg = etapaInfo ? etapaInfo.label : etapa.data.etapa_atual;
+                    }
+                } catch (err) {
+                    console.log('Erro ao buscar etapa:', err);
+                }
+                
+                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
+                let msg = `👋 Olá ${nomeCliente}!\n\n`;
+                if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
+                msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
+                msg += `💬 Fique à vontade para perguntar.`;
+                
+                await sendReply(cleanPhone, msg);
                 return;
             }
 
-            // 4. NOVO
+            // 4. VERIFICAR NOVO
+            console.log('🔍 Verificando NOVO...');
             var novo = await supabase
                 .from('clientes_novos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
+            console.log('📌 Resultado NOVO:', novo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (novo.data) {
-                console.log('👤 Cliente NOVO:', novo.data.nome);
+                console.log('👤 Cliente NOVO encontrado:', novo.data.nome);
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
             // 5. CRIA NOVO CLIENTE
-            console.log('🆕 Criando novo cliente...');
+            console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
             var resultado = await cadastrarCliente(cleanPhone, null);
             if (!resultado) {
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos.');
+                console.error('❌ Falha ao cadastrar cliente');
+                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
                 return;
             }
+            
+            console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
             await processarMensagem(cleanPhone, messageText, body);
 
         } catch (error) {
-            console.error('❌ Erro no processamento do webhook:', error);
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('Mensagem:', error.message);
+            console.error('Stack:', error.stack);
+            
+            try {
+                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
+                if (phone) {
+                    var cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
+                    }
+                }
+            } catch (e) {
+                console.error('Falha ao enviar mensagem de erro:', e);
+            }
         }
     })();
 });
