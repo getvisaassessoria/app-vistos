@@ -1765,8 +1765,37 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // Verificar cliente ativo
-// Verificar cliente ativo
+// ============================================================
+// VERIFICAR CLIENTE FINALIZADO (primeiro)
+// ============================================================
+var finalizado = await supabase
+    .from('clientes_finalizados')
+    .select('*')
+    .eq('telefone', cleanPhone)
+    .maybeSingle();
+
+if (finalizado.data) {
+    console.log('✅ Cliente FINALIZADO: ' + cleanPhone);
+    
+    const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
+    const servico = finalizado.data.servico || 'processo';
+    const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
+    const observacoes = finalizado.data.observacoes || '';
+    
+    let msg = `👋 Olá ${nomeCliente}!\n\n`;
+    msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
+    
+    if (observacoes) {
+        msg += `📝 ${observacoes}\n\n`;
+    }
+    
+    msg += `📱 Como podemos ajudar você hoje?\n\n`;
+    msg += `💬 Fique à vontade para escrever sua dúvida.`;
+    
+    await sendReply(cleanPhone, msg);
+    return;
+}
+
 // Verificar cliente ativo
 var ativo = await supabase
     .from('clientes_ativos')
@@ -3130,85 +3159,110 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
 });
 
 // ============ ROTA PARA FINALIZAR PROCESSO (APROVADO/RECUSADO) ============
-app.post('/api/etapas/finalizar', async function(req, res) {
+// ============ ROTA PARA FINALIZAR E MOVER PARA FINALIZADOS ============
+app.post('/api/clientes/finalizar', async function(req, res) {
     try {
         var telefone = req.body.telefone;
-        var etapaFinal = req.body.etapa_final;
-        var nota = req.body.nota || 'Processo finalizado';
+        var resultado = req.body.resultado || 'aprovado';
+        var observacoes = req.body.observacoes || '';
+        var servico = req.body.servico || 'Visto Americano';
+        var email = req.body.email || '';
         
-        if (!telefone || !etapaFinal) {
-            return res.status(400).json({ erro: 'Telefone e etapa_final são obrigatórios' });
+        if (!telefone) {
+            return res.status(400).json({ erro: 'Telefone é obrigatório' });
         }
         
-        if (!['passaporte_retornado', 'visto_recusado'].includes(etapaFinal)) {
-            return res.status(400).json({ erro: 'Etapa final inválida. Use passaporte_retornado ou visto_recusado' });
-        }
+        console.log(`📌 Finalizando cliente ${telefone}: ${resultado}`);
         
-        console.log(`📌 Finalizando processo para ${telefone} com: ${etapaFinal}`);
-        
-        // Buscar etapa atual
-        const { data: etapaAtual, error } = await supabase
-            .from('etapas_processo')
+        // Buscar dados do cliente em clientes_ativos
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
             .select('*')
-            .eq('cliente_telefone', telefone)
+            .eq('telefone', telefone)
             .maybeSingle();
         
         if (error) {
             return res.status(500).json({ erro: error.message });
         }
         
-        if (!etapaAtual) {
-            return res.status(404).json({ erro: 'Cliente não encontrado em etapas_processo' });
+        if (!cliente) {
+            return res.status(404).json({ erro: 'Cliente não encontrado em clientes_ativos' });
         }
         
-        // Atualizar para a etapa final
-        var historicoAtualizado = (etapaAtual.historico || []).concat([{
-            etapa: etapaAtual.etapa_atual,
-            data: new Date().toISOString(),
-            nota: nota,
-            observacao: `Processo finalizado com: ${etapaFinal === 'passaporte_retornado' ? '✅ APROVADO' : '❌ RECUSADO'}`
-        }]);
-        
-        var dadosAtualizacao = {
-            etapa_atual: etapaFinal,
-            data_atualizacao: new Date().toISOString(),
-            historico: historicoAtualizado
-        };
-        
-        var campoData = 'data_' + etapaFinal;
-        dadosAtualizacao[campoData] = new Date().toISOString();
-        
-        var updated = await supabase
+        // Buscar etapa atual
+        const { data: etapa, error: etapaError } = await supabase
             .from('etapas_processo')
-            .update(dadosAtualizacao)
+            .select('etapa_atual, data_inicio')
             .eq('cliente_telefone', telefone)
+            .maybeSingle();
+        
+        // Inserir em clientes_finalizados
+        const { data: finalizado, error: insertError } = await supabase
+            .from('clientes_finalizados')
+            .insert({
+                telefone: cliente.telefone,
+                nome: cliente.nome,
+                email: email || null,
+                servico: servico,
+                data_inicio: cliente.criado_em || new Date().toISOString(),
+                data_finalizacao: new Date().toISOString(),
+                observacoes: observacoes || `Processo finalizado com ${resultado}`,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
             .select()
             .single();
         
-        if (updated.error) {
-            throw updated.error;
+        if (insertError) {
+            // Se já existe, atualizar
+            const { data: updateData, error: updateError } = await supabase
+                .from('clientes_finalizados')
+                .update({
+                    servico: servico,
+                    data_finalizacao: new Date().toISOString(),
+                    observacoes: observacoes || `Processo finalizado com ${resultado}`,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('telefone', telefone)
+                .select()
+                .single();
+            
+            if (updateError) {
+                return res.status(500).json({ erro: updateError.message });
+            }
+            finalizado = updateData;
         }
         
-        // 🔔 NOTIFICAR CLIENTE
-        if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
-            try {
-                await notificarClienteEtapa(telefone, etapaFinal);
-                console.log(`✅ Notificação de finalização enviada para ${telefone}: ${etapaFinal}`);
-            } catch (err) {
-                console.error(`❌ Erro ao notificar:`, err);
-            }
-        }
+        // Remover de clientes_ativos
+        await supabase
+            .from('clientes_ativos')
+            .delete()
+            .eq('telefone', telefone);
+        
+        // Remover de clientes_novos (se estiver lá)
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefone);
+        
+        // Remover de contatos_amigos (se estiver lá)
+        await supabase
+            .from('contatos_amigos')
+            .delete()
+            .eq('telefone', telefone);
+        
+        console.log(`✅ Cliente ${telefone} finalizado e movido para clientes_finalizados`);
         
         res.json({
-            sucesso: true,
-            etapa_atual: etapaFinal,
-            dados: updated.data
+            success: true,
+            message: `Cliente finalizado com ${resultado}`,
+            cliente: finalizado
         });
         
     } catch (error) {
-        console.error('❌ Erro ao finalizar processo:', error);
+        console.error('❌ Erro ao finalizar cliente:', error);
         res.status(500).json({ 
-            erro: 'Erro ao finalizar processo', 
+            erro: 'Erro ao finalizar cliente', 
             detalhe: error.message 
         });
     }
