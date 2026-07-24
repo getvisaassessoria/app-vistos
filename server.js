@@ -1067,40 +1067,60 @@ async function processarClienteFinalizado(cleanPhone, messageText, dadosCliente)
 async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     console.log('📌 Processando cliente ATIVO:', dadosCliente.nome);
     
+    // ============================================================
+    // CORREÇÃO: Usar o telefone do cliente do banco
+    // ============================================================
+    const telefoneBusca = dadosCliente.telefone || cleanPhone;
+    console.log(`📌 Buscando etapa com: ${telefoneBusca}`);
+    
     // Buscar etapa atual
     let etapaMsg = '';
     try {
         const { data: etapa, error } = await supabase
             .from('etapas_processo')
             .select('etapa_atual')
-            .eq('cliente_telefone', cleanPhone)
+            .eq('cliente_telefone', telefoneBusca)
             .maybeSingle();
         
         if (!error && etapa) {
             const etapaInfo = ETAPAS[etapa.etapa_atual];
             etapaMsg = etapaInfo ? etapaInfo.label : etapa.etapa_atual;
+            console.log(`📌 Etapa encontrada: ${etapaMsg}`);
+        } else {
+            console.log('⚠️ Nenhuma etapa encontrada');
         }
     } catch (err) {
         console.log('Erro ao buscar etapa:', err);
     }
     
     const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
+    console.log(`📌 Nome do cliente: ${nomeCliente}`);
     
-    // Verifica se é um comando de menu
+    // ============================================================
+    // CORREÇÃO: Processar o comando "0" DIRETAMENTE, sem chamar processarMensagem
+    // ============================================================
     const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (comandos.includes(messageText.toLowerCase())) {
-        // Cliente ativo pode receber o menu
-        await processarMensagem(cleanPhone, messageText, {});
+        console.log('📌 Cliente solicitou menu principal');
+        
+        // Envia o menu principal DIRETAMENTE
+        const menu = await getMenuPrincipal();
+        let msg = `👋 Olá ${nomeCliente}!\n\n`;
+        if (etapaMsg) msg += `📌 Seu processo está em: **${etapaMsg}**\n\n`;
+        msg += menu;
+        
+        await sendReply(cleanPhone, msg);
         return;
     }
     
-    // Mensagem padrão para cliente ativo
+    // Mensagem padrão para cliente ativo (qualquer outra mensagem)
     let msg = `👋 Olá ${nomeCliente}!\n\n`;
     if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
     msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
     msg += `💬 Fique à vontade para perguntar.\n\n`;
     msg += `Digite 0 para acessar o menu principal.`;
     
+    console.log(`📨 Enviando mensagem para ${cleanPhone}`);
     await sendReply(cleanPhone, msg);
 }
 
