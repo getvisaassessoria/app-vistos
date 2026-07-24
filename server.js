@@ -1786,7 +1786,7 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// ROTAS PRINCIPAIS
+// ROTAS PRINCIPAIS - WEBHOOK REFATORADO
 // ============================================================
 
 app.post('/api/webhook/zapi', function(req, res) {
@@ -1878,32 +1878,16 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
-            
-            // ============================================================
-            // FUNÇÃO SIMPLES PARA FORMATAR TELEFONE (DEFINIDA LOCALMENTE)
-            // ============================================================
-            
-            function formatarTelefoneLocal(telefone) {
-                if (!telefone) return null;
-                const numeros = telefone.toString().replace(/\D/g, '');
-                if (numeros.length === 11) {
-                    return '(' + numeros.substring(0, 2) + ') ' + numeros.substring(2, 7) + '-' + numeros.substring(7, 11);
-                }
-                if (numeros.length === 10) {
-                    return '(' + numeros.substring(0, 2) + ') ' + numeros.substring(2, 6) + '-' + numeros.substring(6, 10);
-                }
-                return telefone;
-            }
 
             // ============================================================
             // FUNÇÃO PARA ENCONTRAR CLIENTE (DEFINIDA LOCALMENTE)
             // ============================================================
             
             async function encontrarClienteLocal(telefone) {
-                console.log(`🔍 Buscando cliente em todas as tabelas: ${telefone}`);
+                console.log(`🔍 Buscando cliente: ${telefone}`);
                 
                 const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-                const telefoneFormatado = formatarTelefoneLocal(telefoneLimpo);
+                const telefoneFormatado = formatarTelefone(telefoneLimpo);
                 
                 console.log(`📌 Variações: limpo="${telefoneLimpo}", formatado="${telefoneFormatado}"`);
                 
@@ -1919,7 +1903,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                             .maybeSingle();
                         
                         if (!errorLimpo && dataLimpo) {
-                            console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
+                            console.log(`✅ Cliente encontrado em ${table}:`, dataLimpo.nome || dataLimpo.telefone);
                             return { tabela: table, dados: dataLimpo };
                         }
                         
@@ -1931,7 +1915,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                             .maybeSingle();
                         
                         if (!errorFormatado && dataFormatado) {
-                            console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
+                            console.log(`✅ Cliente encontrado em ${table} (formatado):`, dataFormatado.nome || dataFormatado.telefone);
                             return { tabela: table, dados: dataFormatado };
                         }
                         
@@ -1943,7 +1927,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                             .maybeSingle();
                         
                         if (!errorOriginal && dataOriginal) {
-                            console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
+                            console.log(`✅ Cliente encontrado em ${table} (original):`, dataOriginal.nome || dataOriginal.telefone);
                             return { tabela: table, dados: dataOriginal };
                         }
                     } catch (err) {
@@ -1951,42 +1935,39 @@ app.post('/api/webhook/zapi', function(req, res) {
                     }
                 }
                 
-                console.log('❌ Cliente não encontrado em nenhuma tabela');
+                console.log('❌ Cliente não encontrado');
                 return null;
             }
 
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE
+            // VERIFICAR CLIENTE
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
-            console.log('📱 Telefone:', cleanPhone);
-
-            // Usar a função para encontrar o cliente em qualquer tabela
+            
             const clienteEncontrado = await encontrarClienteLocal(cleanPhone);
 
             if (clienteEncontrado) {
                 const { tabela, dados } = clienteEncontrado;
-                console.log(`📌 Cliente encontrado em: ${tabela}`);
+                console.log(`📌 Cliente em: ${tabela}`);
                 
-                // Se for AMIGO - silêncio total
+                // AMIGO - silêncio
                 if (tabela === 'contatos_amigos') {
-                    console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
+                    console.log('👤 AMIGO - SILÊNCIO');
                     return;
                 }
                 
-                // Se for FINALIZADO
+                // FINALIZADO
                 if (tabela === 'clientes_finalizados') {
-                    console.log('✅ Cliente FINALIZADO:', dados.nome);
+                    console.log('✅ FINALIZADO:', dados.nome);
                     await processarClienteFinalizado(cleanPhone, messageText, dados);
                     return;
                 }
                 
-                // Se for ATIVO
+                // ATIVO
                 if (tabela === 'clientes_ativos') {
-                    console.log('🔄 Cliente ATIVO:', dados.nome);
+                    console.log('🔄 ATIVO:', dados.nome);
                     
-                    // Verifica se tem etapa
                     const { data: etapaExistente } = await supabase
                         .from('etapas_processo')
                         .select('etapa_atual')
@@ -1994,7 +1975,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                         .maybeSingle();
                     
                     if (!etapaExistente) {
-                        console.log('⚠️ Cliente ATIVO sem etapa - criando...');
+                        console.log('⚠️ Sem etapa - criando...');
                         await criarEtapaInicial(dados.telefone);
                     }
                     
@@ -2002,109 +1983,77 @@ app.post('/api/webhook/zapi', function(req, res) {
                     return;
                 }
                 
-                // Se for NOVO
-if (tabela === 'clientes_novos') {
-    console.log('👤 Cliente NOVO encontrado:', dados.nome || 'Sem nome');
-    console.log('📌 Onboarding completo:', dados.onboarding_completo);
-    
-    // Se já tem nome e onboarding completo, mover para ATIVOS
-    if (dados.nome && dados.onboarding_completo === true) {
-        console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
-        
-        // Verificar se já existe em clientes_ativos
-        const { data: existeAtivo } = await supabase
-            .from('clientes_ativos')
-            .select('telefone')
-            .eq('telefone', dados.telefone)
-            .maybeSingle();
-        
-        if (!existeAtivo) {
-            // Inserir em clientes_ativos
-            await supabase
-                .from('clientes_ativos')
-                .insert({
-                    telefone: dados.telefone,
-                    nome: dados.nome,
-                    criado_em: dados.data_contato || new Date().toISOString(),
-                    atualizado_em: new Date().toISOString(),
-                    status: 'em_processo'
-                });
-            
-            console.log('✅ Cliente inserido em ATIVOS');
-            
-            // Criar etapa inicial
-            await criarEtapaInicial(dados.telefone);
-            
-            // Remover de NOVOS
-            await supabase
-                .from('clientes_novos')
-                .delete()
-                .eq('telefone', cleanPhone);
-            
-            console.log('🗑️ Cliente removido de NOVOS');
-            
-            // Buscar o cliente em ATIVOS
-            const { data: ativoNovo } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-            
-            if (ativoNovo) {
-                console.log('✅ Cliente movido para ATIVOS com sucesso');
-                await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
-                return;
-            }
-        } else {
-            // Se já existe em ATIVOS, só remover de NOVOS
-            await supabase
-                .from('clientes_novos')
-                .delete()
-                .eq('telefone', cleanPhone);
-            console.log('🗑️ Cliente removido de NOVOS (já existia em ATIVOS)');
-            
-            const { data: ativoExistente } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-            
-            if (ativoExistente) {
-                await processarClienteAtivo(cleanPhone, messageText, ativoExistente);
-                return;
-            }
-        }
-    }
-    
-    // Se não tem nome ainda (onboarding pendente)
-    await processarMensagem(cleanPhone, messageText, body);
-    return;
-}
+                // NOVO
+                if (tabela === 'clientes_novos') {
+                    console.log('👤 NOVO:', dados.nome || 'Sem nome');
+                    
+                    // Se tem nome e onboarding completo → mover para ATIVOS
+                    if (dados.nome && dados.onboarding_completo === true) {
+                        console.log('🔄 Movendo para ATIVOS...');
+                        
+                        const { data: existeAtivo } = await supabase
+                            .from('clientes_ativos')
+                            .select('telefone')
+                            .eq('telefone', dados.telefone)
+                            .maybeSingle();
+                        
+                        if (!existeAtivo) {
+                            await supabase
+                                .from('clientes_ativos')
+                                .insert({
+                                    telefone: dados.telefone,
+                                    nome: dados.nome,
+                                    criado_em: dados.data_contato || new Date().toISOString(),
+                                    atualizado_em: new Date().toISOString(),
+                                    status: 'em_processo'
+                                });
+                            console.log('✅ Inserido em ATIVOS');
+                            await criarEtapaInicial(dados.telefone);
+                        }
+                        
+                        await supabase
+                            .from('clientes_novos')
+                            .delete()
+                            .eq('telefone', cleanPhone);
+                        console.log('🗑️ Removido de NOVOS');
+                        
+                        const { data: ativoNovo } = await supabase
+                            .from('clientes_ativos')
+                            .select('*')
+                            .eq('telefone', cleanPhone)
+                            .maybeSingle();
+                        
+                        if (ativoNovo) {
+                            await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
+                            return;
+                        }
+                    }
+                    
+                    // Onboarding pendente
+                    await processarMensagem(cleanPhone, messageText, body);
+                    return;
+                }
             }
 
-            // Se não encontrou em nenhuma tabela, CRIAR NOVO CLIENTE
-            console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
-            const resultado = await cadastrarCliente(cleanPhone, null);
-            if (!resultado) {
-                console.error('❌ Falha ao cadastrar cliente');
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                return;
-            }
+            // ============================================================
+            // CRIAR NOVO CLIENTE
+            // ============================================================
             
-            console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
+            console.log('🆕 Criando novo cliente...');
+            await cadastrarCliente(cleanPhone, null);
             await processarMensagem(cleanPhone, messageText, body);
 
         } catch (error) {
-            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('❌ ERRO NO WEBHOOK:');
             console.error('Mensagem:', error.message);
             console.error('Stack:', error.stack);
             
             try {
-                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
+                var phone = req.body?.phone || req.body?.from || req.body?.chatId;
                 if (phone) {
                     var cleanPhone = phone.toString().replace(/\D/g, '');
                     if (cleanPhone.length >= 10) {
-                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.\n\nDigite 0 para tentar novamente.');
                     }
                 }
             } catch (e) {
