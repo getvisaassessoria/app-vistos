@@ -900,28 +900,46 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
 
 async function enviarWhatsApp(telefone, mensagem) {
     try {
+        // 🔥 FORÇA O FORMATO CORRETO PARA O Z-API
+        let cleanPhone = telefone.toString().replace(/\D/g, '');
+        
+        // Garante que tem 55 no início (código do Brasil)
+        if (!cleanPhone.startsWith('55')) {
+            cleanPhone = '55' + cleanPhone;
+        }
+        
+        console.log(`📨 Telefone original: ${telefone}`);
+        console.log(`📨 Telefone para Z-API: ${cleanPhone}`);
+        
         const instance = process.env.ZAPI_INSTANCE;
         const token = process.env.ZAPI_TOKEN;
         const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+        
         if (!instance || !token) {
-            console.log('Z-API nao configurada');
+            console.log('⚠️ Z-API nao configurada');
             return false;
         }
-        const cleanPhone = telefone.toString().replace(/\D/g, '');
+        
         const url = 'https://api.z-api.io/instances/' + instance + '/token/' + token + '/send-text';
+        
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Client-Token': securityToken || ''
             },
-            body: JSON.stringify({ phone: cleanPhone, message: mensagem })
+            body: JSON.stringify({ 
+                phone: cleanPhone,  // ← USA O NÚMERO COM 55
+                message: mensagem 
+            })
         });
+        
         const result = await response.text();
-        console.log('WhatsApp enviado para ' + cleanPhone + ': ' + response.status);
+        console.log(`📨 Resposta Z-API: ${response.status} - ${result}`);
+        
         return response.status === 200 || response.status === 201;
     } catch (error) {
-        console.error('Erro ao enviar WhatsApp:', error.message);
+        console.error('❌ Erro ao enviar WhatsApp:', error.message);
         return false;
     }
 }
