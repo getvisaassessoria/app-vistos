@@ -3475,17 +3475,16 @@ app.post('/api/clientes/reabrir', async function(req, res) {
         
         // Inserir de volta em clientes_ativos
         const { data: ativo, error: insertError } = await supabase
-            .from('clientes_ativos')
-            .insert({
-                telefone: cliente.telefone,
-                nome: cliente.nome,
-                email: cliente.email || null,
-                criado_em: cliente.data_inicio || new Date().toISOString(),
-                atualizado_em: new Date().toISOString(),
-                status: 'reaberto'
-            })
-            .select()
-            .single();
+    .from('clientes_ativos')
+    .insert({
+        telefone: cliente.telefone,
+        nome: cliente.nome,
+        criado_em: cliente.data_inicio || new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+        status: 'reaberto'
+    })
+    .select()
+    .single();
         
         if (insertError) {
             console.error('❌ Erro ao inserir em ativos:', insertError);
