@@ -65,16 +65,82 @@ const BOAS_VINDAS_MESSAGES = {
 };
 
 const ETAPAS = {
-    'formulario_enviado': { id: 'formulario_enviado', label: 'Formulário Enviado', next: 'analise_correcoes', color: '#3498db' },
-    'analise_correcoes': { id: 'analise_correcoes', label: 'Análise e Correções', next: 'abertura_processo', color: '#f39c12' },
-    'abertura_processo': { id: 'abertura_processo', label: 'Abertura do Processo', next: 'boleto_emitido', color: '#8e44ad' },
-    'boleto_emitido': { id: 'boleto_emitido', label: 'Boleto Emitido', next: 'boleto_pago', color: '#e67e22' },
-    'boleto_pago': { id: 'boleto_pago', label: 'Boleto Pago', next: 'agendamento_realizado', color: '#27ae60' },
-    'agendamento_realizado': { id: 'agendamento_realizado', label: 'Agendamento Realizado', next: 'treinamento_realizado', color: '#2980b9' },
-    'treinamento_realizado': { id: 'treinamento_realizado', label: 'Treinamento Concluído', next: 'entrevista_realizada', color: '#8e44ad' },
-    'entrevista_realizada': { id: 'entrevista_realizada', label: '🎤 Entrevista Realizada', next: null, color: '#2c3e50' },
-    'passaporte_retornado': { id: 'passaporte_retornado', label: '✅ Passaporte Retornado (Aprovado)', next: null, color: '#2ecc71' },
-    'visto_recusado': { id: 'visto_recusado', label: '❌ Visto Recusado', next: null, color: '#ef4444' }
+    formulario_enviado: {
+        id: 'formulario_enviado',
+        label: 'Formulário Enviado',
+        next: 'analise_correcoes',
+        color: '#3498db'
+    },
+
+    analise_correcoes: {
+        id: 'analise_correcoes',
+        label: 'Análise e Correções',
+        next: 'abertura_processo',
+        color: '#f39c12'
+    },
+
+    abertura_processo: {
+        id: 'abertura_processo',
+        label: 'Abertura do Processo',
+        next: 'boleto_emitido',
+        color: '#8e44ad'
+    },
+
+    boleto_emitido: {
+        id: 'boleto_emitido',
+        label: 'Boleto Emitido',
+        next: 'boleto_pago',
+        color: '#e67e22'
+    },
+
+    boleto_pago: {
+        id: 'boleto_pago',
+        label: 'Boleto Pago',
+        next: 'agendamento_realizado',
+        color: '#27ae60'
+    },
+
+    agendamento_realizado: {
+        id: 'agendamento_realizado',
+        label: 'Agendamento Realizado',
+        next: 'treinamento_realizado',
+        color: '#2980b9'
+    },
+
+    treinamento_realizado: {
+        id: 'treinamento_realizado',
+        label: 'Treinamento Concluído',
+        next: 'entrevista_realizada',
+        color: '#8e44ad'
+    },
+
+    entrevista_realizada: {
+        id: 'entrevista_realizada',
+        label: '🎤 Entrevista Realizada',
+        next: null, // decisão manual: aprovado ou recusado
+        color: '#2c3e50'
+    },
+
+    visto_aprovado: {
+        id: 'visto_aprovado',
+        label: '✅ Visto Aprovado',
+        next: 'passaporte_retornado',
+        color: '#16a34a'
+    },
+
+    passaporte_retornado: {
+        id: 'passaporte_retornado',
+        label: '📦 Passaporte disponível para retirada/entrega',
+        next: null,
+        color: '#2ecc71'
+    },
+
+    visto_recusado: {
+        id: 'visto_recusado',
+        label: '❌ Visto Recusado',
+        next: null,
+        color: '#ef4444'
+    }
 };
 
 const RADIO_MAPPING = {
@@ -1224,6 +1290,82 @@ async function criarEtapaComCliente(cliente, telefone) {
 }
 
 
+function gerarMensagemEtapa(etapaId, nome) {
+    const primeiroNome = nome && typeof nome === 'string'
+        ? nome.trim().split(' ')[0]
+        : 'Cliente';
+
+    const mensagens = {
+        formulario_enviado:
+            `🎉 Olá ${primeiroNome}!\n\n` +
+            `Recebemos seu formulário e seu processo foi iniciado com sucesso.\n\n` +
+            `📋 Etapa atual: Formulário Enviado\n\n` +
+            `Nossa equipe dará continuidade à análise das informações.`,
+
+        analise_correcoes:
+            `🔎 Olá ${primeiroNome}!\n\n` +
+            `Seu processo está em análise.\n\n` +
+            `📋 Etapa atual: Análise e Correções\n\n` +
+            `Caso seja necessário algum ajuste, nossa equipe entrará em contato.`,
+
+        abertura_processo:
+            `📂 Olá ${primeiroNome}!\n\n` +
+            `Seu processo foi aberto com sucesso!\n\n` +
+            `📋 Etapa atual: Abertura do Processo\n\n` +
+            `Seguiremos agora com os próximos procedimentos.`,
+
+        boleto_emitido:
+            `💳 Olá ${primeiroNome}!\n\n` +
+            `Uma nova atualização foi registrada no seu processo.\n\n` +
+            `📋 Etapa atual: Boleto Emitido\n\n` +
+            `Verifique as orientações da nossa equipe para pagamento.`,
+
+        boleto_pago:
+            `✅ Olá ${primeiroNome}!\n\n` +
+            `O pagamento foi confirmado em seu processo.\n\n` +
+            `📋 Etapa atual: Boleto Pago\n\n` +
+            `Agora seguiremos para as próximas etapas do agendamento.`,
+
+        agendamento_realizado:
+            `📅 Olá ${primeiroNome}!\n\n` +
+            `Seu agendamento foi realizado com sucesso!\n\n` +
+            `📋 Etapa atual: Agendamento Realizado\n\n` +
+            `Nossa equipe enviará as orientações necessárias para essa fase.`,
+
+        treinamento_realizado:
+            `🎯 Olá ${primeiroNome}!\n\n` +
+            `Seu treinamento foi concluído!\n\n` +
+            `📋 Etapa atual: Treinamento Concluído\n\n` +
+            `Você está preparado(a) para a próxima fase do processo.`,
+
+        entrevista_realizada:
+            `🎤 Olá ${primeiroNome}!\n\n` +
+            `Registramos a realização da sua entrevista.\n\n` +
+            `📋 Etapa atual: Entrevista Realizada\n\n` +
+            `Agora aguardaremos a definição do resultado consular.`,
+
+        visto_aprovado:
+            `🎉 Parabéns, ${primeiroNome}!\n\n` +
+            `Seu visto foi aprovado! ✅\n\n` +
+            `📋 Próximo passo: aguardaremos a devolução do seu passaporte.\n\n` +
+            `Assim que ele estiver disponível para retirada ou entrega, avisaremos você por aqui. ✈️`,
+
+        passaporte_retornado:
+            `📦 Olá ${primeiroNome}!\n\n` +
+            `Excelente notícia: seu passaporte já está disponível! ✅\n\n` +
+            `Nossa equipe entrará em contato para combinar a retirada ou a entrega.\n\n` +
+            `A GetVisa agradece a sua confiança e deseja uma ótima viagem! ✈️`,
+
+        visto_recusado:
+            `Olá ${primeiroNome}.\n\n` +
+            `Recebemos a atualização de que o visto não foi aprovado nesta solicitação.\n\n` +
+            `Sabemos que esse momento pode ser difícil. Nossa equipe analisará os detalhes para orientar você sobre os próximos passos e uma possível nova estratégia.\n\n` +
+            `Conte com a GetVisa.`
+    };
+
+    return mensagens[etapaId] || null;
+}
+
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
     if (novaEtapa === 'entrevista_realizada') {
@@ -2356,6 +2498,115 @@ app.post('/api/etapas/avancar', async function(req, res) {
     } catch (error) {
         console.error('Erro ao avançar etapa:', error);
         res.status(500).json({ erro: 'Erro ao avançar etapa', detalhe: error.message });
+    }
+});
+
+app.post('/api/etapas/definir-resultado', async function(req, res) {
+    try {
+        const { telefone, resultado, nota, observacao } = req.body;
+
+        if (!telefone || !resultado) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Telefone e resultado são obrigatórios'
+            });
+        }
+
+        if (!['aprovado', 'recusado'].includes(resultado)) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Resultado deve ser "aprovado" ou "recusado"'
+            });
+        }
+
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        const telefoneFormatado = formatarTelefone(telefoneLimpo);
+
+        let { data: etapa, error } = await supabase
+            .from('etapas_processo')
+            .select('*')
+            .eq('cliente_telefone', telefoneFormatado)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (!etapa) {
+            const { data: etapaLimpa, error: erroLimpo } = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefoneLimpo)
+                .maybeSingle();
+
+            if (erroLimpo) throw erroLimpo;
+
+            etapa = etapaLimpa;
+        }
+
+        if (!etapa) {
+            return res.status(404).json({
+                sucesso: false,
+                erro: 'Etapa do cliente não encontrada'
+            });
+        }
+
+        if (etapa.etapa_atual !== 'entrevista_realizada') {
+            return res.status(400).json({
+                sucesso: false,
+                erro: `O resultado só pode ser definido após a entrevista. Etapa atual: ${etapa.etapa_atual}`
+            });
+        }
+
+        const novaEtapa = resultado === 'aprovado'
+            ? 'visto_aprovado'
+            : 'visto_recusado';
+
+        const dataAgora = new Date().toISOString();
+
+        const historicoAtualizado = [
+            ...(etapa.historico || []),
+            {
+                etapa: novaEtapa,
+                data: dataAgora,
+                nota: nota || `Resultado da entrevista: ${resultado}`,
+                observacao: observacao || 'Resultado informado pela equipe administrativa'
+            }
+        ];
+
+        const { data: atualizado, error: updateError } = await supabase
+            .from('etapas_processo')
+            .update({
+                etapa_atual: novaEtapa,
+                data_atualizacao: dataAgora,
+                [`data_${novaEtapa}`]: dataAgora,
+                historico: historicoAtualizado
+            })
+            .eq('id', etapa.id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        const resultadoNotificacao = await notificarClienteEtapa(
+            telefoneLimpo,
+            novaEtapa
+        );
+
+        return res.json({
+            sucesso: true,
+            etapa_anterior: 'entrevista_realizada',
+            etapa_atual: novaEtapa,
+            notificacao: resultadoNotificacao,
+            dados: atualizado
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao definir resultado da entrevista:', error);
+
+        return res.status(500).json({
+            sucesso: false,
+            erro: 'Erro ao definir resultado da entrevista',
+            detalhe: error.message
+        });
     }
 });
 
