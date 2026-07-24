@@ -3037,6 +3037,253 @@ app.get('/api/test/banco', async function(req, res) {
 });
 
 // ============================================================
+// ROTA DE FINALIZAÇÃO - CORRESPONDE AO QUE O PAINEL ENVIA
+// ============================================================
+
+app.post('/api/etapas/finalizar', async function(req, res) {
+    console.log('📌 ===== ROTA /api/etapas/finalizar CHAMADA =====');
+    console.log('📌 Body recebido:', JSON.stringify(req.body, null, 2));
+    
+    try {
+        // O painel envia: { telefone, etapa_final, nota }
+        var telefone = req.body.telefone;
+        var etapaFinal = req.body.etapa_final || 'passaporte_retornado';
+        var nota = req.body.nota || '';
+        
+        console.log('📌 Telefone:', telefone);
+        console.log('📌 Etapa Final:', etapaFinal);
+        console.log('📌 Nota:', nota);
+        
+        if (!telefone) {
+            console.log('❌ Telefone não fornecido');
+            return res.status(400).json({ 
+                sucesso: false, 
+                erro: 'Telefone é obrigatório',
+                body_recebido: req.body 
+            });
+        }
+        
+        // Limpa o telefone
+        var telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (telefoneLimpo.startsWith('55')) telefoneLimpo = telefoneLimpo.substring(2);
+        console.log('📌 Telefone limpo:', telefoneLimpo);
+        
+        // Busca o cliente em clientes_ativos
+        console.log('🔍 Buscando cliente em clientes_ativos...');
+        let { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        if (error) {
+            console.error('❌ Erro ao buscar cliente:', error);
+            return res.status(500).json({ sucesso: false, erro: error.message });
+        }
+        
+        // Se não encontrou, tenta com telefone formatado
+        if (!cliente) {
+            const telefoneFormatado = formatarTelefone(telefoneLimpo);
+            console.log('🔍 Tentando com telefone formatado:', telefoneFormatado);
+            const { data: clienteFormatado } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            
+            if (clienteFormatado) {
+                cliente = clienteFormatado;
+            }
+        }
+        
+        if (!cliente) {
+            console.log('❌ Cliente não encontrado em clientes_ativos');
+            return res.status(404).json({ 
+                sucesso: false, 
+                erro: 'Cliente não encontrado em clientes_ativos',
+                telefone_buscado: telefoneLimpo
+            });
+        }
+        
+        console.log('✅ Cliente encontrado:', cliente.nome);
+        
+        // Determina o resultado baseado na etapa final
+        const isAprovado = etapaFinal === 'passaporte_retornado';
+        const resultado = isAprovado ? 'aprovado' : 'recusado';
+        const servico = 'Visto Americano';
+        
+        // Prepara os dados para finalização
+        const dadosFinalizacao = {
+            telefone: cliente.telefone,
+            nome: cliente.nome,
+            email: cliente.email || null,
+            servico: servico,
+            data_inicio: cliente.criado_em || new Date().toISOString(),
+            data_finalizacao: new Date().toISOString(),
+            observacoes: nota || `Processo finalizado com ${resultado}`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        
+        console.log('📌 Dados para finalizar:', JSON.stringify(dadosFinalizacao, null, 2));
+        
+        // Insere em clientes_finalizados
+        const { data: finalizado, error: insertError } = await supabase
+            .from('clientes_finalizados')
+            .insert(dadosFinalizacao)
+            .select()
+            .single();
+        
+        if (insertError) {
+            console.error('❌ Erro ao inserir em clientes_finalizados:', insertError);
+            
+            // Tenta atualizar se já existir
+            const { data: updateData, error: updateError } = await supabase
+                .from('clientes_finalizados')
+                .update({
+                    servico: servico,
+                    data_finalizacao: new Date().toISOString(),
+                    observacoes: nota || `Processo finalizado com ${resultado}`,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('telefone', cliente.telefone)
+                .select()
+                .single();
+            
+            if (updateError) {
+                console.error('❌ Erro ao atualizar clientes_finalizados:', updateError);
+                return res.status(500).json({ 
+                    sucesso: false, 
+                    erro: 'Erro ao salvar em clientes_finalizados', 
+                    detalhe: insertError.message
+                });
+            }
+            finalizado = updateData;
+            console.log('✅ Cliente atualizado em clientes_finalizados');
+        } else {
+            console.log('✅ Cliente inserido em clientes_finalizados');
+        }
+        
+        // Remove de todas as outras tabelas
+        console.log('🗑️ Removendo de outras tabelas...');
+        
+        await supabase
+            .from('clientes_ativos')
+            .delete()
+            .eq('telefone', cliente.telefone);
+        
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', cliente.telefone);
+        
+        await supabase
+            .from('contatos_amigos')
+            .delete()
+            .eq('telefone', cliente.telefone);
+        
+        console.log('✅ Cliente removido das outras tabelas');
+        
+        // Atualiza a etapa no processo (se existir)
+        try {
+            const { data: etapaData } = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', cliente.telefone)
+                .maybeSingle();
+            
+            if (etapaData) {
+                const historicoAtualizado = (etapaData.historico || []).concat([{
+                    etapa: etapaFinal,
+                    data: new Date().toISOString(),
+                    nota: nota || 'Processo finalizado',
+                    observacao: `Cliente finalizado com ${resultado}`
+                }]);
+                
+                await supabase
+                    .from('etapas_processo')
+                    .update({
+                        etapa_atual: etapaFinal,
+                        data_atualizacao: new Date().toISOString(),
+                        historico: historicoAtualizado,
+                        [`data_${etapaFinal}`]: new Date().toISOString()
+                    })
+                    .eq('cliente_telefone', cliente.telefone);
+                
+                console.log('✅ Etapa atualizada no processo');
+            }
+        } catch (err) {
+            console.error('❌ Erro ao atualizar etapa:', err);
+        }
+        
+        // Envia a mensagem de finalização
+        try {
+            const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+                ? cliente.nome.split(' ')[0] 
+                : 'Cliente';
+            
+            let mensagem = '';
+            if (!isAprovado) {
+                mensagem = `😔 Olá ${nomeCliente}!\n\n` +
+                          `Sabemos que essa notícia dói, ainda mais depois de tanta dedicação na preparação.\n\n` +
+                          `É importante entender: a decisão final do visto acontece no momento da entrevista, e depende muito da avaliação pessoal do oficial consular naquele instante — algo que vai além da documentação e da preparação, por mais completa que tenha sido.\n\n` +
+                          `🔍 Vamos analisar com você os detalhes da entrevista para entender o que pesou na decisão e ajustar a estratégia para a próxima tentativa.\n\n` +
+                          `📱 Fale com a gente agora para uma análise gratuita:\n` +
+                          `https://wa.me/5521974601812\n\n` +
+                          `💪 Isso não muda o seu objetivo. Vamos trabalhar juntos para reverter esse cenário!`;
+            } else {
+                mensagem = `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
+                          `Seu passaporte com o visto foi retornado!\n\n` +
+                          `✅ Seu processo foi concluído com sucesso!\n\n` +
+                          `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
+                          `✈️ Boa viagem! Vá realizar seus sonhos!`;
+            }
+            
+            const enviado = await enviarWhatsApp(cliente.telefone, mensagem);
+            console.log(`✅ Mensagem de finalização enviada: ${enviado}`);
+        } catch (err) {
+            console.error('❌ Erro ao enviar mensagem de finalização:', err);
+        }
+        
+        console.log('✅ ===== PROCESSO FINALIZADO COM SUCESSO =====');
+        
+        res.json({
+            sucesso: true,
+            message: `Cliente finalizado com ${resultado}`,
+            etapa: etapaFinal,
+            cliente: finalizado
+        });
+        
+    } catch (error) {
+        console.error('❌ ERRO AO FINALIZAR CLIENTE:');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
+        res.status(500).json({ 
+            sucesso: false, 
+            erro: 'Erro ao finalizar cliente', 
+            detalhe: error.message
+        });
+    }
+});
+
+// ============================================================
+// HEALTH CHECKS
+// ============================================================
+
+app.get('/health', function(req, res) { res.status(200).send('OK'); });
+app.get('/ping', function(req, res) { res.status(200).send('ok'); });
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
+
+app.listen(PORT, '0.0.0.0', function() {
+    console.log('Servidor rodando na porta ' + PORT);
+    console.log('Painel: https://app-vistos.onrender.com/painel.html');
+    console.log('Webhook: https://app-vistos.onrender.com/api/webhook/zapi');
+});
+
+// ============================================================
 // HEALTH CHECKS
 // ============================================================
 
