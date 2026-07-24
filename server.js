@@ -1803,6 +1803,10 @@ app.post('/api/webhook/zapi', function(req, res) {
         try {
             var body = req.body;
 
+            // ============================================================
+            // FILTROS DE MENSAGEM
+            // ============================================================
+            
             if (body.isGroup === true || body.isGroupMsg === true || 
                 (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
                 console.log('👥 Mensagem de grupo ignorada');
@@ -1819,6 +1823,10 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // ============================================================
+            // EXTRAIR MENSAGEM E TELEFONE
+            // ============================================================
+            
             var messageText = '';
             var senderPhone = '';
 
@@ -1856,6 +1864,10 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             messageText = messageText.trim();
 
+            // ============================================================
+            // LIMPAR TELEFONE
+            // ============================================================
+            
             var cleanPhone = senderPhone.toString().replace(/\D/g, '');
             if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
             if (cleanPhone.length < 10) {
@@ -1868,13 +1880,15 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - FUNÇÃO CORRIGIDA
+            // VERIFICAÇÕES DE CLIENTE - COMPLETAS E CORRIGIDAS
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
             console.log('📱 Telefone:', cleanPhone);
 
+            // ------------------------------------------------------------
             // 1. VERIFICAR AMIGO
+            // ------------------------------------------------------------
             console.log('🔍 Verificando AMIGO...');
             var { data: amigo, error: amigoError } = await supabase
                 .from('contatos_amigos')
@@ -1890,7 +1904,9 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // ------------------------------------------------------------
             // 2. VERIFICAR FINALIZADO
+            // ------------------------------------------------------------
             console.log('🔍 Verificando FINALIZADO...');
             var { data: finalizado, error: finalizadoError } = await supabase
                 .from('clientes_finalizados')
@@ -1907,7 +1923,9 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // ------------------------------------------------------------
             // 3. VERIFICAR ATIVO
+            // ------------------------------------------------------------
             console.log('🔍 Verificando ATIVO...');
             var { data: ativo, error: ativoError } = await supabase
                 .from('clientes_ativos')
@@ -1920,11 +1938,26 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             if (ativo) {
                 console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
+                
+                // Verifica se tem etapa, se não tiver, cria
+                const { data: etapaExistente } = await supabase
+                    .from('etapas_processo')
+                    .select('etapa_atual')
+                    .eq('cliente_telefone', cleanPhone)
+                    .maybeSingle();
+                
+                if (!etapaExistente) {
+                    console.log('⚠️ Cliente ATIVO sem etapa - criando...');
+                    await criarEtapaInicial(cleanPhone);
+                }
+                
                 await processarClienteAtivo(cleanPhone, messageText, ativo);
                 return;
             }
 
-            // 4. VERIFICAR NOVO
+            // ------------------------------------------------------------
+            // 4. VERIFICAR NOVO (com mais detalhes)
+            // ------------------------------------------------------------
             console.log('🔍 Verificando NOVO...');
             var { data: novo, error: novoError } = await supabase
                 .from('clientes_novos')
@@ -1934,14 +1967,74 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             if (novoError) console.log('Erro ao buscar novo:', novoError);
             console.log('📌 Resultado NOVO:', novo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
+            
             if (novo) {
-                console.log('👤 Cliente NOVO encontrado:', novo.nome);
+                console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
+                console.log('📌 Onboarding completo:', novo.onboarding_completo);
+                
+                // Se tem nome mas onboarding_completo = false, corrigir
+                if (novo.nome && novo.onboarding_completo === false) {
+                    console.log('🔄 Cliente com nome mas onboarding incompleto - corrigindo...');
+                    await supabase
+                        .from('clientes_novos')
+                        .update({ 
+                            onboarding_completo: true,
+                            data_onboarding: new Date().toISOString()
+                        })
+                        .eq('telefone', cleanPhone);
+                    console.log('✅ Onboarding corrigido para:', novo.nome);
+                }
+                
+                // Se já tem nome e onboarding completo, mover para ATIVOS
+                if (novo.nome && novo.onboarding_completo === true) {
+                    console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
+                    
+                    await supabase
+                        .from('clientes_ativos')
+                        .insert({
+                            telefone: novo.telefone,
+                            nome: novo.nome,
+                            criado_em: novo.data_contato || new Date().toISOString(),
+                            atualizado_em: new Date().toISOString(),
+                            status: 'em_processo'
+                        })
+                        .onConflict('telefone')
+                        .ignore();
+                    
+                    // Criar etapa inicial
+                    await criarEtapaInicial(novo.telefone);
+                    
+                    // Remover de NOVOS
+                    await supabase
+                        .from('clientes_novos')
+                        .delete()
+                        .eq('telefone', cleanPhone);
+                    
+                    console.log('✅ Cliente movido para ATIVOS');
+                    
+                    // Buscar o cliente recém-criado em ATIVOS
+                    const { data: ativoNovo } = await supabase
+                        .from('clientes_ativos')
+                        .select('*')
+                        .eq('telefone', cleanPhone)
+                        .maybeSingle();
+                    
+                    if (ativoNovo) {
+                        await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
+                    } else {
+                        await processarMensagem(cleanPhone, messageText, body);
+                    }
+                    return;
+                }
+                
+                // Se não tem nome ainda (onboarding pendente)
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
-            // 5. CRIA NOVO CLIENTE
+            // ------------------------------------------------------------
+            // 5. CRIA NOVO CLIENTE (se realmente não existir em lugar nenhum)
+            // ------------------------------------------------------------
             console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
             var resultado = await cadastrarCliente(cleanPhone, null);
             if (!resultado) {
