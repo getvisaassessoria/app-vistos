@@ -980,8 +980,11 @@ async function enviarWhatsApp(telefone, mensagem) {
             body: JSON.stringify({ phone: cleanPhone, message: mensagem })
         });
         const result = await response.text();
-        console.log('WhatsApp enviado para ' + cleanPhone + ': ' + response.status);
-        return response.status === 200 || response.status === 201;
+
+        console.log('📨 Z-API status para ' + cleanPhone + ': ' + response.status);
+        console.log('📨 Z-API resposta:', result);
+
+return response.status === 200 || response.status === 201;
     } catch (error) {
         console.error('Erro ao enviar WhatsApp:', error.message);
         return false;
