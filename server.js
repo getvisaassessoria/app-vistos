@@ -973,27 +973,21 @@ async function cadastrarCliente(telefone, nome) {
 // FUNÇÃO PARA BUSCAR CLIENTE EM QUALQUER TABELA
 // ============================================================
 
-async function buscarClienteEmQualquerTabela(telefone) {
-    console.log('🔍 Buscando cliente em todas as tabelas:', telefone);
+// ============================================================
+// FUNÇÃO PARA BUSCAR CLIENTE EM UMA TABELA ESPECÍFICA
+// ============================================================
+
+async function buscarClienteEmQualquerTabela(telefone, tabelaEspecifica = null) {
+    console.log(`🔍 Buscando cliente: ${telefone} ${tabelaEspecifica ? 'em ' + tabelaEspecifica : 'em todas as tabelas'}`);
     
     const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-    const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
+    const tables = tabelaEspecifica ? [tabelaEspecifica] : ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
     
     for (const table of tables) {
         try {
-            // Primeiro tenta com o telefone original
-            const { data, error } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefone)
-                .maybeSingle();
-            
-            if (!error && data) {
-                console.log(`✅ Cliente encontrado em ${table}:`, data.nome || data.telefone);
-                return { tabela: table, dados: data };
-            }
-            
-            // Se não encontrou, tenta com o telefone limpo
+            // Tenta com telefone limpo
             const { data: dataLimpo, error: errorLimpo } = await supabase
                 .from(table)
                 .select('*')
@@ -1002,14 +996,38 @@ async function buscarClienteEmQualquerTabela(telefone) {
             
             if (!errorLimpo && dataLimpo) {
                 console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
-                return { tabela: table, dados: dataLimpo };
+                return dataLimpo;
+            }
+            
+            // Tenta com telefone formatado
+            const { data: dataFormatado, error: errorFormatado } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            
+            if (!errorFormatado && dataFormatado) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
+                return dataFormatado;
+            }
+            
+            // Tenta com o telefone original
+            const { data: dataOriginal, error: errorOriginal } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefone)
+                .maybeSingle();
+            
+            if (!errorOriginal && dataOriginal) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
+                return dataOriginal;
             }
         } catch (err) {
             console.error(`Erro ao buscar em ${table}:`, err);
         }
     }
     
-    console.log('❌ Cliente não encontrado em nenhuma tabela');
+    console.log(`❌ Cliente ${telefone} não encontrado em ${tabelaEspecifica || 'nenhuma tabela'}`);
     return null;
 }
 
@@ -1812,6 +1830,10 @@ app.use((err, req, res, next) => {
 // ROTAS PRINCIPAIS
 // ============================================================
 
+// ============================================================
+// WEBHOOK CORRIGIDO - USA A FUNÇÃO buscarClienteEmQualquerTabela
+// ============================================================
+
 app.post('/api/webhook/zapi', function(req, res) {
     console.log('📨 WEBHOOK Z-API RECEBIDO');
     console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -1891,7 +1913,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - FUNÇÃO CORRIGIDA
+            // VERIFICAÇÕES DE CLIENTE - USA A FUNÇÃO CORRETA
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
@@ -1913,53 +1935,32 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // 2. VERIFICAR FINALIZADO
+            // 2. VERIFICAR FINALIZADO - usa buscarClienteEmQualquerTabela
             console.log('🔍 Verificando FINALIZADO...');
-            var { data: finalizado, error: finalizadoError } = await supabase
-                .from('clientes_finalizados')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (finalizadoError) console.log('Erro ao buscar finalizado:', finalizadoError);
-            console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
+            const finalizado = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_finalizados');
+            
             if (finalizado) {
                 console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
                 await processarClienteFinalizado(cleanPhone, messageText, finalizado);
                 return;
             }
 
-            // 3. VERIFICAR ATIVO
+            // 3. VERIFICAR ATIVO - usa buscarClienteEmQualquerTabela
             console.log('🔍 Verificando ATIVO...');
-            var { data: ativo, error: ativoError } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (ativoError) console.log('Erro ao buscar ativo:', ativoError);
-            console.log('📌 Resultado ATIVO:', ativo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
+            const ativo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_ativos');
+            
             if (ativo) {
                 console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
                 await processarClienteAtivo(cleanPhone, messageText, ativo);
                 return;
             }
 
-            // 4. VERIFICAR NOVO
+            // 4. VERIFICAR NOVO - usa buscarClienteEmQualquerTabela
             console.log('🔍 Verificando NOVO...');
-            var { data: novo, error: novoError } = await supabase
-                .from('clientes_novos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (novoError) console.log('Erro ao buscar novo:', novoError);
-            console.log('📌 Resultado NOVO:', novo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
+            const novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+            
             if (novo) {
-                console.log('👤 Cliente NOVO encontrado:', novo.nome);
+                console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
