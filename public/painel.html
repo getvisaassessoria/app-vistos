@@ -1717,6 +1717,8 @@ async function finalizarProcesso(etapaFinal) {
 
 
 async function avancarEtapa() {
+    alert('TESTE: função avancarEtapa do backend foi chamada');
+
     if (!clienteSelecionadoTimeline) {
         showToast('Selecione um cliente primeiro!', 'info');
         return;
