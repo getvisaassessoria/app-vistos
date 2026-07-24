@@ -1223,6 +1223,71 @@ async function criarEtapaComCliente(cliente, telefone) {
     return data;
 }
 
+// ============================================================
+// FUNÇÃO PARA GERAR MENSAGEM DE ETAPA
+// ============================================================
+
+function gerarMensagemEtapa(etapa, nomeCliente) {
+    const mensagens = {
+        'formulario_enviado': `📋 Olá ${nomeCliente}!\n\n` +
+                              `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
+                              `✅ Próximo passo: Análise e correções\n\n` +
+                              `📱 Nossa equipe entrará em contato em breve.`,
+
+        'analise_correcoes': `🔍 Olá ${nomeCliente}!\n\n` +
+                             `Estamos analisando seu formulário DS-160.\n\n` +
+                             `📝 Se houver correções necessárias, nossa equipe entrará em contato.\n\n` +
+                             `✅ Aguarde nosso contato.`,
+
+        'abertura_processo': `📂 Olá ${nomeCliente}!\n\n` +
+                             `Seu processo foi aberto oficialmente na GetVisa!\n\n` +
+                             `📋 Status: Em andamento\n` +
+                             `📍 Próxima etapa: Emissão do boleto\n\n` +
+                             `📱 Dúvidas? Fale conosco.`,
+
+        'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
+                          `O boleto para pagamento foi emitido!\n\n` +
+                          `✅ Pague e nos envie o comprovante para dar continuidade.\n\n` +
+                          `📱 Qualquer dúvida, estamos aqui!`,
+
+        'boleto_pago': `✅ Olá ${nomeCliente}!\n\n` +
+                       `Boleto confirmado! Pagamento recebido com sucesso.\n\n` +
+                       `📍 Próxima etapa: Agendamento da entrevista\n\n` +
+                       `📋 Agora vamos agendar sua entrevista no consulado.`,
+
+        'agendamento_realizado': `📅 Olá ${nomeCliente}!\n\n` +
+                                 `Seu agendamento no consulado foi realizado!\n\n` +
+                                 `📌 Data e horário: em breve enviaremos os detalhes.\n\n` +
+                                 `📍 Próxima etapa: Treinamento para entrevista`,
+
+        'treinamento_realizado': `🎯 Olá ${nomeCliente}!\n\n` +
+                                 `Treinamento para entrevista concluído!\n\n` +
+                                 `Você está preparado(a) para a entrevista.\n\n` +
+                                 `📍 Próxima etapa: Entrevista no consulado\n\n` +
+                                 `⭐ Boa sorte! Vai dar tudo certo!`,
+
+        'entrevista_realizada': `🎤 Olá ${nomeCliente}!\n\n` +
+                                `Entrevista no consulado realizada!\n\n` +
+                                `📌 Aguardando retorno do passaporte.\n\n` +
+                                `🙏 Torcendo por você!`,
+
+        'passaporte_retornado': `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
+                                `Seu passaporte com o visto foi retornado!\n\n` +
+                                `✅ Visto APROVADO com sucesso!\n\n` +
+                                `✈️ Boa viagem! Vá realizar seus sonhos!\n\n` +
+                                `🌟 Agradecemos por confiar na GetVisa Assessoria!`,
+
+        'visto_recusado': `😔 Olá ${nomeCliente}!\n\n` +
+                          `Infelizmente seu visto foi recusado.\n\n` +
+                          `🔍 Vamos analisar o motivo da recusa e buscar alternativas.\n\n` +
+                          `📱 Fale com a gente para uma análise gratuita:\n` +
+                          `https://wa.me/5521974601812\n\n` +
+                          `💪 Não desista! Vamos trabalhar juntos para reverter isso.`
+    };
+
+    return mensagens[etapa] || `📌 Olá ${nomeCliente}!\n\nSeu processo foi atualizado.\n\n📍 Etapa atual: ${ETAPAS[etapa]?.label || etapa}\n\n📱 Dúvidas? Fale conosco.`;
+}
+
 async function notificarClienteEtapa(telefone, novaEtapa) {
     if (novaEtapa === 'entrevista_realizada') {
         console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa}`);
