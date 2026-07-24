@@ -2003,11 +2003,83 @@ app.post('/api/webhook/zapi', function(req, res) {
                 }
                 
                 // Se for NOVO
-                if (tabela === 'clientes_novos') {
-                    console.log('👤 Cliente NOVO:', dados.nome || 'Sem nome');
-                    await processarMensagem(cleanPhone, messageText, body);
-                    return;
-                }
+if (tabela === 'clientes_novos') {
+    console.log('👤 Cliente NOVO encontrado:', dados.nome || 'Sem nome');
+    console.log('📌 Onboarding completo:', dados.onboarding_completo);
+    
+    // Se já tem nome e onboarding completo, mover para ATIVOS
+    if (dados.nome && dados.onboarding_completo === true) {
+        console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
+        
+        // Verificar se já existe em clientes_ativos
+        const { data: existeAtivo } = await supabase
+            .from('clientes_ativos')
+            .select('telefone')
+            .eq('telefone', dados.telefone)
+            .maybeSingle();
+        
+        if (!existeAtivo) {
+            // Inserir em clientes_ativos
+            await supabase
+                .from('clientes_ativos')
+                .insert({
+                    telefone: dados.telefone,
+                    nome: dados.nome,
+                    criado_em: dados.data_contato || new Date().toISOString(),
+                    atualizado_em: new Date().toISOString(),
+                    status: 'em_processo'
+                });
+            
+            console.log('✅ Cliente inserido em ATIVOS');
+            
+            // Criar etapa inicial
+            await criarEtapaInicial(dados.telefone);
+            
+            // Remover de NOVOS
+            await supabase
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', cleanPhone);
+            
+            console.log('🗑️ Cliente removido de NOVOS');
+            
+            // Buscar o cliente em ATIVOS
+            const { data: ativoNovo } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (ativoNovo) {
+                console.log('✅ Cliente movido para ATIVOS com sucesso');
+                await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
+                return;
+            }
+        } else {
+            // Se já existe em ATIVOS, só remover de NOVOS
+            await supabase
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', cleanPhone);
+            console.log('🗑️ Cliente removido de NOVOS (já existia em ATIVOS)');
+            
+            const { data: ativoExistente } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', cleanPhone)
+                .maybeSingle();
+            
+            if (ativoExistente) {
+                await processarClienteAtivo(cleanPhone, messageText, ativoExistente);
+                return;
+            }
+        }
+    }
+    
+    // Se não tem nome ainda (onboarding pendente)
+    await processarMensagem(cleanPhone, messageText, body);
+    return;
+}
             }
 
             // Se não encontrou em nenhuma tabela, CRIAR NOVO CLIENTE
