@@ -1069,6 +1069,7 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     
     // Buscar etapa atual
     let etapaMsg = '';
+    let etapaAtual = '';
     try {
         const { data: etapa, error } = await supabase
             .from('etapas_processo')
@@ -1077,6 +1078,7 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
             .maybeSingle();
         
         if (!error && etapa) {
+            etapaAtual = etapa.etapa_atual;
             const etapaInfo = ETAPAS[etapa.etapa_atual];
             etapaMsg = etapaInfo ? etapaInfo.label : etapa.etapa_atual;
         }
@@ -1086,15 +1088,36 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     
     const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
     
-    // Verifica se é um comando de menu
+    // ============================================================
+    // 🔥 ENVIA NOTIFICAÇÃO DA ETAPA ATUAL (se não for entrevista)
+    // ============================================================
+    if (etapaAtual && etapaAtual !== 'entrevista_realizada') {
+        try {
+            const mensagem = gerarMensagemEtapa(etapaAtual, dadosCliente.nome);
+            if (mensagem) {
+                console.log(`📨 Enviando notificação da etapa "${etapaAtual}" para ${cleanPhone}`);
+                await enviarWhatsApp(cleanPhone, mensagem);
+                console.log(`✅ Notificação enviada para ${cleanPhone}: ${etapaAtual}`);
+            } else {
+                console.log(`⚠️ Sem mensagem para etapa: ${etapaAtual}`);
+            }
+        } catch (err) {
+            console.error('❌ Erro ao enviar notificação:', err);
+        }
+    }
+    
+    // ============================================================
+    // VERIFICA SE É COMANDO DE MENU
+    // ============================================================
     const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (comandos.includes(messageText.toLowerCase())) {
-        // Cliente ativo pode receber o menu
         await processarMensagem(cleanPhone, messageText, {});
         return;
     }
     
-    // Mensagem padrão para cliente ativo
+    // ============================================================
+    // MENSAGEM PADRÃO PARA CLIENTE ATIVO
+    // ============================================================
     let msg = `👋 Olá ${nomeCliente}!\n\n`;
     if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
     msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
