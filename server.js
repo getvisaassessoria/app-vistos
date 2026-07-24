@@ -900,46 +900,28 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
 
 async function enviarWhatsApp(telefone, mensagem) {
     try {
-        // 🔥 FORÇA O FORMATO CORRETO PARA O Z-API
-        let cleanPhone = telefone.toString().replace(/\D/g, '');
-        
-        // Garante que tem 55 no início (código do Brasil)
-        if (!cleanPhone.startsWith('55')) {
-            cleanPhone = '55' + cleanPhone;
-        }
-        
-        console.log(`📨 Telefone original: ${telefone}`);
-        console.log(`📨 Telefone para Z-API: ${cleanPhone}`);
-        
         const instance = process.env.ZAPI_INSTANCE;
         const token = process.env.ZAPI_TOKEN;
         const securityToken = process.env.ZAPI_SECURITY_TOKEN;
-        
         if (!instance || !token) {
-            console.log('⚠️ Z-API nao configurada');
+            console.log('Z-API nao configurada');
             return false;
         }
-        
+        const cleanPhone = telefone.toString().replace(/\D/g, '');
         const url = 'https://api.z-api.io/instances/' + instance + '/token/' + token + '/send-text';
-        
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Client-Token': securityToken || ''
             },
-            body: JSON.stringify({ 
-                phone: cleanPhone,  // ← USA O NÚMERO COM 55
-                message: mensagem 
-            })
+            body: JSON.stringify({ phone: cleanPhone, message: mensagem })
         });
-        
         const result = await response.text();
-        console.log(`📨 Resposta Z-API: ${response.status} - ${result}`);
-        
+        console.log('WhatsApp enviado para ' + cleanPhone + ': ' + response.status);
         return response.status === 200 || response.status === 201;
     } catch (error) {
-        console.error('❌ Erro ao enviar WhatsApp:', error.message);
+        console.error('Erro ao enviar WhatsApp:', error.message);
         return false;
     }
 }
@@ -1085,60 +1067,40 @@ async function processarClienteFinalizado(cleanPhone, messageText, dadosCliente)
 async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     console.log('📌 Processando cliente ATIVO:', dadosCliente.nome);
     
-    // ============================================================
-    // CORREÇÃO: Usar o telefone do cliente do banco
-    // ============================================================
-    const telefoneBusca = dadosCliente.telefone || cleanPhone;
-    console.log(`📌 Buscando etapa com: ${telefoneBusca}`);
-    
     // Buscar etapa atual
     let etapaMsg = '';
     try {
         const { data: etapa, error } = await supabase
             .from('etapas_processo')
             .select('etapa_atual')
-            .eq('cliente_telefone', telefoneBusca)
+            .eq('cliente_telefone', cleanPhone)
             .maybeSingle();
         
         if (!error && etapa) {
             const etapaInfo = ETAPAS[etapa.etapa_atual];
             etapaMsg = etapaInfo ? etapaInfo.label : etapa.etapa_atual;
-            console.log(`📌 Etapa encontrada: ${etapaMsg}`);
-        } else {
-            console.log('⚠️ Nenhuma etapa encontrada');
         }
     } catch (err) {
         console.log('Erro ao buscar etapa:', err);
     }
     
     const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
-    console.log(`📌 Nome do cliente: ${nomeCliente}`);
     
-    // ============================================================
-    // CORREÇÃO: Processar o comando "0" DIRETAMENTE, sem chamar processarMensagem
-    // ============================================================
+    // Verifica se é um comando de menu
     const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (comandos.includes(messageText.toLowerCase())) {
-        console.log('📌 Cliente solicitou menu principal');
-        
-        // Envia o menu principal DIRETAMENTE
-        const menu = await getMenuPrincipal();
-        let msg = `👋 Olá ${nomeCliente}!\n\n`;
-        if (etapaMsg) msg += `📌 Seu processo está em: **${etapaMsg}**\n\n`;
-        msg += menu;
-        
-        await sendReply(cleanPhone, msg);
+        // Cliente ativo pode receber o menu
+        await processarMensagem(cleanPhone, messageText, {});
         return;
     }
     
-    // Mensagem padrão para cliente ativo (qualquer outra mensagem)
+    // Mensagem padrão para cliente ativo
     let msg = `👋 Olá ${nomeCliente}!\n\n`;
     if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
     msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
     msg += `💬 Fique à vontade para perguntar.\n\n`;
     msg += `Digite 0 para acessar o menu principal.`;
     
-    console.log(`📨 Enviando mensagem para ${cleanPhone}`);
     await sendReply(cleanPhone, msg);
 }
 
@@ -1824,200 +1786,188 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// WEBHOOK SIMPLIFICADO - SEM userState
+// ROTAS PRINCIPAIS
 // ============================================================
 
 app.post('/api/webhook/zapi', function(req, res) {
-    console.log('📨 WEBHOOK RECEBIDO');
+    console.log('📨 WEBHOOK Z-API RECEBIDO');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
 
-    res.status(200).json({ status: 'ok', received: true });
+    res.status(200).json({
+        status: 'ok',
+        received: true,
+        timestamp: new Date().toISOString()
+    });
 
     (async function() {
         try {
-            const body = req.body;
+            var body = req.body;
 
-            // FILTROS
-            if (body.isGroup || body.fromMe || body.isStatusReply) {
-                console.log('⏭️ Mensagem ignorada');
+            if (body.isGroup === true || body.isGroupMsg === true || 
+                (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
+                console.log('👥 Mensagem de grupo ignorada');
+                return;
+            }
+            
+            if (body.fromMe === true) {
+                console.log('🤖 Mensagem do próprio bot ignorada');
+                return;
+            }
+            
+            if (body.isStatusReply === true || body.waitingMessage === true) {
+                console.log('📊 Mensagem de status/waiting ignorada');
                 return;
             }
 
-            // EXTRAIR DADOS
-            let messageText = body.text?.message || body.text?.body || body.text?.text || body.message || body.content || body.body || '';
-            let senderPhone = body.phone || body.from || body.sender || body.wa_id || body.chatId || '';
+            var messageText = '';
+            var senderPhone = '';
 
-            if (!senderPhone || !messageText) {
-                console.log('❌ Dados inválidos');
+            if (body.text) {
+                if (typeof body.text === 'string') messageText = body.text;
+                else if (body.text.message) messageText = body.text.message;
+                else if (body.text.body) messageText = body.text.body;
+                else if (body.text.text) messageText = body.text.text;
+            }
+            if (!messageText && body.message) {
+                if (typeof body.message === 'string') messageText = body.message;
+                else if (body.message.text) messageText = body.message.text;
+                else if (body.message.content) messageText = body.message.content;
+                else if (body.message.body) messageText = body.message.body;
+                else if (body.message.conversation) messageText = body.message.conversation;
+            }
+            if (!messageText && body.content) messageText = body.content;
+            if (!messageText && body.body) messageText = body.body;
+            if (!messageText && body.conversation) messageText = body.conversation;
+
+            if (body.phone) senderPhone = body.phone;
+            else if (body.from) senderPhone = body.from;
+            else if (body.sender) senderPhone = body.sender;
+            else if (body.wa_id) senderPhone = body.wa_id;
+            else if (body.chatId) senderPhone = body.chatId;
+            else if (body.author) senderPhone = body.author;
+
+            console.log('📝 Mensagem bruta: "' + messageText + '"');
+            console.log('📱 Telefone bruto: "' + senderPhone + '"');
+
+            if (!senderPhone || !messageText || messageText.trim().length === 0) {
+                console.log('❌ Dados inválidos - ignorando');
                 return;
             }
 
             messageText = messageText.trim();
-            let cleanPhone = senderPhone.replace(/\D/g, '');
+
+            var cleanPhone = senderPhone.toString().replace(/\D/g, '');
             if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
-            
             if (cleanPhone.length < 10) {
-                console.log('❌ Telefone inválido');
+                console.log('❌ Telefone inválido (' + cleanPhone + ')');
+                await sendReply(senderPhone, 'Desculpe, não conseguimos identificar seu número. Tente novamente.');
                 return;
             }
 
-            console.log(`📱 ${cleanPhone} | 💬 "${messageText}"`);
-
+            console.log('✅ Telefone limpo: ' + cleanPhone);
+            console.log('💬 Mensagem: "' + messageText + '"');
+            
             // ============================================================
-            // BUSCAR CLIENTE - DIRETO E SIMPLES
+            // VERIFICAÇÕES DE CLIENTE - FUNÇÃO CORRIGIDA
             // ============================================================
+            
+            console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
+            console.log('📱 Telefone:', cleanPhone);
 
             // 1. VERIFICAR AMIGO
-            const { data: amigo } = await supabase
+            console.log('🔍 Verificando AMIGO...');
+            var { data: amigo, error: amigoError } = await supabase
                 .from('contatos_amigos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
-            
+
+            if (amigoError) console.log('Erro ao buscar amigo:', amigoError);
+            console.log('📌 Resultado AMIGO:', amigo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (amigo) {
-                console.log('👤 AMIGO - SILÊNCIO');
+                console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
                 return;
             }
 
             // 2. VERIFICAR FINALIZADO
-            const { data: finalizado } = await supabase
+            console.log('🔍 Verificando FINALIZADO...');
+            var { data: finalizado, error: finalizadoError } = await supabase
                 .from('clientes_finalizados')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
-            
+
+            if (finalizadoError) console.log('Erro ao buscar finalizado:', finalizadoError);
+            console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (finalizado) {
-                console.log('✅ FINALIZADO');
+                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
                 await processarClienteFinalizado(cleanPhone, messageText, finalizado);
                 return;
             }
 
             // 3. VERIFICAR ATIVO
-            let { data: ativo } = await supabase
+            console.log('🔍 Verificando ATIVO...');
+            var { data: ativo, error: ativoError } = await supabase
                 .from('clientes_ativos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
+            if (ativoError) console.log('Erro ao buscar ativo:', ativoError);
+            console.log('📌 Resultado ATIVO:', ativo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
             if (ativo) {
-                console.log(`🔄 ATIVO: ${ativo.nome}`);
-                
-                // Verificar etapa
-                const { data: etapa } = await supabase
-                    .from('etapas_processo')
-                    .select('etapa_atual')
-                    .eq('cliente_telefone', ativo.telefone)
-                    .maybeSingle();
-                
-                if (!etapa) {
-                    await criarEtapaInicial(ativo.telefone);
-                }
-                
-                // Processar como ATIVO (com menu)
+                console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
                 await processarClienteAtivo(cleanPhone, messageText, ativo);
                 return;
             }
 
             // 4. VERIFICAR NOVO
-            let { data: novo } = await supabase
+            console.log('🔍 Verificando NOVO...');
+            var { data: novo, error: novoError } = await supabase
                 .from('clientes_novos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
-            // SE NÃO TEM NOME, FAZER ONBOARDING
-            if (!novo || !novo.nome) {
-                console.log('👤 NOVO - iniciando onboarding');
-                
-                // Criar se não existir
-                if (!novo) {
-                    await cadastrarCliente(cleanPhone, null);
-                    const { data: novoCliente } = await supabase
-                        .from('clientes_novos')
-                        .select('*')
-                        .eq('telefone', cleanPhone)
-                        .maybeSingle();
-                    novo = novoCliente;
-                }
-                
-                // Processar onboarding (usando o estado apenas para controle local)
-                const state = {
-                    onboardingStep: novo.nome ? ONBOARDING_STEPS.COMPLETO : ONBOARDING_STEPS.SAUDACAO,
-                    onboardingCompleto: !!novo.nome,
-                    nome: novo.nome || null,
-                    nivel: 'principal',
-                    service: null,
-                    lastActivity: Date.now()
-                };
-                
-                await processarOnboarding(cleanPhone, messageText, state);
+            if (novoError) console.log('Erro ao buscar novo:', novoError);
+            console.log('📌 Resultado NOVO:', novo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+
+            if (novo) {
+                console.log('👤 Cliente NOVO encontrado:', novo.nome);
+                await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
-            // 5. SE TEM NOME MAS ESTÁ EM NOVOS, MOVER PARA ATIVOS
-            if (novo && novo.nome && novo.onboarding_completo === true) {
-                console.log(`🔄 MOVENDO ${novo.nome} PARA ATIVOS...`);
-                
-                await supabase
-                    .from('clientes_ativos')
-                    .insert({
-                        telefone: novo.telefone,
-                        nome: novo.nome,
-                        criado_em: novo.data_contato || new Date().toISOString(),
-                        atualizado_em: new Date().toISOString(),
-                        status: 'em_processo'
-                    })
-                    .onConflict('telefone')
-                    .ignore();
-                
-                await criarEtapaInicial(novo.telefone);
-                
-                await supabase
-                    .from('clientes_novos')
-                    .delete()
-                    .eq('telefone', cleanPhone);
-                
-                console.log('✅ MOVIDO PARA ATIVOS');
-                
-                // Buscar o cliente em ATIVOS e processar
-                const { data: ativoNovo } = await supabase
-                    .from('clientes_ativos')
-                    .select('*')
-                    .eq('telefone', cleanPhone)
-                    .maybeSingle();
-                
-                if (ativoNovo) {
-                    await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
-                }
+            // 5. CRIA NOVO CLIENTE
+            console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
+            var resultado = await cadastrarCliente(cleanPhone, null);
+            if (!resultado) {
+                console.error('❌ Falha ao cadastrar cliente');
+                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
                 return;
             }
-
-            // 6. FALLBACK - criar novo cliente
-            console.log('🆕 Criando novo cliente...');
-            await cadastrarCliente(cleanPhone, null);
             
-            const state = {
-                onboardingStep: ONBOARDING_STEPS.SAUDACAO,
-                onboardingCompleto: false,
-                nome: null,
-                nivel: 'principal',
-                service: null,
-                lastActivity: Date.now()
-            };
-            await processarOnboarding(cleanPhone, messageText, state);
+            console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
+            await processarMensagem(cleanPhone, messageText, body);
 
         } catch (error) {
-            console.error('❌ ERRO:', error);
+            console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
+            console.error('Mensagem:', error.message);
+            console.error('Stack:', error.stack);
             
             try {
-                const phone = req.body?.phone || req.body?.from || '';
+                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
                 if (phone) {
-                    const clean = phone.replace(/\D/g, '').replace(/^55/, '');
-                    if (clean.length >= 10) {
-                        await sendReply(clean, '❌ Erro técnico. Tente novamente em alguns minutos.');
+                    var cleanPhone = phone.toString().replace(/\D/g, '');
+                    if (cleanPhone.length >= 10) {
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
                     }
                 }
             } catch (e) {
-                console.error('Erro ao enviar mensagem de erro:', e);
+                console.error('Falha ao enviar mensagem de erro:', e);
             }
         }
     })();
@@ -2404,153 +2354,89 @@ app.post('/api/etapas/avancar', async function(req, res) {
 
 async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
     try {
-        console.log('📌 ===== PROCESSAR AVANCO INICIADO =====');
-        console.log('📌 Telefone recebido:', telefone);
-        console.log('📌 Etapa atual:', etapaAtual.etapa_atual);
+        console.log('📌 processarAvanco iniciado para:', telefone);
         
-        // ============================================================
-        // NORMALIZAR TELEFONE
-        // ============================================================
-        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-        const telefoneSem55 = telefoneLimpo.startsWith('55') ? telefoneLimpo.substring(2) : telefoneLimpo;
-        const telefoneFormatado = formatarTelefone(telefoneSem55);
-        
-        const variacoesTelefone = [
-            telefoneFormatado,
-            telefoneSem55,
-            telefoneLimpo,
-            telefone,
-            telefone.toString()
-        ].filter(Boolean);
-        
-        const telefonesUnicos = [...new Set(variacoesTelefone)];
-        console.log('📌 Variações a tentar:', telefonesUnicos);
-        
-        // ============================================================
-        // BUSCAR CLIENTE
-        // ============================================================
-        let cliente = null;
-        let telefoneEncontrado = null;
-        
-        for (const tel of telefonesUnicos) {
-            if (!tel || tel.length < 8) continue;
-            
-            const { data, error } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', tel)
-                .maybeSingle();
-            
-            if (!error && data) {
-                cliente = data;
-                telefoneEncontrado = tel;
-                console.log(`✅ Cliente encontrado em clientes_ativos com: "${tel}"`);
-                break;
-            }
-        }
-        
-        if (!cliente) {
-            console.error('❌ Cliente não encontrado');
-            return res.status(404).json({ 
-                erro: 'Cliente não encontrado',
-                telefones_buscados: telefonesUnicos
-            });
-        }
-        
-        console.log('✅ Cliente encontrado:', cliente.nome || 'Sem nome');
-        
-        // ============================================================
-        // VERIFICAR ETAPA ATUAL
-        // ============================================================
         var etapaId = etapaAtual.etapa_atual;
+        console.log('📌 etapaId:', etapaId);
+        
         var etapaInfo = ETAPAS[etapaId];
+        console.log('📌 etapaInfo:', JSON.stringify(etapaInfo));
         
         if (!etapaInfo) {
+            console.error('❌ Etapa não encontrada:', etapaId);
             return res.status(400).json({ erro: 'Etapa não encontrada: ' + etapaId });
         }
         
         var proximaEtapa = etapaInfo.next;
+        console.log('📌 proximaEtapa:', proximaEtapa);
+
         if (!proximaEtapa) {
-            return res.status(400).json({ erro: 'Cliente já está na última etapa' });
+            return res.status(400).json({ erro: 'Cliente ja esta na ultima etapa' });
         }
-        
+
         if (!ETAPAS[proximaEtapa]) {
+            console.error('❌ Próxima etapa não encontrada:', proximaEtapa);
             return res.status(400).json({ erro: 'Próxima etapa não encontrada: ' + proximaEtapa });
         }
-        
-        // ============================================================
-        // ATUALIZAR ETAPA
-        // ============================================================
+
         var historicoAtualizado = (etapaAtual.historico || []).concat([{
             etapa: etapaId,
             data: new Date().toISOString(),
-            nota: nota || 'Avanço manual',
-            observacao: observacao || 'Avançado pelo painel administrativo'
+            nota: nota || 'Avanco manual',
+            observacao: observacao || 'Avancado pelo painel administrativo'
         }]);
-        
+
         var dadosAtualizacao = {
             etapa_atual: proximaEtapa,
             data_atualizacao: new Date().toISOString(),
             historico: historicoAtualizado
         };
-        
+
         var campoData = 'data_' + proximaEtapa;
+        console.log('📌 campoData:', campoData);
         dadosAtualizacao[campoData] = new Date().toISOString();
-        
-        let updated = await supabase
+
+        console.log('📌 Atualizando para:', JSON.stringify(dadosAtualizacao));
+
+        var updated = await supabase
             .from('etapas_processo')
             .update(dadosAtualizacao)
-            .eq('cliente_telefone', telefoneEncontrado)
+            .eq('cliente_telefone', telefone)
             .select()
             .single();
-        
+
         if (updated.error) {
             console.error('❌ Erro no update:', updated.error);
-            return res.status(500).json({ 
-                erro: 'Erro ao atualizar etapa', 
-                detalhe: updated.error.message
-            });
+            throw updated.error;
         }
-        
+
         console.log('✅ Update realizado com sucesso');
-        
-        // ============================================================
-        // 🔔 ENVIAR NOTIFICAÇÃO AUTOMÁTICA PARA O CLIENTE
-        // ============================================================
-        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
-            ? cliente.nome.split(' ')[0] 
-            : 'Cliente';
-        
-        console.log(`📨 GERANDO MENSAGEM PARA ETAPA: ${proximaEtapa}`);
-        const mensagem = gerarMensagemEtapa(proximaEtapa, nomeCliente);
-        
-        if (mensagem) {
-            console.log(`📨 ENVIANDO NOTIFICAÇÃO PARA ${cliente.telefone}...`);
-            const enviado = await enviarWhatsApp(cliente.telefone, mensagem);
-            console.log(`✅ Notificação enviada: ${enviado ? 'SUCESSO' : 'FALHA'}`);
-        } else {
-            console.log(`⚠️ Nenhuma mensagem definida para etapa: ${proximaEtapa}`);
+
+        if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
+            try {
+                await notificarClienteEtapa(telefone, proximaEtapa);
+                console.log(`✅ Notificação de etapa enviada para ${telefone}: ${proximaEtapa}`);
+            } catch (err) {
+                console.error(`❌ Erro ao notificar cliente:`, err);
+            }
         }
-        
-        console.log(`✅ Cliente ${cliente.telefone} avançou para: ${proximaEtapa}`);
-        
+
+        console.log('✅ Cliente ' + telefone + ' avançou para: ' + proximaEtapa);
+
         res.json({
             sucesso: true,
             etapa_anterior: etapaId,
             etapa_atual: proximaEtapa,
-            notificacao_enviada: !!mensagem,
-            cliente: {
-                nome: cliente.nome,
-                telefone: cliente.telefone
-            },
             dados: updated.data
         });
         
     } catch (error) {
         console.error('❌ ERRO em processarAvanco:', error);
+        console.error('❌ Stack:', error.stack);
         res.status(500).json({ 
             erro: 'Erro ao processar avanço', 
-            detalhe: error.message
+            detalhe: error.message,
+            stack: error.stack 
         });
     }
 }
@@ -3589,16 +3475,17 @@ app.post('/api/clientes/reabrir', async function(req, res) {
         
         // Inserir de volta em clientes_ativos
         const { data: ativo, error: insertError } = await supabase
-    .from('clientes_ativos')
-    .insert({
-        telefone: cliente.telefone,
-        nome: cliente.nome,
-        criado_em: cliente.data_inicio || new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-        status: 'reaberto'
-    })
-    .select()
-    .single();
+            .from('clientes_ativos')
+            .insert({
+                telefone: cliente.telefone,
+                nome: cliente.nome,
+                email: cliente.email || null,
+                criado_em: cliente.data_inicio || new Date().toISOString(),
+                atualizado_em: new Date().toISOString(),
+                status: 'reaberto'
+            })
+            .select()
+            .single();
         
         if (insertError) {
             console.error('❌ Erro ao inserir em ativos:', insertError);
