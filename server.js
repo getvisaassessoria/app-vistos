@@ -3312,6 +3312,43 @@ app.post('/api/etapas/finalizar', async function(req, res) {
 });
 
 
+// ============================================================
+// ROTA PARA LISTAR CLIENTES FINALIZADOS
+// ============================================================
+
+app.get('/api/clientes/finalizados', async function(req, res) {
+    try {
+        console.log('📌 [GET] /api/clientes/finalizados');
+        
+        const { data, error } = await supabase
+            .from('clientes_finalizados')
+            .select('*')
+            .order('data_finalizacao', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Erro no Supabase:', error);
+            return res.status(500).json({ 
+                success: false, 
+                error: error.message 
+            });
+        }
+        
+        console.log(`✅ ${data?.length || 0} clientes finalizados encontrados`);
+        
+        res.json({
+            success: true,
+            finalizados: data || []
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar finalizados:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
 // Buscar um cliente finalizado específico (para o botão "Histórico")
 app.get('/api/clientes/finalizados/:telefone', async function(req, res) {
     try {
