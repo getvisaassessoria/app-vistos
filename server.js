@@ -1786,6 +1786,67 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
+// FUNÇÃO PARA ENCONTRAR CLIENTE EM QUALQUER TABELA
+// ============================================================
+
+async function encontrarCliente(telefone) {
+    console.log(`🔍 Buscando cliente em todas as tabelas: ${telefone}`);
+    
+    const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    
+    console.log(`📌 Variações: limpo="${telefoneLimpo}", formatado="${telefoneFormatado}"`);
+    
+    const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
+    
+    for (const table of tables) {
+        try {
+            // Tenta com telefone limpo
+            const { data: dataLimpo, error: errorLimpo } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefoneLimpo)
+                .maybeSingle();
+            
+            if (!errorLimpo && dataLimpo) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
+                return { tabela: table, dados: dataLimpo };
+            }
+            
+            // Tenta com telefone formatado
+            const { data: dataFormatado, error: errorFormatado } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            
+            if (!errorFormatado && dataFormatado) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
+                return { tabela: table, dados: dataFormatado };
+            }
+            
+            // Tenta com o telefone original (sem limpeza)
+            const { data: dataOriginal, error: errorOriginal } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefone)
+                .maybeSingle();
+            
+            if (!errorOriginal && dataOriginal) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
+                return { tabela: table, dados: dataOriginal };
+            }
+        } catch (err) {
+            console.error(`Erro ao buscar em ${table}:`, err);
+        }
+    }
+    
+    console.log('❌ Cliente não encontrado em nenhuma tabela');
+    return null;
+}
+
+
+// ============================================================
 // ROTAS PRINCIPAIS
 // ============================================================
 
@@ -1880,163 +1941,124 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - COMPLETAS E CORRIGIDAS
+            // VERIFICAÇÕES DE CLIENTE - USANDO FUNÇÃO UNIFICADA
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
             console.log('📱 Telefone:', cleanPhone);
 
-            // ------------------------------------------------------------
-            // 1. VERIFICAR AMIGO
-            // ------------------------------------------------------------
-            console.log('🔍 Verificando AMIGO...');
-            var { data: amigo, error: amigoError } = await supabase
-                .from('contatos_amigos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
+            // Usar a função unificada para encontrar o cliente em qualquer tabela
+            const clienteEncontrado = await encontrarCliente(cleanPhone);
 
-            if (amigoError) console.log('Erro ao buscar amigo:', amigoError);
-            console.log('📌 Resultado AMIGO:', amigo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
-            if (amigo) {
-                console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
-                return;
-            }
-
-            // ------------------------------------------------------------
-            // 2. VERIFICAR FINALIZADO
-            // ------------------------------------------------------------
-            console.log('🔍 Verificando FINALIZADO...');
-            var { data: finalizado, error: finalizadoError } = await supabase
-                .from('clientes_finalizados')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (finalizadoError) console.log('Erro ao buscar finalizado:', finalizadoError);
-            console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
-            if (finalizado) {
-                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
-                await processarClienteFinalizado(cleanPhone, messageText, finalizado);
-                return;
-            }
-
-            // ------------------------------------------------------------
-            // 3. VERIFICAR ATIVO
-            // ------------------------------------------------------------
-            console.log('🔍 Verificando ATIVO...');
-            var { data: ativo, error: ativoError } = await supabase
-                .from('clientes_ativos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (ativoError) console.log('Erro ao buscar ativo:', ativoError);
-            console.log('📌 Resultado ATIVO:', ativo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
-            if (ativo) {
-                console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
+            if (clienteEncontrado) {
+                const { tabela, dados } = clienteEncontrado;
+                console.log(`📌 Cliente encontrado em: ${tabela}`);
                 
-                // Verifica se tem etapa, se não tiver, cria
-                const { data: etapaExistente } = await supabase
-                    .from('etapas_processo')
-                    .select('etapa_atual')
-                    .eq('cliente_telefone', cleanPhone)
-                    .maybeSingle();
-                
-                if (!etapaExistente) {
-                    console.log('⚠️ Cliente ATIVO sem etapa - criando...');
-                    await criarEtapaInicial(cleanPhone);
-                }
-                
-                await processarClienteAtivo(cleanPhone, messageText, ativo);
-                return;
-            }
-
-            // ------------------------------------------------------------
-            // 4. VERIFICAR NOVO (com mais detalhes)
-            // ------------------------------------------------------------
-            console.log('🔍 Verificando NOVO...');
-            var { data: novo, error: novoError } = await supabase
-                .from('clientes_novos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (novoError) console.log('Erro ao buscar novo:', novoError);
-            console.log('📌 Resultado NOVO:', novo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-            
-            if (novo) {
-                console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
-                console.log('📌 Onboarding completo:', novo.onboarding_completo);
-                
-                // Se tem nome mas onboarding_completo = false, corrigir
-                if (novo.nome && novo.onboarding_completo === false) {
-                    console.log('🔄 Cliente com nome mas onboarding incompleto - corrigindo...');
-                    await supabase
-                        .from('clientes_novos')
-                        .update({ 
-                            onboarding_completo: true,
-                            data_onboarding: new Date().toISOString()
-                        })
-                        .eq('telefone', cleanPhone);
-                    console.log('✅ Onboarding corrigido para:', novo.nome);
-                }
-                
-                // Se já tem nome e onboarding completo, mover para ATIVOS
-                if (novo.nome && novo.onboarding_completo === true) {
-                    console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
-                    
-                    await supabase
-                        .from('clientes_ativos')
-                        .insert({
-                            telefone: novo.telefone,
-                            nome: novo.nome,
-                            criado_em: novo.data_contato || new Date().toISOString(),
-                            atualizado_em: new Date().toISOString(),
-                            status: 'em_processo'
-                        })
-                        .onConflict('telefone')
-                        .ignore();
-                    
-                    // Criar etapa inicial
-                    await criarEtapaInicial(novo.telefone);
-                    
-                    // Remover de NOVOS
-                    await supabase
-                        .from('clientes_novos')
-                        .delete()
-                        .eq('telefone', cleanPhone);
-                    
-                    console.log('✅ Cliente movido para ATIVOS');
-                    
-                    // Buscar o cliente recém-criado em ATIVOS
-                    const { data: ativoNovo } = await supabase
-                        .from('clientes_ativos')
-                        .select('*')
-                        .eq('telefone', cleanPhone)
-                        .maybeSingle();
-                    
-                    if (ativoNovo) {
-                        await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
-                    } else {
-                        await processarMensagem(cleanPhone, messageText, body);
-                    }
+                // Se for AMIGO - silêncio total
+                if (tabela === 'contatos_amigos') {
+                    console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
                     return;
                 }
                 
-                // Se não tem nome ainda (onboarding pendente)
-                await processarMensagem(cleanPhone, messageText, body);
-                return;
+                // Se for FINALIZADO
+                if (tabela === 'clientes_finalizados') {
+                    console.log('✅ Cliente FINALIZADO:', dados.nome);
+                    await processarClienteFinalizado(cleanPhone, messageText, dados);
+                    return;
+                }
+                
+                // Se for ATIVO
+                if (tabela === 'clientes_ativos') {
+                    console.log('🔄 Cliente ATIVO:', dados.nome);
+                    
+                    // Verifica se tem etapa
+                    const { data: etapaExistente } = await supabase
+                        .from('etapas_processo')
+                        .select('etapa_atual')
+                        .eq('cliente_telefone', dados.telefone)
+                        .maybeSingle();
+                    
+                    if (!etapaExistente) {
+                        console.log('⚠️ Cliente ATIVO sem etapa - criando...');
+                        await criarEtapaInicial(dados.telefone);
+                    }
+                    
+                    await processarClienteAtivo(cleanPhone, messageText, dados);
+                    return;
+                }
+                
+                // Se for NOVO
+                if (tabela === 'clientes_novos') {
+                    console.log('👤 Cliente NOVO:', dados.nome || 'Sem nome');
+                    console.log('📌 Onboarding completo:', dados.onboarding_completo);
+                    
+                    // Se tem nome mas onboarding_completo = false, corrigir
+                    if (dados.nome && dados.onboarding_completo === false) {
+                        console.log('🔄 Cliente com nome mas onboarding incompleto - corrigindo...');
+                        await supabase
+                            .from('clientes_novos')
+                            .update({ 
+                                onboarding_completo: true,
+                                data_onboarding: new Date().toISOString()
+                            })
+                            .eq('telefone', cleanPhone);
+                        console.log('✅ Onboarding corrigido para:', dados.nome);
+                        
+                        // Atualizar dados
+                        dados.onboarding_completo = true;
+                    }
+                    
+                    // Se já tem nome e onboarding completo, mover para ATIVOS
+                    if (dados.nome && dados.onboarding_completo === true) {
+                        console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
+                        
+                        await supabase
+                            .from('clientes_ativos')
+                            .insert({
+                                telefone: dados.telefone,
+                                nome: dados.nome,
+                                criado_em: dados.data_contato || new Date().toISOString(),
+                                atualizado_em: new Date().toISOString(),
+                                status: 'em_processo'
+                            })
+                            .onConflict('telefone')
+                            .ignore();
+                        
+                        // Criar etapa inicial
+                        await criarEtapaInicial(dados.telefone);
+                        
+                        // Remover de NOVOS
+                        await supabase
+                            .from('clientes_novos')
+                            .delete()
+                            .eq('telefone', cleanPhone);
+                        
+                        console.log('✅ Cliente movido para ATIVOS');
+                        
+                        // Buscar o cliente recém-criado em ATIVOS
+                        const { data: ativoNovo } = await supabase
+                            .from('clientes_ativos')
+                            .select('*')
+                            .eq('telefone', cleanPhone)
+                            .maybeSingle();
+                        
+                        if (ativoNovo) {
+                            await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
+                        } else {
+                            await processarMensagem(cleanPhone, messageText, body);
+                        }
+                        return;
+                    }
+                    
+                    // Se não tem nome ainda (onboarding pendente)
+                    await processarMensagem(cleanPhone, messageText, body);
+                    return;
+                }
             }
 
-            // ------------------------------------------------------------
-            // 5. CRIA NOVO CLIENTE (se realmente não existir em lugar nenhum)
-            // ------------------------------------------------------------
+            // Se não encontrou em nenhuma tabela, CRIAR NOVO CLIENTE
             console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
-            var resultado = await cadastrarCliente(cleanPhone, null);
+            const resultado = await cadastrarCliente(cleanPhone, null);
             if (!resultado) {
                 console.error('❌ Falha ao cadastrar cliente');
                 await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
