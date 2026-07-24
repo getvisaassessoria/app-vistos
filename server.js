@@ -3266,6 +3266,26 @@ app.post('/api/etapas/finalizar', async function(req, res) {
     }
 });
 
+// Rota para listar clientes finalizados
+app.get('/api/clientes/finalizados', async function(req, res) {
+    try {
+        const { data, error } = await supabase
+            .from('clientes_finalizados')
+            .select('*')
+            .order('data_finalizacao', { ascending: false });
+        
+        if (error) throw error;
+        
+        res.json({
+            success: true,
+            finalizados: data || []
+        });
+    } catch (error) {
+        console.error('Erro ao buscar finalizados:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ============================================================
 // HEALTH CHECKS
 // ============================================================
