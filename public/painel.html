@@ -1218,28 +1218,99 @@ async function carregarFinalizados() {
 }
 
 // ============================================================
-//  HISTÓRICO DO CLIENTE FINALIZADO
+//  HISTÓRICO COMPLETO DO CLIENTE FINALIZADO
 // ============================================================
 
 async function abrirHistoricoFinalizado(telefone) {
     try {
-        const response = await fetch(`/api/clientes/finalizados/${telefone}`);
-        const data = await response.json();
+        showToast('⏳ Carregando histórico...', 'info');
         
-        if (!data.success) {
-            throw new Error(data.error || 'Erro ao buscar histórico');
+        // Buscar dados do cliente finalizado
+        const responseCliente = await fetch(`/api/clientes/finalizados/${telefone}`);
+        const dataCliente = await responseCliente.json();
+        
+        if (!dataCliente.success) {
+            throw new Error(dataCliente.error || 'Erro ao buscar cliente');
         }
         
-        const cliente = data.cliente;
+        const cliente = dataCliente.cliente;
         
-        let msg = `📜 HISTÓRICO DO CLIENTE FINALIZADO\n\n`;
-        msg += `📱 Telefone: ${cliente.telefone}\n`;
-        msg += `👤 Nome: ${cliente.nome || 'N/A'}\n`;
+        // Buscar o histórico de etapas (tenta em etapas_processo primeiro)
+        let historico = [];
+        let etapaAtual = '';
+        
+        try {
+            const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+            const responseEtapas = await fetch(`/api/etapas/historico/${telefoneLimpo}`);
+            
+            if (responseEtapas.ok) {
+                const dataEtapas = await responseEtapas.json();
+                if (!dataEtapas.erro) {
+                    historico = dataEtapas.historico || [];
+                    etapaAtual = dataEtapas.etapa_atual || '';
+                }
+            }
+        } catch (err) {
+            console.log('⚠️ Não foi possível buscar histórico de etapas:', err);
+        }
+        
+        // Se não encontrou histórico, tenta buscar da tabela de etapas com formato diferente
+        if (historico.length === 0) {
+            try {
+                const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+                const responseEtapas2 = await fetch(`/api/etapas/cliente/${telefoneLimpo}`);
+                
+                if (responseEtapas2.ok) {
+                    const dataEtapas2 = await responseEtapas2.json();
+                    if (!dataEtapas2.erro && dataEtapas2.historico) {
+                        historico = dataEtapas2.historico || [];
+                        etapaAtual = dataEtapas2.etapa_atual || '';
+                    }
+                }
+            } catch (err) {
+                console.log('⚠️ Não foi possível buscar histórico (2):', err);
+            }
+        }
+        
+        // Montar a mensagem com histórico completo
+        let msg = '📜 HISTÓRICO COMPLETO DO PROCESSO\n\n';
+        msg += `📱 Cliente: ${cliente.nome || 'N/A'}\n`;
         msg += `📋 Serviço: ${cliente.servico || 'Visto Americano'}\n`;
         msg += `📅 Finalizado em: ${new Date(cliente.data_finalizacao).toLocaleString('pt-BR')}\n`;
-        msg += `📝 Observações: ${cliente.observacoes || 'N/A'}\n\n`;
-        msg += `📌 Cliente movido para finalizados em ${new Date(cliente.created_at).toLocaleString('pt-BR')}`;
+        msg += `📝 Resultado: ${cliente.observacoes || 'N/A'}\n\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `📌 ETAPAS DO PROCESSO:\n\n`;
         
+        if (historico.length === 0) {
+            msg += `⚠️ Nenhum registro de etapas encontrado.\n\n`;
+            msg += `💡 Dados disponíveis:\n`;
+            msg += `• Início: ${cliente.data_inicio ? new Date(cliente.data_inicio).toLocaleString('pt-BR') : 'N/A'}\n`;
+            msg += `• Finalização: ${new Date(cliente.data_finalizacao).toLocaleString('pt-BR')}\n`;
+        } else {
+            // Mostrar cada etapa do histórico
+            historico.forEach((item, index) => {
+                const etapaInfo = ETAPAS_CONFIG[item.etapa] || { label: item.etapa || 'Etapa desconhecida' };
+                const dataFormatada = item.data ? new Date(item.data).toLocaleString('pt-BR') : 'Data não registrada';
+                const etapaLabel = etapaInfo.label || item.etapa || `Etapa ${index + 1}`;
+                
+                msg += `${index + 1}. ${etapaLabel}\n`;
+                msg += `   📅 ${dataFormatada}\n`;
+                if (item.nota) msg += `   📝 Nota: ${item.nota}\n`;
+                if (item.observacao) msg += `   💬 Obs: ${item.observacao}\n`;
+                msg += `\n`;
+            });
+            
+            // Mostrar etapa atual (se houver)
+            if (etapaAtual) {
+                const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual };
+                msg += `✅ Etapa final: ${etapaInfo.label || etapaAtual}\n`;
+            }
+        }
+        
+        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `📌 Cliente movido para finalizados em ${new Date(cliente.created_at || cliente.data_finalizacao).toLocaleString('pt-BR')}`;
+        
+        // Exibir em um alert com quebras de linha
         alert(msg);
         
     } catch (error) {
@@ -1248,7 +1319,7 @@ async function abrirHistoricoFinalizado(telefone) {
     }
 }
 
-// ============================================================
+///============================================================
 //  REABRIR PROCESSO (VOLTAR PARA ATIVOS)
 // ============================================================
 

@@ -3266,40 +3266,6 @@ app.post('/api/etapas/finalizar', async function(req, res) {
     }
 });
 
-// Rota para listar clientes finalizados
-// ============================================================
-// ROTAS DE CLIENTES FINALIZADOS
-// ============================================================
-
-// Listar todos os clientes finalizados
-app.get('/api/clientes/finalizados', async function(req, res) {
-    try {
-        console.log('📌 [GET] /api/clientes/finalizados');
-        
-        const { data, error } = await supabase
-            .from('clientes_finalizados')
-            .select('*')
-            .order('data_finalizacao', { ascending: false });
-        
-        if (error) {
-            console.error('❌ Erro:', error);
-            throw error;
-        }
-        
-        console.log(`✅ ${data?.length || 0} clientes finalizados`);
-        
-        res.json({
-            success: true,
-            finalizados: data || []
-        });
-    } catch (error) {
-        console.error('❌ Erro ao buscar finalizados:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
 
 // Buscar um cliente finalizado específico (para o botão "Histórico")
 app.get('/api/clientes/finalizados/:telefone', async function(req, res) {
@@ -3554,22 +3520,6 @@ app.get('/api/clientes/buscar/:telefone', async function(req, res) {
     }
 });
 
-// ============================================================
-// HEALTH CHECKS
-// ============================================================
-
-app.get('/health', function(req, res) { res.status(200).send('OK'); });
-app.get('/ping', function(req, res) { res.status(200).send('ok'); });
-
-// ============================================================
-// INICIALIZAÇÃO
-// ============================================================
-
-app.listen(PORT, '0.0.0.0', function() {
-    console.log('Servidor rodando na porta ' + PORT);
-    console.log('Painel: https://app-vistos.onrender.com/painel.html');
-    console.log('Webhook: https://app-vistos.onrender.com/api/webhook/zapi');
-});
 
 // ============================================================
 // HEALTH CHECKS
