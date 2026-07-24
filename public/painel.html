@@ -1510,16 +1510,22 @@ function renderizarTimeline(data) {
     const etapaAtual = data.etapa_atual;
     const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
     
-    // Verifica se a etapa está no histórico (NOVO)
+    // 🔥 FUNÇÕES QUE USAM O HISTÓRICO
     const isEtapaConcluida = (etapa) => {
-        return data.historico && data.historico.some(item => item.etapa === etapa);
+        if (!data.historico) return false;
+        return data.historico.some(item => item.etapa === etapa);
     };
     
-    // Busca a data de uma etapa no histórico (NOVO)
     const getDataEtapa = (etapa) => {
         if (!data.historico) return null;
         const item = data.historico.find(item => item.etapa === etapa);
         return item ? item.data : null;
+    };
+    
+    const getNotaEtapa = (etapa) => {
+        if (!data.historico) return null;
+        const item = data.historico.find(item => item.etapa === etapa);
+        return item ? item.nota : null;
     };
     
     let nomeCliente = 'Cliente';
@@ -1542,10 +1548,14 @@ function renderizarTimeline(data) {
     // Mostrar etapas normais (até entrevista)
     ETAPAS_ORDEM.forEach((etapa, index) => {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
-        const dataValue = getDataEtapa(etapa);  // <-- USA O HISTÓRICO
         
-        const isConcluida = !!dataValue;
-        const isAtual = index === indexAtual && !isConcluida && !isFinalizada;
+        // 🔥 USA O HISTÓRICO PARA VERIFICAR
+        const isConcluida = isEtapaConcluida(etapa);
+        const dataValue = getDataEtapa(etapa);
+        const notaValue = getNotaEtapa(etapa);
+        
+        // Verifica se é a etapa atual (não concluída e não finalizada)
+        const isAtual = (etapa === etapaAtual) && !isConcluida && !isFinalizada;
         const isPendente = !isConcluida && !isAtual && !isFinalizada;
         
         let corBadge = '#e9ecef';
@@ -1577,6 +1587,7 @@ function renderizarTimeline(data) {
                     </h6>
                     <small>${statusText}</small>
                     ${dataValue ? `<br><small class="text-muted">📅 ${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
+                    ${notaValue && notaValue !== 'Inicio do processo' ? `<br><small class="text-muted">📝 ${notaValue}</small>` : ''}
                 </div>
             </div>
         `;
