@@ -1364,61 +1364,166 @@ function gerarMensagemEtapa(etapaId, nome) {
 
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
-    if (novaEtapa === 'entrevista_realizada') {
-        console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa}`);
-        return;
-    }
+    console.log('📨 ===== INICIANDO NOTIFICAÇÃO DE ETAPA =====');
+    console.log('📨 Telefone recebido:', telefone);
+    console.log('📨 Nova etapa:', novaEtapa);
 
     try {
-        const telefoneLimpo = limparTelefone(telefone);           // "21974601812"
-        const telefoneFormatado = formatarTelefone(telefoneLimpo); // "(21) 97460-1812"
+        const telefoneOriginal = String(telefone || '').trim();
+        const telefoneLimpo = limparTelefone(telefoneOriginal);
+        const telefoneFormatado = formatarTelefone(telefoneLimpo);
 
-        // 1. Tenta com o número limpo (formato mais comum)
-        let { data: cliente } = await supabase
-            .from('clientes_ativos')
-            .select('nome')
-            .eq('telefone', telefoneLimpo)
-            .maybeSingle();
+        if (!telefoneLimpo) {
+            console.error('❌ Telefone inválido para notificação:', telefone);
 
-        // 2. Tenta com o formatado
-        if (!cliente) {
-            const { data: clienteFmt } = await supabase
+            return {
+                sucesso: false,
+                motivo: 'telefone_invalido',
+                telefone: telefoneOriginal,
+                etapa: novaEtapa
+            };
+        }
+
+        console.log('📱 Telefone original:', telefoneOriginal);
+        console.log('📱 Telefone limpo:', telefoneLimpo);
+        console.log('📱 Telefone formatado:', telefoneFormatado);
+
+        const telefonesParaBuscar = [
+            telefoneLimpo,
+            telefoneFormatado,
+            telefoneOriginal
+        ].filter(function(valor, indice, array) {
+            return valor && array.indexOf(valor) === indice;
+        });
+
+        let cliente = null;
+
+        for (const telefoneBusca of telefonesParaBuscar) {
+            console.log(
+                '🔍 Buscando cliente ativo para notificação:',
+                telefoneBusca
+            );
+
+            const { data, error } = await supabase
                 .from('clientes_ativos')
-                .select('nome')
-                .eq('telefone', telefoneFormatado)
+                .select('nome, telefone')
+                .eq('telefone', telefoneBusca)
                 .maybeSingle();
-            cliente = clienteFmt;
-        }
 
-        // 3. Tenta com o valor original (pode vir com 55, etc.)
-        if (!cliente && telefone !== telefoneLimpo && telefone !== telefoneFormatado) {
-            const { data: clienteOrig } = await supabase
-                .from('clientes_ativos')
-                .select('nome')
-                .eq('telefone', telefone)
-                .maybeSingle();
-            cliente = clienteOrig;
+            if (error) {
+                console.error(
+                    '❌ Erro ao buscar cliente ativo:',
+                    error
+                );
+
+                continue;
+            }
+
+            if (data) {
+                cliente = data;
+
+                console.log(
+                    '✅ Cliente encontrado para notificação:',
+                    cliente
+                );
+
+                break;
+            }
         }
 
         if (!cliente) {
-            console.warn(`⚠️ Cliente não encontrado para notificação: ${telefone}`);
-            return;
+            console.warn(
+                '⚠️ Cliente não encontrado em clientes_ativos para notificação:',
+                telefoneOriginal
+            );
+
+            return {
+                sucesso: false,
+                motivo: 'cliente_nao_encontrado',
+                telefone: telefoneLimpo,
+                etapa: novaEtapa
+            };
         }
 
-        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
-            ? cliente.nome.split(' ')[0] 
-            : 'Cliente';
-        const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
+        const nomeCliente =
+            cliente.nome &&
+            typeof cliente.nome === 'string' &&
+            cliente.nome.trim() &&
+            !cliente.nome.startsWith('Cliente_')
+                ? cliente.nome.trim()
+                : 'Cliente';
+
+        console.log('👤 Nome usado na mensagem:', nomeCliente);
+
+        const mensagem = gerarMensagemEtapa(
+            novaEtapa,
+            nomeCliente
+        );
 
         if (!mensagem) {
-            console.log(`⏭️ Sem mensagem definida para etapa: ${novaEtapa}`);
-            return;
+            console.warn(
+                '⚠️ Nenhuma mensagem configurada para a etapa:',
+                novaEtapa
+            );
+
+            return {
+                sucesso: false,
+                motivo: 'mensagem_nao_configurada',
+                telefone: telefoneLimpo,
+                etapa: novaEtapa
+            };
         }
 
-        const enviado = await enviarWhatsApp(telefoneLimpo, mensagem);
-        console.log(`Notificação enviada para ${telefoneLimpo} (${novaEtapa}): ${enviado ? 'SUCESSO' : 'FALHA'}`);
+        console.log('✅ Mensagem gerada com sucesso.');
+        console.log('📨 Enviando WhatsApp para:', telefoneLimpo);
+
+        const enviado = await enviarWhatsApp(
+            telefoneLimpo,
+            mensagem
+        );
+
+        if (!enviado) {
+            console.error(
+                '❌ Z-API não confirmou o envio da notificação.'
+            );
+
+            return {
+                sucesso: false,
+                motivo: 'falha_no_envio_whatsapp',
+                telefone: telefoneLimpo,
+                etapa: novaEtapa
+            };
+        }
+
+        console.log(
+            '✅ Notificação enviada com sucesso para ' +
+            telefoneLimpo +
+            ' | Etapa: ' +
+            novaEtapa
+        );
+
+        return {
+            sucesso: true,
+            telefone: telefoneLimpo,
+            etapa: novaEtapa,
+            cliente: nomeCliente
+        };
+
     } catch (error) {
-        console.error('Erro ao notificar cliente:', error);
+        console.error(
+            '❌ ERRO CRÍTICO EM notificarClienteEtapa:',
+            error
+        );
+
+        console.error('❌ Stack:', error.stack);
+
+        return {
+            sucesso: false,
+            motivo: 'erro_interno',
+            telefone: telefone,
+            etapa: novaEtapa,
+            erro: error.message
+        };
     }
 }
 
@@ -2444,6 +2549,9 @@ app.get('/api/etapas/cliente/:telefone', async function(req, res) {
 
 app.post('/api/etapas/avancar', async function(req, res) {
     try {
+        console.log('🚨 ROTA /api/etapas/avancar EXECUTADA');
+        console.log('🚨 Body recebido:', req.body);
+        
         var telefone = req.body.telefone;
         var nota = req.body.nota;
         var observacao = req.body.observacao;
