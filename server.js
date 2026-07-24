@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
 const PORT = process.env.PORT || 10000;
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'minha-chave-secreta-123';
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -983,8 +983,12 @@ async function enviarWhatsApp(telefone, mensagem) {
 
         console.log('📨 Z-API status para ' + cleanPhone + ': ' + response.status);
         console.log('📨 Z-API resposta:', result);
+<<<<<<< HEAD
 
 return response.status === 200 || response.status === 201;
+=======
+        return response.status === 200 || response.status === 201;
+>>>>>>> 1cec2bb (feat: integração WhatsApp via Z-API e salvamento de leads)
     } catch (error) {
         console.error('Erro ao enviar WhatsApp:', error.message);
         return false;
@@ -1174,23 +1178,6 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     
     const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
     
-    // ============================================================
-    // 🔥 ENVIA NOTIFICAÇÃO DA ETAPA ATUAL (se não for entrevista)
-    // ============================================================
-    if (etapaAtual && etapaAtual !== 'entrevista_realizada') {
-        try {
-            const mensagem = gerarMensagemEtapa(etapaAtual, dadosCliente.nome);
-            if (mensagem) {
-                console.log(`📨 Enviando notificação da etapa "${etapaAtual}" para ${cleanPhone}`);
-                const enviado = await enviarWhatsApp(cleanPhone, mensagem);
-                console.log(`✅ Notificação enviada para ${cleanPhone}: ${etapaAtual} (${enviado ? 'SUCESSO' : 'FALHA'})`);
-            } else {
-                console.log(`⚠️ Sem mensagem para etapa: ${etapaAtual}`);
-            }
-        } catch (err) {
-            console.error('❌ Erro ao enviar notificação:', err);
-        }
-    }
     
     // ============================================================
     // VERIFICA SE É COMANDO DE MENU
