@@ -1223,29 +1223,7 @@ async function criarEtapaComCliente(cliente, telefone) {
     return data;
 }
 
-/**
- * Gera a mensagem de notificação para cada etapa do processo.
- * @param {string} etapa - chave da etapa (ex: 'boleto_pago')
- * @param {string} nomeCliente - primeiro nome do cliente
- * @returns {string} mensagem formatada para WhatsApp
- */
-function gerarMensagemEtapa(etapa, nomeCliente) {
-    const nome = nomeCliente || 'Cliente';
-    const mensagens = {
-        formulario_enviado: `📋 Olá ${nome}! Seu formulário foi recebido com sucesso.\n\nNossa equipe já iniciará a análise dos dados. Fique atento ao WhatsApp para os próximos passos.`,
-        analise_correcoes: `📝 ${nome}, estamos analisando seus documentos e em breve poderemos solicitar pequenas correções, se necessário.`,
-        abertura_processo: `🚀 ${nome}, seu processo foi aberto oficialmente! Acompanhe as atualizações por aqui.`,
-        boleto_emitido: `💰 ${nome}, o boleto para pagamento das taxas foi emitido. Confira os detalhes e realize o pagamento o quanto antes.`,
-        boleto_pago: `✅ ${nome}, recebemos a confirmação do pagamento. O agendamento será o próximo passo.`,
-        agendamento_realizado: `📅 Agendamento confirmado, ${nome}! Fique atento à data e local da entrevista.`,
-        treinamento_realizado: `🎓 Treinamento concluído, ${nome}! Você está preparado(a) para a entrevista.`,
-        entrevista_realizada: `🎤 Entrevista realizada, ${nome}! Agora é aguardar o resultado.`,
-        passaporte_retornado: `🎉 PARABÉNS, ${nome}! Seu passaporte com o visto foi retornado.\n\nAgradecemos por confiar na GetVisa! ✈️`,
-        visto_recusado: `😔 ${nome}, lamentamos informar que o visto foi recusado. Mas não desanime! Podemos analisar juntos o que aconteceu e preparar uma nova tentativa.\n\nFale conosco: https://wa.me/5521974601812`
-    };
 
-    return mensagens[etapa] || `📌 Atualização do seu processo, ${nome}! Entre em contato para mais detalhes. 📱`;
-}
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
     if (novaEtapa === 'entrevista_realizada') {
