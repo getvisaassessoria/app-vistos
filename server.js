@@ -970,29 +970,72 @@ async function cadastrarCliente(telefone, nome) {
 }
 
 // ============================================================
-// BUSCAR CLIENTE EM QUALQUER TABELA
+// FUNÇÃO PARA BUSCAR CLIENTE EM QUALQUER TABELA
 // ============================================================
-const clienteEncontrado = await buscarClienteEmQualquerTabela(cleanPhone);
 
-if (clienteEncontrado) {
-    const { tabela, dados } = clienteEncontrado;
-    console.log(`📌 Cliente encontrado em: ${tabela}`);
+async function buscarClienteEmQualquerTabela(telefone) {
+    console.log('🔍 Buscando cliente em todas as tabelas:', telefone);
     
-    // 1. Se for AMIGO
-    if (tabela === 'contatos_amigos') {
-        console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
-        return;
+    const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+    const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
+    
+    for (const table of tables) {
+        try {
+            // Primeiro tenta com o telefone original
+            const { data, error } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefone)
+                .maybeSingle();
+            
+            if (!error && data) {
+                console.log(`✅ Cliente encontrado em ${table}:`, data.nome || data.telefone);
+                return { tabela: table, dados: data };
+            }
+            
+            // Se não encontrou, tenta com o telefone limpo
+            const { data: dataLimpo, error: errorLimpo } = await supabase
+                .from(table)
+                .select('*')
+                .eq('telefone', telefoneLimpo)
+                .maybeSingle();
+            
+            if (!errorLimpo && dataLimpo) {
+                console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
+                return { tabela: table, dados: dataLimpo };
+            }
+        } catch (err) {
+            console.error(`Erro ao buscar em ${table}:`, err);
+        }
     }
     
-    // 2. Se for FINALIZADO
-    if (tabela === 'clientes_finalizados') {
-        console.log('✅ Cliente FINALIZADO:', dados.nome);
-        const nomeCliente = dados.nome ? dados.nome.split(' ')[0] : 'Cliente';
-        const servico = dados.servico || 'processo';
-        const dataFinal = dados.data_finalizacao ? new Date(dados.data_finalizacao).toLocaleDateString('pt-BR') : '';
-        const observacoes = dados.observacoes || '';
-        
+    console.log('❌ Cliente não encontrado em nenhuma tabela');
+    return null;
+}
+
+// ============================================================
+// FUNÇÃO PARA PROCESSAR CLIENTE FINALIZADO
+// ============================================================
+
+async function processarClienteFinalizado(cleanPhone, messageText, dadosCliente) {
+    console.log('📌 Processando cliente FINALIZADO:', dadosCliente.nome);
+    
+    const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
+    const servico = dadosCliente.servico || 'processo';
+    const dataFinal = dadosCliente.data_finalizacao ? new Date(dadosCliente.data_finalizacao).toLocaleDateString('pt-BR') : '';
+    const observacoes = dadosCliente.observacoes || '';
+    const resultado = dadosCliente.observacoes && dadosCliente.observacoes.includes('recusado') ? 'recusado' : 'aprovado';
+    
+    // Verifica se a mensagem é um comando especial
+    const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
+    if (comandos.includes(messageText.toLowerCase())) {
+        // Cliente finalizado NÃO recebe menu - apenas mensagem de confirmação
         let msg = `👋 Olá ${nomeCliente}!\n\n`;
+        if (resultado === 'recusado') {
+            msg += `📌 Seu processo foi finalizado com o resultado: **❌ Visto Recusado**\n\n`;
+        } else {
+            msg += `📌 Seu processo foi finalizado com o resultado: **✅ Visto Aprovado**\n\n`;
+        }
         msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
         if (observacoes) msg += `📝 ${observacoes}\n\n`;
         msg += `📱 Como podemos ajudar você hoje?\n\n`;
@@ -1002,19 +1045,68 @@ if (clienteEncontrado) {
         return;
     }
     
-    // 3. Se for ATIVO ou NOVO, chama o processamento normal
-    await processarMensagem(cleanPhone, messageText, body);
-    return;
+    // Se o cliente finalizado enviar qualquer outra mensagem, responde com uma mensagem padrão
+    let msg = `👋 Olá ${nomeCliente}!\n\n`;
+    if (resultado === 'recusado') {
+        msg += `📌 Seu processo foi finalizado com o resultado: **❌ Visto Recusado**\n\n`;
+    } else {
+        msg += `📌 Seu processo foi finalizado com o resultado: **✅ Visto Aprovado**\n\n`;
+    }
+    msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
+    if (observacoes) msg += `📝 ${observacoes}\n\n`;
+    msg += `📱 Como podemos ajudar você hoje?\n\n`;
+    msg += `💬 Fique à vontade para escrever sua dúvida.`;
+    
+    await sendReply(cleanPhone, msg);
 }
 
-// 4. Se não encontrou em nenhuma tabela, CRIA NOVO CLIENTE
-console.log('🆕 Criando novo cliente...');
-const resultado = await cadastrarCliente(cleanPhone, null);
-if (!resultado) {
-    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos.');
-    return;
+// ============================================================
+// FUNÇÃO PARA PROCESSAR CLIENTE ATIVO
+// ============================================================
+
+async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
+    console.log('📌 Processando cliente ATIVO:', dadosCliente.nome);
+    
+    // Buscar etapa atual
+    let etapaMsg = '';
+    try {
+        const { data: etapa, error } = await supabase
+            .from('etapas_processo')
+            .select('etapa_atual')
+            .eq('cliente_telefone', cleanPhone)
+            .maybeSingle();
+        
+        if (!error && etapa) {
+            const etapaInfo = ETAPAS[etapa.etapa_atual];
+            etapaMsg = etapaInfo ? etapaInfo.label : etapa.etapa_atual;
+        }
+    } catch (err) {
+        console.log('Erro ao buscar etapa:', err);
+    }
+    
+    const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
+    
+    // Verifica se é um comando de menu
+    const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
+    if (comandos.includes(messageText.toLowerCase())) {
+        // Cliente ativo pode receber o menu
+        await processarMensagem(cleanPhone, messageText, {});
+        return;
+    }
+    
+    // Mensagem padrão para cliente ativo
+    let msg = `👋 Olá ${nomeCliente}!\n\n`;
+    if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
+    msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
+    msg += `💬 Fique à vontade para perguntar.\n\n`;
+    msg += `Digite 0 para acessar o menu principal.`;
+    
+    await sendReply(cleanPhone, msg);
 }
-await processarMensagem(cleanPhone, messageText, body);
+
+// ============================================================
+// FUNÇÕES DE CRIAÇÃO DE ETAPAS E NOTIFICAÇÕES
+// ============================================================
 
 async function criarEtapaInicial(telefone) {
     try {
@@ -1776,7 +1868,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - SIMPLES E DIRETA
+            // VERIFICAÇÕES DE CLIENTE - FUNÇÃO CORRIGIDA
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
@@ -1784,98 +1876,67 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             // 1. VERIFICAR AMIGO
             console.log('🔍 Verificando AMIGO...');
-            var amigo = await supabase
+            var { data: amigo, error: amigoError } = await supabase
                 .from('contatos_amigos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
-            console.log('📌 Resultado AMIGO:', amigo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+            if (amigoError) console.log('Erro ao buscar amigo:', amigoError);
+            console.log('📌 Resultado AMIGO:', amigo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
-            if (amigo.data) {
+            if (amigo) {
                 console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
                 return;
             }
 
             // 2. VERIFICAR FINALIZADO
             console.log('🔍 Verificando FINALIZADO...');
-            var finalizado = await supabase
+            var { data: finalizado, error: finalizadoError } = await supabase
                 .from('clientes_finalizados')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
-            console.log('📌 Resultado FINALIZADO:', finalizado.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+            if (finalizadoError) console.log('Erro ao buscar finalizado:', finalizadoError);
+            console.log('📌 Resultado FINALIZADO:', finalizado ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
-            if (finalizado.data) {
-                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.data.nome);
-                
-                const nomeCliente = finalizado.data.nome ? finalizado.data.nome.split(' ')[0] : 'Cliente';
-                const servico = finalizado.data.servico || 'processo';
-                const dataFinal = finalizado.data.data_finalizacao ? new Date(finalizado.data.data_finalizacao).toLocaleDateString('pt-BR') : '';
-                const observacoes = finalizado.data.observacoes || '';
-                
-                let msg = `👋 Olá ${nomeCliente}!\n\n`;
-                msg += `✅ Seu ${servico} foi **finalizado** em ${dataFinal}.\n\n`;
-                if (observacoes) msg += `📝 ${observacoes}\n\n`;
-                msg += `📱 Como podemos ajudar você hoje?\n\n`;
-                msg += `💬 Fique à vontade para escrever sua dúvida.`;
-                
-                await sendReply(cleanPhone, msg);
+            if (finalizado) {
+                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
+                await processarClienteFinalizado(cleanPhone, messageText, finalizado);
                 return;
             }
 
             // 3. VERIFICAR ATIVO
             console.log('🔍 Verificando ATIVO...');
-            var ativo = await supabase
+            var { data: ativo, error: ativoError } = await supabase
                 .from('clientes_ativos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
-            console.log('📌 Resultado ATIVO:', ativo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+            if (ativoError) console.log('Erro ao buscar ativo:', ativoError);
+            console.log('📌 Resultado ATIVO:', ativo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
-            if (ativo.data) {
-                console.log('🔄 Cliente ATIVO encontrado:', ativo.data.nome);
-                
-                // Buscar etapa atual
-                var etapaMsg = '';
-                try {
-                    var etapa = await supabase
-                        .from('etapas_processo')
-                        .select('etapa_atual')
-                        .eq('cliente_telefone', cleanPhone)
-                        .maybeSingle();
-                    if (etapa.data) {
-                        var etapaInfo = ETAPAS[etapa.data.etapa_atual];
-                        etapaMsg = etapaInfo ? etapaInfo.label : etapa.data.etapa_atual;
-                    }
-                } catch (err) {
-                    console.log('Erro ao buscar etapa:', err);
-                }
-                
-                const nomeCliente = ativo.data.nome ? ativo.data.nome.split(' ')[0] : 'Cliente';
-                let msg = `👋 Olá ${nomeCliente}!\n\n`;
-                if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
-                msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
-                msg += `💬 Fique à vontade para perguntar.`;
-                
-                await sendReply(cleanPhone, msg);
+            if (ativo) {
+                console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
+                await processarClienteAtivo(cleanPhone, messageText, ativo);
                 return;
             }
 
             // 4. VERIFICAR NOVO
             console.log('🔍 Verificando NOVO...');
-            var novo = await supabase
+            var { data: novo, error: novoError } = await supabase
                 .from('clientes_novos')
                 .select('*')
                 .eq('telefone', cleanPhone)
                 .maybeSingle();
 
-            console.log('📌 Resultado NOVO:', novo.data ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
+            if (novoError) console.log('Erro ao buscar novo:', novoError);
+            console.log('📌 Resultado NOVO:', novo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
 
-            if (novo.data) {
-                console.log('👤 Cliente NOVO encontrado:', novo.data.nome);
+            if (novo) {
+                console.log('👤 Cliente NOVO encontrado:', novo.nome);
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
@@ -1914,7 +1975,7 @@ app.post('/api/webhook/zapi', function(req, res) {
 
 // ============================================================
 // ROTAS DE FORMULÁRIO
-/// ============================================================
+// ============================================================
 
 app.post('/api/submit-ds160', async function(req, res) {
     var data = req.body;
@@ -2890,6 +2951,35 @@ app.post('/api/clientes/finalizar', async function(req, res) {
         
         console.log(`✅ Cliente ${telefone} finalizado e movido para clientes_finalizados`);
         
+        // Envia a mensagem de finalização baseado no resultado
+        try {
+            const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+                ? cliente.nome.split(' ')[0] 
+                : 'Cliente';
+            
+            let mensagem = '';
+            if (resultado === 'recusado') {
+                mensagem = `😔 Olá ${nomeCliente}!\n\n` +
+                          `Sabemos que essa notícia dói, ainda mais depois de tanta dedicação na preparação.\n\n` +
+                          `É importante entender: a decisão final do visto acontece no momento da entrevista, e depende muito da avaliação pessoal do oficial consular naquele instante — algo que vai além da documentação e da preparação, por mais completa que tenha sido.\n\n` +
+                          `🔍 Vamos analisar com você os detalhes da entrevista para entender o que pesou na decisão e ajustar a estratégia para a próxima tentativa.\n\n` +
+                          `📱 Fale com a gente agora para uma análise gratuita:\n` +
+                          `https://wa.me/5521974601812\n\n` +
+                          `💪 Isso não muda o seu objetivo. Vamos trabalhar juntos para reverter esse cenário!`;
+            } else {
+                mensagem = `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
+                          `Seu passaporte com o visto foi retornado!\n\n` +
+                          `✅ Seu processo foi concluído com sucesso!\n\n` +
+                          `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
+                          `✈️ Boa viagem! Vá realizar seus sonhos!`;
+            }
+            
+            await enviarWhatsApp(telefone, mensagem);
+            console.log(`✅ Mensagem de finalização enviada para ${telefone}`);
+        } catch (err) {
+            console.error(`❌ Erro ao enviar mensagem de finalização:`, err);
+        }
+        
         res.json({
             success: true,
             message: `Cliente finalizado com ${resultado}`,
@@ -2945,7 +3035,6 @@ app.get('/api/test/banco', async function(req, res) {
         res.status(500).json({ error: error.message });
     }
 });
-
 
 // ============================================================
 // HEALTH CHECKS
