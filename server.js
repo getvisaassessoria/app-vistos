@@ -2441,29 +2441,74 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
     }
 }
 
+// ============================================================
+// ROTA PARA BUSCAR HISTÓRICO DE ETAPAS
+// ============================================================
+
 app.get('/api/etapas/historico/:telefone', async function(req, res) {
     try {
-        var telefoneLimpo = req.params.telefone.replace(/\D/g, '');
-        var result = await supabase
+        const telefone = req.params.telefone;
+        console.log(`📌 [GET] /api/etapas/historico/${telefone}`);
+        
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        console.log(`🔍 Buscando histórico para: ${telefoneLimpo}`);
+        
+        // Tenta buscar com telefone limpo
+        let { data, error } = await supabase
             .from('etapas_processo')
             .select('historico, etapa_atual, data_inicio, data_atualizacao')
             .eq('cliente_telefone', telefoneLimpo)
-            .single();
-
-        if (result.error) {
-            if (result.error.code === 'PGRST116') return res.status(404).json({ erro: 'Cliente nao encontrado' });
-            throw result.error;
+            .maybeSingle();
+        
+        // Se não encontrou, tenta com formato (21) 97460-1812
+        if (!data) {
+            const telefoneFormatado = formatarTelefone(telefoneLimpo);
+            console.log(`🔍 Tentando formato: ${telefoneFormatado}`);
+            
+            const { data: dataFormatado } = await supabase
+                .from('etapas_processo')
+                .select('historico, etapa_atual, data_inicio, data_atualizacao')
+                .eq('cliente_telefone', telefoneFormatado)
+                .maybeSingle();
+            data = dataFormatado;
         }
-
+        
+        if (error) {
+            console.error('❌ Erro no Supabase:', error);
+            return res.status(500).json({ 
+                erro: error.message,
+                historico: [],
+                etapa_atual: null
+            });
+        }
+        
+        if (!data) {
+            console.log(`⚠️ Nenhum histórico encontrado para ${telefoneLimpo}`);
+            return res.json({
+                etapa_atual: null,
+                data_inicio: null,
+                data_atualizacao: null,
+                historico: []
+            });
+        }
+        
+        console.log(`✅ Histórico encontrado: ${data.historico?.length || 0} registros`);
+        
         res.json({
-            etapa_atual: result.data.etapa_atual,
-            data_inicio: result.data.data_inicio,
-            data_atualizacao: result.data.data_atualizacao,
-            historico: result.data.historico || []
+            etapa_atual: data.etapa_atual,
+            data_inicio: data.data_inicio,
+            data_atualizacao: data.data_atualizacao,
+            historico: data.historico || []
         });
+        
     } catch (error) {
-        console.error('Erro ao buscar histórico:', error);
-        res.status(500).json({ erro: 'Erro ao buscar histórico' });
+        console.error('❌ Erro ao buscar histórico:', error);
+        res.status(500).json({ 
+            erro: 'Erro ao buscar histórico',
+            detalhe: error.message,
+            historico: [],
+            etapa_atual: null
+        });
     }
 });
 
