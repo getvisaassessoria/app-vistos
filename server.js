@@ -1949,6 +1949,35 @@ app.post('/api/webhook/zapi', function(req, res) {
     })();
 });
 
+// Coloque isso ANTES da linha 1955 (antes de //ROTAS DE FORMULARIO)
+
+function validateDS160(data) {
+  const errors = [];
+  
+  if (data['radio-visto-negado'] === 'one') {
+    if (!data['text-visto-negado-ano'] || data['text-visto-negado-ano'] === '') {
+      errors.push('Ano da negativa do visto é obrigatório');
+    }
+  }
+  
+  if (data['radio-entrada-negada'] === 'one') {
+    if (!data['text-entrada-negada-ano'] || data['text-entrada-negada-ano'] === '') {
+      errors.push('Ano da negativa de entrada é obrigatório');
+    }
+  }
+  
+  if (data['radio-deportado'] === 'one') {
+    if (!data['text-deportado-ano'] || data['text-deportado-ano'] === '') {
+      errors.push('Ano da deportação é obrigatório');
+    }
+    if (!data['select-deportado-duracao'] || data['select-deportado-duracao'] === '') {
+      errors.push('Duração da deportação é obrigatória');
+    }
+  }
+  
+  return { isValid: errors.length === 0, errors: errors };
+}
+
 // ============================================================
 // ROTAS DE FORMULÁRIO
 // ============================================================
