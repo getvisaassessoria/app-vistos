@@ -592,27 +592,23 @@ async function processarMensagem(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENSAGEM ===');
     console.log('Phone: ' + cleanPhone);
     console.log('Message: "' + messageText + '"');
-    
+
     try {
         let clienteDB = null;
+
         try {
-            const { data, error } = await supabase
-                .from('clientes_novos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-            
-            if (error) {
-                console.error('Erro ao buscar cliente:', error);
-            } else {
-                clienteDB = data;
-            }
+            clienteDB = await buscarClienteEmQualquerTabela(
+                cleanPhone,
+                'clientes_novos'
+            );
         } catch (err) {
             console.error('Erro ao buscar cliente:', err);
         }
-        
+
         console.log('Cliente DB:', clienteDB ? 'Encontrado' : 'Nao encontrado');
-        if (clienteDB) {
+
+        // Todo o restante da sua função continua exatamente igual daqui para baixo.
+            if (clienteDB) {
             console.log('  - Nome:', clienteDB.nome || '(vazio)');
             console.log('  - Onboarding completo:', clienteDB.onboarding_completo || false);
         }
