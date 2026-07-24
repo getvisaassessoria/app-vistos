@@ -1786,67 +1786,6 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// FUNÇÃO PARA ENCONTRAR CLIENTE EM QUALQUER TABELA
-// ============================================================
-
-async function encontrarCliente(telefone) {
-    console.log(`🔍 Buscando cliente em todas as tabelas: ${telefone}`);
-    
-    const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
-    
-    console.log(`📌 Variações: limpo="${telefoneLimpo}", formatado="${telefoneFormatado}"`);
-    
-    const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
-    
-    for (const table of tables) {
-        try {
-            // Tenta com telefone limpo
-            const { data: dataLimpo, error: errorLimpo } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefoneLimpo)
-                .maybeSingle();
-            
-            if (!errorLimpo && dataLimpo) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
-                return { tabela: table, dados: dataLimpo };
-            }
-            
-            // Tenta com telefone formatado
-            const { data: dataFormatado, error: errorFormatado } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefoneFormatado)
-                .maybeSingle();
-            
-            if (!errorFormatado && dataFormatado) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
-                return { tabela: table, dados: dataFormatado };
-            }
-            
-            // Tenta com o telefone original (sem limpeza)
-            const { data: dataOriginal, error: errorOriginal } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefone)
-                .maybeSingle();
-            
-            if (!errorOriginal && dataOriginal) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
-                return { tabela: table, dados: dataOriginal };
-            }
-        } catch (err) {
-            console.error(`Erro ao buscar em ${table}:`, err);
-        }
-    }
-    
-    console.log('❌ Cliente não encontrado em nenhuma tabela');
-    return null;
-}
-
-
-// ============================================================
 // ROTAS PRINCIPAIS
 // ============================================================
 
@@ -1941,13 +1880,73 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - USANDO FUNÇÃO UNIFICADA
+            // FUNÇÃO PARA ENCONTRAR CLIENTE (definida dentro do webhook)
+            // ============================================================
+            
+            async function encontrarCliente(telefone) {
+                console.log(`🔍 Buscando cliente em todas as tabelas: ${telefone}`);
+                
+                const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+                const telefoneFormatado = formatarTelefone(telefoneLimpo);
+                
+                console.log(`📌 Variações: limpo="${telefoneLimpo}", formatado="${telefoneFormatado}"`);
+                
+                const tables = ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
+                
+                for (const table of tables) {
+                    try {
+                        // Tenta com telefone limpo
+                        const { data: dataLimpo, error: errorLimpo } = await supabase
+                            .from(table)
+                            .select('*')
+                            .eq('telefone', telefoneLimpo)
+                            .maybeSingle();
+                        
+                        if (!errorLimpo && dataLimpo) {
+                            console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
+                            return { tabela: table, dados: dataLimpo };
+                        }
+                        
+                        // Tenta com telefone formatado
+                        const { data: dataFormatado, error: errorFormatado } = await supabase
+                            .from(table)
+                            .select('*')
+                            .eq('telefone', telefoneFormatado)
+                            .maybeSingle();
+                        
+                        if (!errorFormatado && dataFormatado) {
+                            console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
+                            return { tabela: table, dados: dataFormatado };
+                        }
+                        
+                        // Tenta com o telefone original (sem limpeza)
+                        const { data: dataOriginal, error: errorOriginal } = await supabase
+                            .from(table)
+                            .select('*')
+                            .eq('telefone', telefone)
+                            .maybeSingle();
+                        
+                        if (!errorOriginal && dataOriginal) {
+                            console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
+                            return { tabela: table, dados: dataOriginal };
+                        }
+                    } catch (err) {
+                        console.error(`Erro ao buscar em ${table}:`, err);
+                    }
+                }
+                
+                console.log('❌ Cliente não encontrado em nenhuma tabela');
+                return null;
+            }
+
+            // ============================================================
+            // VERIFICAÇÕES DE CLIENTE
             // ============================================================
             
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
             console.log('📱 Telefone:', cleanPhone);
 
-            // Usar a função unificada para encontrar o cliente em qualquer tabela
+            // Usar a função para encontrar o cliente em qualquer tabela
             const clienteEncontrado = await encontrarCliente(cleanPhone);
 
             if (clienteEncontrado) {
