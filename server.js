@@ -2469,65 +2469,31 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
         console.log('📌 Etapa atual:', etapaAtual.etapa_atual);
         
         // ============================================================
-        // CORREÇÃO: NORMALIZAR O TELEFONE PARA TODOS OS FORMATOS
+        // NORMALIZAR TELEFONE
         // ============================================================
-        
-        // Remove tudo que não é número
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-        console.log('📌 Telefone limpo:', telefoneLimpo);
-        
-        // Remove o 55 do início se tiver
         const telefoneSem55 = telefoneLimpo.startsWith('55') ? telefoneLimpo.substring(2) : telefoneLimpo;
-        console.log('📌 Telefone sem 55:', telefoneSem55);
-        
-        // Formata para o padrão do banco (21) 97460-1812
         const telefoneFormatado = formatarTelefone(telefoneSem55);
-        console.log('📌 Telefone formatado:', telefoneFormatado);
         
-        // Cria array com todas as variações possíveis
         const variacoesTelefone = [
-            telefoneFormatado,      // (21) 97460-1812
-            telefoneSem55,          // 21974601812
-            telefoneLimpo,          // 5521974601812
-            telefone,               // original
-            telefone.toString()     // string
-        ].filter(Boolean); // Remove null/undefined
+            telefoneFormatado,
+            telefoneSem55,
+            telefoneLimpo,
+            telefone,
+            telefone.toString()
+        ].filter(Boolean);
         
-        // Remove duplicatas
         const telefonesUnicos = [...new Set(variacoesTelefone)];
         console.log('📌 Variações a tentar:', telefonesUnicos);
         
-        var etapaId = etapaAtual.etapa_atual;
-        console.log('📌 etapaId:', etapaId);
-        
-        var etapaInfo = ETAPAS[etapaId];
-        if (!etapaInfo) {
-            console.error('❌ Etapa não encontrada:', etapaId);
-            return res.status(400).json({ erro: 'Etapa não encontrada: ' + etapaId });
-        }
-        
-        var proximaEtapa = etapaInfo.next;
-        if (!proximaEtapa) {
-            return res.status(400).json({ erro: 'Cliente ja esta na ultima etapa' });
-        }
-        
-        if (!ETAPAS[proximaEtapa]) {
-            console.error('❌ Próxima etapa não encontrada:', proximaEtapa);
-            return res.status(400).json({ erro: 'Próxima etapa não encontrada: ' + proximaEtapa });
-        }
-        
         // ============================================================
-        // BUSCAR O CLIENTE EM QUALQUER TABELA
+        // BUSCAR CLIENTE
         // ============================================================
-        
         let cliente = null;
         let telefoneEncontrado = null;
         
-        // Buscar em clientes_ativos
         for (const tel of telefonesUnicos) {
             if (!tel || tel.length < 8) continue;
-            
-            console.log(`🔍 Buscando em clientes_ativos com: "${tel}"`);
             
             const { data, error } = await supabase
                 .from('clientes_ativos')
@@ -2543,38 +2509,8 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
             }
         }
         
-        // Se não encontrou em clientes_ativos, busca em outras tabelas
         if (!cliente) {
-            for (const tel of telefonesUnicos) {
-                if (!tel || tel.length < 8) continue;
-                
-                // Buscar em etapas_processo primeiro para pegar o telefone correto
-                const { data: etapaData } = await supabase
-                    .from('etapas_processo')
-                    .select('cliente_telefone')
-                    .eq('cliente_telefone', tel)
-                    .maybeSingle();
-                
-                if (etapaData && etapaData.cliente_telefone) {
-                    // Agora busca o cliente com o telefone do etapa
-                    const { data: clienteData } = await supabase
-                        .from('clientes_ativos')
-                        .select('*')
-                        .eq('telefone', etapaData.cliente_telefone)
-                        .maybeSingle();
-                    
-                    if (clienteData) {
-                        cliente = clienteData;
-                        telefoneEncontrado = etapaData.cliente_telefone;
-                        console.log(`✅ Cliente encontrado via etapas_processo: "${telefoneEncontrado}"`);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if (!cliente) {
-            console.error('❌ Cliente não encontrado em nenhuma tabela');
+            console.error('❌ Cliente não encontrado');
             return res.status(404).json({ 
                 erro: 'Cliente não encontrado',
                 telefones_buscados: telefonesUnicos
@@ -2582,17 +2518,34 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
         }
         
         console.log('✅ Cliente encontrado:', cliente.nome || 'Sem nome');
-        console.log('📌 Telefone no banco:', cliente.telefone);
+        
+        // ============================================================
+        // VERIFICAR ETAPA ATUAL
+        // ============================================================
+        var etapaId = etapaAtual.etapa_atual;
+        var etapaInfo = ETAPAS[etapaId];
+        
+        if (!etapaInfo) {
+            return res.status(400).json({ erro: 'Etapa não encontrada: ' + etapaId });
+        }
+        
+        var proximaEtapa = etapaInfo.next;
+        if (!proximaEtapa) {
+            return res.status(400).json({ erro: 'Cliente já está na última etapa' });
+        }
+        
+        if (!ETAPAS[proximaEtapa]) {
+            return res.status(400).json({ erro: 'Próxima etapa não encontrada: ' + proximaEtapa });
+        }
         
         // ============================================================
         // ATUALIZAR ETAPA
         // ============================================================
-        
         var historicoAtualizado = (etapaAtual.historico || []).concat([{
             etapa: etapaId,
             data: new Date().toISOString(),
-            nota: nota || 'Avanco manual',
-            observacao: observacao || 'Avancado pelo painel administrativo'
+            nota: nota || 'Avanço manual',
+            observacao: observacao || 'Avançado pelo painel administrativo'
         }]);
         
         var dadosAtualizacao = {
@@ -2604,9 +2557,6 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
         var campoData = 'data_' + proximaEtapa;
         dadosAtualizacao[campoData] = new Date().toISOString();
         
-        console.log('📌 Atualizando para:', JSON.stringify(dadosAtualizacao));
-        
-        // Atualiza usando o telefone encontrado
         let updated = await supabase
             .from('etapas_processo')
             .update(dadosAtualizacao)
@@ -2618,27 +2568,26 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
             console.error('❌ Erro no update:', updated.error);
             return res.status(500).json({ 
                 erro: 'Erro ao atualizar etapa', 
-                detalhe: updated.error.message,
-                telefone_usado: telefoneEncontrado
+                detalhe: updated.error.message
             });
         }
         
         console.log('✅ Update realizado com sucesso');
         
         // ============================================================
-        // NOTIFICAR CLIENTE
+        // 🔔 ENVIAR NOTIFICAÇÃO AUTOMÁTICA PARA O CLIENTE
         // ============================================================
-        
         const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
             ? cliente.nome.split(' ')[0] 
             : 'Cliente';
         
+        console.log(`📨 GERANDO MENSAGEM PARA ETAPA: ${proximaEtapa}`);
         const mensagem = gerarMensagemEtapa(proximaEtapa, nomeCliente);
         
         if (mensagem) {
-            console.log(`📨 Enviando WhatsApp para ${cliente.telefone}...`);
+            console.log(`📨 ENVIANDO NOTIFICAÇÃO PARA ${cliente.telefone}...`);
             const enviado = await enviarWhatsApp(cliente.telefone, mensagem);
-            console.log(`✅ WhatsApp enviado: ${enviado ? 'SUCESSO' : 'FALHA'}`);
+            console.log(`✅ Notificação enviada: ${enviado ? 'SUCESSO' : 'FALHA'}`);
         } else {
             console.log(`⚠️ Nenhuma mensagem definida para etapa: ${proximaEtapa}`);
         }
@@ -2649,6 +2598,7 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
             sucesso: true,
             etapa_anterior: etapaId,
             etapa_atual: proximaEtapa,
+            notificacao_enviada: !!mensagem,
             cliente: {
                 nome: cliente.nome,
                 telefone: cliente.telefone
@@ -2658,7 +2608,6 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
         
     } catch (error) {
         console.error('❌ ERRO em processarAvanco:', error);
-        console.error('❌ Stack:', error.stack);
         res.status(500).json({ 
             erro: 'Erro ao processar avanço', 
             detalhe: error.message
