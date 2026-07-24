@@ -591,13 +591,16 @@
     </div>
 
     <!-- TABS -->
-    <div class="tabs">
-        <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
-        <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
-        <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
-        <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
-        <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
-    </div>
+    <!-- TABS -->
+<div class="tabs">
+    <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
+    <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
+    <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
+    <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
+    <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
+    <!-- NOVA ABA - FINALIZADOS -->
+    <button class="tab-btn" data-tab="finalizados" onclick="mudarAba('finalizados')">✅ Finalizados</button>
+</div>
 
     <!-- TAB: PENDENTES -->
     <div class="tab-content active" id="tab-pendentes">
@@ -648,7 +651,6 @@
         </div>
     </div>
 
-    <!-- TAB: ETAPAS (TIMELINE) -->
     <!-- TAB: ETAPAS (TIMELINE) -->
 <div class="tab-content" id="tab-etapas">
     <div class="table-container">
@@ -738,6 +740,20 @@
                 <div class="loading">🔄 Carregando...</div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- TAB: FINALIZADOS -->
+<div class="tab-content" id="tab-finalizados">
+    <div class="table-container">
+        <div class="table-header">
+            <span style="font-weight:600;color:#1e293b;">✅ Clientes Finalizados</span>
+            <div>
+                <input type="text" id="buscar-finalizados" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('finalizados')">
+                <button class="btn btn-primary" onclick="carregarFinalizados()" style="margin-left:10px;">🔄 Atualizar</button>
+            </div>
+        </div>
+        <div id="tabela-finalizados"><div class="loading">🔄 Carregando...</div></div>
     </div>
 </div>
 
@@ -1114,6 +1130,180 @@ function renderAmigos() {
     });
     html += `</tbody></table>`;
     container.innerHTML = html;
+}
+
+// ============================================================
+//  CARREGAR E RENDERIZAR FINALIZADOS
+// ============================================================
+
+async function carregarFinalizados() {
+    try {
+        const container = document.getElementById('tabela-finalizados');
+        container.innerHTML = '<div class="loading">🔄 Carregando...</div>';
+        
+        const response = await fetch('/api/clientes/finalizados');
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Erro ao carregar finalizados');
+        }
+        
+        const finalizados = data.finalizados || [];
+        
+        // Atualiza o contador no card de estatísticas (opcional)
+        // document.getElementById('total-finalizados').textContent = finalizados.length;
+        
+        if (finalizados.length === 0) {
+            container.innerHTML = `<div class="empty">✅ Nenhum cliente finalizado ainda</div>`;
+            return;
+        }
+        
+        let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Telefone</th>
+                        <th>Nome</th>
+                        <th>Serviço</th>
+                        <th>Resultado</th>
+                        <th>Data Finalização</th>
+                        <th>Observações</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        finalizados.forEach(item => {
+            const dataFinal = item.data_finalizacao 
+                ? new Date(item.data_finalizacao).toLocaleString('pt-BR') 
+                : '-';
+            
+            const isAprovado = item.observacoes && 
+                (item.observacoes.toLowerCase().includes('aprovado') || 
+                 item.observacoes.toLowerCase().includes('passaporte_retornado'));
+            
+            const resultado = isAprovado 
+                ? '<span style="color:#10b981;font-weight:bold;">✅ Aprovado</span>' 
+                : '<span style="color:#ef4444;font-weight:bold;">❌ Recusado</span>';
+            
+            const observacoes = item.observacoes || '-';
+            
+            html += `
+                <tr>
+                    <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                    <td>${item.nome || 'Sem nome'}</td>
+                    <td>${item.servico || 'Visto Americano'}</td>
+                    <td>${resultado}</td>
+                    <td class="data-hora">${dataFinal}</td>
+                    <td style="max-width:200px;font-size:13px;color:#64748b;">${observacoes}</td>
+                    <td>
+                        <div class="acoes">
+                            <button class="btn btn-info btn-sm" onclick="abrirHistoricoFinalizado('${item.telefone}')">📜 Histórico</button>
+                            <button class="btn btn-danger btn-sm" onclick="reabrirProcesso('${item.telefone}')">🔄 Reabrir</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('❌ Erro ao carregar finalizados:', error);
+        document.getElementById('tabela-finalizados').innerHTML = 
+            `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
+    }
+}
+
+// ============================================================
+//  HISTÓRICO DO CLIENTE FINALIZADO
+// ============================================================
+
+async function abrirHistoricoFinalizado(telefone) {
+    try {
+        const response = await fetch(`/api/clientes/finalizados/${telefone}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Erro ao buscar histórico');
+        }
+        
+        const cliente = data.cliente;
+        
+        let msg = `📜 HISTÓRICO DO CLIENTE FINALIZADO\n\n`;
+        msg += `📱 Telefone: ${cliente.telefone}\n`;
+        msg += `👤 Nome: ${cliente.nome || 'N/A'}\n`;
+        msg += `📋 Serviço: ${cliente.servico || 'Visto Americano'}\n`;
+        msg += `📅 Finalizado em: ${new Date(cliente.data_finalizacao).toLocaleString('pt-BR')}\n`;
+        msg += `📝 Observações: ${cliente.observacoes || 'N/A'}\n\n`;
+        msg += `📌 Cliente movido para finalizados em ${new Date(cliente.created_at).toLocaleString('pt-BR')}`;
+        
+        alert(msg);
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar histórico:', error);
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================
+//  REABRIR PROCESSO (VOLTAR PARA ATIVOS)
+// ============================================================
+
+async function reabrirProcesso(telefone) {
+    if (!confirm(`Tem certeza que deseja REABRIR o processo de ${telefone}?\n\nO cliente voltará para a lista de "Em Processo".`)) {
+        return;
+    }
+    
+    try {
+        showToast('⏳ Reabrindo processo...', 'info');
+        
+        const response = await fetch('/api/clientes/reabrir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`✅ Processo reaberto com sucesso!`, 'success');
+            await carregarFinalizados();
+            await carregarDados();
+        } else {
+            showToast(`❌ Erro: ${data.error || 'Erro desconhecido'}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao reabrir:', error);
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================
+//  ATUALIZAR O mudarAba() PARA INCLUIR FINALIZADOS
+// ============================================================
+
+// Substitua a função mudarAba existente por esta versão atualizada:
+function mudarAba(aba) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    
+    const tabContent = document.getElementById(`tab-${aba}`);
+    if (tabContent) tabContent.classList.add('active');
+    
+    const tabBtn = document.querySelector(`.tab-btn[data-tab="${aba}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+    
+    // Carregar dados conforme a aba
+    if (aba === 'pendentes') renderPendentes();
+    else if (aba === 'ativos') renderAtivos();
+    else if (aba === 'amigos') renderAmigos();
+    else if (aba === 'etapas') carregarClientesParaTimeline();
+    else if (aba === 'dashboard') carregarDashboard();
+    else if (aba === 'finalizados') carregarFinalizados();
 }
 
 // ============================================================
