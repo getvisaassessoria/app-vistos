@@ -3267,22 +3267,290 @@ app.post('/api/etapas/finalizar', async function(req, res) {
 });
 
 // Rota para listar clientes finalizados
+// ============================================================
+// ROTAS DE CLIENTES FINALIZADOS
+// ============================================================
+
+// Listar todos os clientes finalizados
 app.get('/api/clientes/finalizados', async function(req, res) {
     try {
+        console.log('📌 [GET] /api/clientes/finalizados');
+        
         const { data, error } = await supabase
             .from('clientes_finalizados')
             .select('*')
             .order('data_finalizacao', { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Erro:', error);
+            throw error;
+        }
+        
+        console.log(`✅ ${data?.length || 0} clientes finalizados`);
         
         res.json({
             success: true,
             finalizados: data || []
         });
     } catch (error) {
-        console.error('Erro ao buscar finalizados:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('❌ Erro ao buscar finalizados:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Buscar um cliente finalizado específico (para o botão "Histórico")
+app.get('/api/clientes/finalizados/:telefone', async function(req, res) {
+    try {
+        const telefone = req.params.telefone;
+        console.log(`📌 [GET] /api/clientes/finalizados/${telefone}`);
+        
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        console.log(`🔍 Buscando: ${telefoneLimpo}`);
+        
+        // Tenta buscar com o telefone limpo
+        let { data, error } = await supabase
+            .from('clientes_finalizados')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        // Se não encontrou, tenta com formato (21) 97460-1812
+        if (!data) {
+            const telefoneFormatado = formatarTelefone(telefoneLimpo);
+            console.log(`🔍 Tentando formato: ${telefoneFormatado}`);
+            
+            const { data: dataFormatado } = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            data = dataFormatado;
+        }
+        
+        if (error) {
+            console.error('❌ Erro:', error);
+            return res.status(500).json({ 
+                success: false, 
+                error: error.message 
+            });
+        }
+        
+        if (!data) {
+            console.log(`❌ Cliente não encontrado`);
+            return res.status(404).json({
+                success: false,
+                error: 'Cliente não encontrado em finalizados'
+            });
+        }
+        
+        console.log(`✅ Cliente encontrado: ${data.nome}`);
+        
+        res.json({
+            success: true,
+            cliente: data
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar cliente finalizado:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Reabrir processo (mover de finalizados para ativos)
+app.post('/api/clientes/reabrir', async function(req, res) {
+    try {
+        const telefone = req.body.telefone;
+        console.log(`📌 [POST] /api/clientes/reabrir`);
+        console.log(`📌 Telefone: ${telefone}`);
+        
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        console.log(`🔄 Reabrindo: ${telefoneLimpo}`);
+        
+        // Buscar o cliente em finalizados
+        let { data: cliente, error } = await supabase
+            .from('clientes_finalizados')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        // Se não encontrou, tenta com formato
+        if (!cliente) {
+            const telefoneFormatado = formatarTelefone(telefoneLimpo);
+            console.log(`🔍 Tentando formato: ${telefoneFormatado}`);
+            
+            const { data: dataFormatado } = await supabase
+                .from('clientes_finalizados')
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            cliente = dataFormatado;
+        }
+        
+        if (error) {
+            console.error('❌ Erro:', error);
+            return res.status(500).json({ 
+                success: false, 
+                error: error.message 
+            });
+        }
+        
+        if (!cliente) {
+            console.log(`❌ Cliente não encontrado em finalizados`);
+            return res.status(404).json({
+                success: false,
+                error: 'Cliente não encontrado em finalizados'
+            });
+        }
+        
+        console.log(`✅ Cliente encontrado: ${cliente.nome}`);
+        
+        // Verificar se já existe em clientes_ativos
+        const { data: existente } = await supabase
+            .from('clientes_ativos')
+            .select('telefone')
+            .eq('telefone', cliente.telefone)
+            .maybeSingle();
+        
+        if (existente) {
+            console.log(`⚠️ Cliente já existe em ativos, removendo...`);
+            await supabase
+                .from('clientes_ativos')
+                .delete()
+                .eq('telefone', cliente.telefone);
+        }
+        
+        // Inserir de volta em clientes_ativos
+        const { data: ativo, error: insertError } = await supabase
+            .from('clientes_ativos')
+            .insert({
+                telefone: cliente.telefone,
+                nome: cliente.nome,
+                email: cliente.email || null,
+                criado_em: cliente.data_inicio || new Date().toISOString(),
+                atualizado_em: new Date().toISOString(),
+                status: 'reaberto'
+            })
+            .select()
+            .single();
+        
+        if (insertError) {
+            console.error('❌ Erro ao inserir em ativos:', insertError);
+            return res.status(500).json({ 
+                success: false, 
+                error: insertError.message 
+            });
+        }
+        
+        console.log(`✅ Cliente inserido em clientes_ativos`);
+        
+        // Remover de finalizados
+        await supabase
+            .from('clientes_finalizados')
+            .delete()
+            .eq('telefone', cliente.telefone);
+        
+        console.log(`🗑️ Cliente removido de clientes_finalizados`);
+        
+        // Criar nova etapa no processo
+        try {
+            await criarEtapaInicial(telefoneLimpo);
+            console.log(`✅ Etapa inicial criada`);
+        } catch (err) {
+            console.error('❌ Erro ao criar etapa:', err);
+        }
+        
+        // Enviar mensagem de reabertura
+        try {
+            const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+                ? cliente.nome.split(' ')[0] 
+                : 'Cliente';
+            
+            const mensagem = `🔄 Olá ${nomeCliente}!\n\n` +
+                           `Seu processo foi REABERTO pela nossa equipe.\n\n` +
+                           `📋 Status: Em andamento\n` +
+                           `📍 Etapa atual: Formulário recebido\n\n` +
+                           `Em breve nossa equipe entrará em contato com os próximos passos.\n\n` +
+                           `📱 Dúvidas? Fale conosco pelo WhatsApp: https://wa.me/5521974601812`;
+            
+            await enviarWhatsApp(cliente.telefone, mensagem);
+            console.log(`✅ Mensagem de reabertura enviada`);
+        } catch (err) {
+            console.error('❌ Erro ao enviar mensagem:', err);
+        }
+        
+        console.log(`✅ Processo reaberto com sucesso!`);
+        
+        res.json({
+            success: true,
+            message: 'Processo reaberto com sucesso',
+            cliente: ativo
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao reabrir processo:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Buscar cliente em ativos (usado pelo moverParaAmigo)
+app.get('/api/clientes/buscar/:telefone', async function(req, res) {
+    try {
+        const telefone = req.params.telefone;
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        
+        console.log(`🔍 Buscando cliente: ${telefoneLimpo}`);
+        
+        let { data, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        if (!data) {
+            const telefoneFormatado = formatarTelefone(telefoneLimpo);
+            const { data: dataFormatado } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            data = dataFormatado;
+        }
+        
+        if (error) {
+            console.error('❌ Erro:', error);
+            return res.status(500).json({ 
+                success: false, 
+                error: error.message 
+            });
+        }
+        
+        if (!data) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Cliente não encontrado' 
+            });
+        }
+        
+        res.json({ 
+            success: true, 
+            cliente: data 
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
