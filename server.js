@@ -1880,14 +1880,30 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // FUNÇÃO PARA ENCONTRAR CLIENTE (definida dentro do webhook)
+            // FUNÇÃO SIMPLES PARA FORMATAR TELEFONE (DEFINIDA LOCALMENTE)
             // ============================================================
             
-            async function encontrarCliente(telefone) {
+            function formatarTelefoneLocal(telefone) {
+                if (!telefone) return null;
+                const numeros = telefone.toString().replace(/\D/g, '');
+                if (numeros.length === 11) {
+                    return '(' + numeros.substring(0, 2) + ') ' + numeros.substring(2, 7) + '-' + numeros.substring(7, 11);
+                }
+                if (numeros.length === 10) {
+                    return '(' + numeros.substring(0, 2) + ') ' + numeros.substring(2, 6) + '-' + numeros.substring(6, 10);
+                }
+                return telefone;
+            }
+
+            // ============================================================
+            // FUNÇÃO PARA ENCONTRAR CLIENTE (DEFINIDA LOCALMENTE)
+            // ============================================================
+            
+            async function encontrarClienteLocal(telefone) {
                 console.log(`🔍 Buscando cliente em todas as tabelas: ${telefone}`);
                 
                 const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-                const telefoneFormatado = formatarTelefone(telefoneLimpo);
+                const telefoneFormatado = formatarTelefoneLocal(telefoneLimpo);
                 
                 console.log(`📌 Variações: limpo="${telefoneLimpo}", formatado="${telefoneFormatado}"`);
                 
@@ -1919,7 +1935,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                             return { tabela: table, dados: dataFormatado };
                         }
                         
-                        // Tenta com o telefone original (sem limpeza)
+                        // Tenta com o telefone original
                         const { data: dataOriginal, error: errorOriginal } = await supabase
                             .from(table)
                             .select('*')
@@ -1947,7 +1963,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('📱 Telefone:', cleanPhone);
 
             // Usar a função para encontrar o cliente em qualquer tabela
-            const clienteEncontrado = await encontrarCliente(cleanPhone);
+            const clienteEncontrado = await encontrarClienteLocal(cleanPhone);
 
             if (clienteEncontrado) {
                 const { tabela, dados } = clienteEncontrado;
@@ -1989,67 +2005,6 @@ app.post('/api/webhook/zapi', function(req, res) {
                 // Se for NOVO
                 if (tabela === 'clientes_novos') {
                     console.log('👤 Cliente NOVO:', dados.nome || 'Sem nome');
-                    console.log('📌 Onboarding completo:', dados.onboarding_completo);
-                    
-                    // Se tem nome mas onboarding_completo = false, corrigir
-                    if (dados.nome && dados.onboarding_completo === false) {
-                        console.log('🔄 Cliente com nome mas onboarding incompleto - corrigindo...');
-                        await supabase
-                            .from('clientes_novos')
-                            .update({ 
-                                onboarding_completo: true,
-                                data_onboarding: new Date().toISOString()
-                            })
-                            .eq('telefone', cleanPhone);
-                        console.log('✅ Onboarding corrigido para:', dados.nome);
-                        
-                        // Atualizar dados
-                        dados.onboarding_completo = true;
-                    }
-                    
-                    // Se já tem nome e onboarding completo, mover para ATIVOS
-                    if (dados.nome && dados.onboarding_completo === true) {
-                        console.log('🔄 Cliente com onboarding completo - movendo para ATIVOS...');
-                        
-                        await supabase
-                            .from('clientes_ativos')
-                            .insert({
-                                telefone: dados.telefone,
-                                nome: dados.nome,
-                                criado_em: dados.data_contato || new Date().toISOString(),
-                                atualizado_em: new Date().toISOString(),
-                                status: 'em_processo'
-                            })
-                            .onConflict('telefone')
-                            .ignore();
-                        
-                        // Criar etapa inicial
-                        await criarEtapaInicial(dados.telefone);
-                        
-                        // Remover de NOVOS
-                        await supabase
-                            .from('clientes_novos')
-                            .delete()
-                            .eq('telefone', cleanPhone);
-                        
-                        console.log('✅ Cliente movido para ATIVOS');
-                        
-                        // Buscar o cliente recém-criado em ATIVOS
-                        const { data: ativoNovo } = await supabase
-                            .from('clientes_ativos')
-                            .select('*')
-                            .eq('telefone', cleanPhone)
-                            .maybeSingle();
-                        
-                        if (ativoNovo) {
-                            await processarClienteAtivo(cleanPhone, messageText, ativoNovo);
-                        } else {
-                            await processarMensagem(cleanPhone, messageText, body);
-                        }
-                        return;
-                    }
-                    
-                    // Se não tem nome ainda (onboarding pendente)
                     await processarMensagem(cleanPhone, messageText, body);
                     return;
                 }
