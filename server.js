@@ -2776,8 +2776,22 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
 
         if (FEATURES.SISTEMA_ETAPAS.notificar_cliente) {
             try {
-                await notificarClienteEtapa(telefone, proximaEtapa);
-                console.log(`✅ Notificação de etapa enviada para ${telefone}: ${proximaEtapa}`);
+                let resultadoNotificacao = {
+    sucesso: false,
+    motivo: 'notificacao_desativada'
+};
+
+if (FEATURES.SISTEMA_ETAPAS.notificar_cliente === true) {
+    resultadoNotificacao = await notificarClienteEtapa(
+        telefone,
+        proximaEtapa
+    );
+
+    console.log(
+        '📨 Resultado da notificação de etapa:',
+        resultadoNotificacao
+    );
+}
             } catch (err) {
                 console.error(`❌ Erro ao notificar cliente:`, err);
             }
@@ -2789,6 +2803,7 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
             sucesso: true,
             etapa_anterior: etapaId,
             etapa_atual: proximaEtapa,
+            notificacao: resultadoNotificacao,
             dados: updated.data
         });
         
@@ -3960,6 +3975,60 @@ app.get('/api/clientes/buscar/:telefone', async function(req, res) {
         res.status(500).json({ 
             success: false, 
             error: error.message 
+        });
+    }
+});
+
+app.post('/api/admin/testar-notificacao-etapa', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({
+                sucesso: false,
+                erro: 'Não autorizado'
+            });
+        }
+
+        const telefone = req.body.telefone;
+        const etapa = req.body.etapa;
+
+        if (!telefone || !etapa) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Telefone e etapa são obrigatórios'
+            });
+        }
+
+        if (!ETAPAS[etapa]) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Etapa inválida: ' + etapa
+            });
+        }
+
+        console.log('🧪 ===== TESTE ISOLADO DE NOTIFICAÇÃO =====');
+        console.log('🧪 Telefone:', telefone);
+        console.log('🧪 Etapa:', etapa);
+
+        const resultado = await notificarClienteEtapa(
+            telefone,
+            etapa
+        );
+
+        console.log('🧪 Resultado do teste:', resultado);
+
+        return res.status(resultado.sucesso ? 200 : 400).json({
+            sucesso: resultado.sucesso,
+            resultado: resultado
+        });
+
+    } catch (error) {
+        console.error('❌ Erro no teste isolado de notificação:', error);
+
+        return res.status(500).json({
+            sucesso: false,
+            erro: error.message
         });
     }
 });
