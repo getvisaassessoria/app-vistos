@@ -1099,6 +1099,9 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
             etapaAtual = etapa.etapa_atual;
             const etapaInfo = ETAPAS[etapa.etapa_atual];
             etapaMsg = etapaInfo ? etapaInfo.label : etapa.etapa_atual;
+            console.log(`📌 Etapa atual do cliente: ${etapaAtual} (${etapaMsg})`);
+        } else {
+            console.log('⚠️ Nenhuma etapa encontrada para o cliente');
         }
     } catch (err) {
         console.log('Erro ao buscar etapa:', err);
@@ -1114,8 +1117,8 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
             const mensagem = gerarMensagemEtapa(etapaAtual, dadosCliente.nome);
             if (mensagem) {
                 console.log(`📨 Enviando notificação da etapa "${etapaAtual}" para ${cleanPhone}`);
-                await enviarWhatsApp(cleanPhone, mensagem);
-                console.log(`✅ Notificação enviada para ${cleanPhone}: ${etapaAtual}`);
+                const enviado = await enviarWhatsApp(cleanPhone, mensagem);
+                console.log(`✅ Notificação enviada para ${cleanPhone}: ${etapaAtual} (${enviado ? 'SUCESSO' : 'FALHA'})`);
             } else {
                 console.log(`⚠️ Sem mensagem para etapa: ${etapaAtual}`);
             }
@@ -1129,6 +1132,7 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     // ============================================================
     const comandos = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (comandos.includes(messageText.toLowerCase())) {
+        console.log('📌 Comando de menu detectado');
         await processarMensagem(cleanPhone, messageText, {});
         return;
     }
@@ -1142,6 +1146,7 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     msg += `💬 Fique à vontade para perguntar.\n\n`;
     msg += `Digite 0 para acessar o menu principal.`;
     
+    console.log(`📨 Enviando mensagem padrão para ${cleanPhone}`);
     await sendReply(cleanPhone, msg);
 }
 
