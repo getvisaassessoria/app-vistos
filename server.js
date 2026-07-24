@@ -1230,17 +1230,17 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
     }
 
     try {
-        const telefoneLimpo = limparTelefone(telefone);       // "21974601812"
+        const telefoneLimpo = limparTelefone(telefone);           // "21974601812"
         const telefoneFormatado = formatarTelefone(telefoneLimpo); // "(21) 97460-1812"
 
-        // 1. Tenta com o número limpo (formato mais comum na tabela)
+        // 1. Tenta com o número limpo (formato mais comum)
         let { data: cliente } = await supabase
             .from('clientes_ativos')
             .select('nome')
             .eq('telefone', telefoneLimpo)
             .maybeSingle();
 
-        // 2. Se não achou, tenta com o formatado
+        // 2. Tenta com o formatado
         if (!cliente) {
             const { data: clienteFmt } = await supabase
                 .from('clientes_ativos')
@@ -1250,7 +1250,7 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
             cliente = clienteFmt;
         }
 
-        // 3. Última tentativa: valor original (pode vir de outras origens)
+        // 3. Tenta com o valor original (pode vir com 55, etc.)
         if (!cliente && telefone !== telefoneLimpo && telefone !== telefoneFormatado) {
             const { data: clienteOrig } = await supabase
                 .from('clientes_ativos')
