@@ -1510,6 +1510,18 @@ function renderizarTimeline(data) {
     const etapaAtual = data.etapa_atual;
     const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
     
+    // Verifica se a etapa está no histórico (NOVO)
+    const isEtapaConcluida = (etapa) => {
+        return data.historico && data.historico.some(item => item.etapa === etapa);
+    };
+    
+    // Busca a data de uma etapa no histórico (NOVO)
+    const getDataEtapa = (etapa) => {
+        if (!data.historico) return null;
+        const item = data.historico.find(item => item.etapa === etapa);
+        return item ? item.data : null;
+    };
+    
     let nomeCliente = 'Cliente';
     const allClientes = [...dadosCompletos.ativos, ...dadosCompletos.pendentes];
     const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
@@ -1530,7 +1542,7 @@ function renderizarTimeline(data) {
     // Mostrar etapas normais (até entrevista)
     ETAPAS_ORDEM.forEach((etapa, index) => {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
-        const dataValue = data[`data_${etapa}`];
+        const dataValue = getDataEtapa(etapa);  // <-- USA O HISTÓRICO
         
         const isConcluida = !!dataValue;
         const isAtual = index === indexAtual && !isConcluida && !isFinalizada;
@@ -1573,7 +1585,7 @@ function renderizarTimeline(data) {
     // Se o processo já foi finalizado, mostrar a etapa final
     if (isFinalizada) {
         const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual, color: '#6c757d' };
-        const dataValue = data[`data_${etapaAtual}`];
+        const dataValue = getDataEtapa(etapaAtual);
         const isAprovado = etapaAtual === 'passaporte_retornado';
         
         html += `
