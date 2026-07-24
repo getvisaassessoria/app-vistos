@@ -2781,6 +2781,8 @@ async function processarAvanco(res, etapaAtual, nota, observacao, telefone) {
     motivo: 'notificacao_desativada'
 };
 
+let resultadoNotificacao = null;
+
 if (FEATURES.SISTEMA_ETAPAS.notificar_cliente === true) {
     resultadoNotificacao = await notificarClienteEtapa(
         telefone,
@@ -2800,12 +2802,12 @@ if (FEATURES.SISTEMA_ETAPAS.notificar_cliente === true) {
         console.log('✅ Cliente ' + telefone + ' avançou para: ' + proximaEtapa);
 
         res.json({
-            sucesso: true,
-            etapa_anterior: etapaId,
-            etapa_atual: proximaEtapa,
-            notificacao: resultadoNotificacao,
-            dados: updated.data
-        });
+    sucesso: true,
+    etapa_anterior: etapaId,
+    etapa_atual: proximaEtapa,
+    notificacao: resultadoNotificacao,
+    dados: updated.data
+});
         
     } catch (error) {
         console.error('❌ ERRO em processarAvanco:', error);
