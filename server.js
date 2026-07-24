@@ -1225,114 +1225,61 @@ async function criarEtapaComCliente(cliente, telefone) {
 
 async function notificarClienteEtapa(telefone, novaEtapa) {
     if (novaEtapa === 'entrevista_realizada') {
-        console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa} (resultado é no ato da entrevista)`);
+        console.log(`⏭️ Pulando notificação para etapa: ${novaEtapa}`);
         return;
     }
-    
+
     try {
-        const { data: cliente } = await supabase
+        const telefoneLimpo = limparTelefone(telefone);       // "21974601812"
+        const telefoneFormatado = formatarTelefone(telefoneLimpo); // "(21) 97460-1812"
+
+        // 1. Tenta com o número limpo (formato mais comum na tabela)
+        let { data: cliente } = await supabase
             .from('clientes_ativos')
             .select('nome')
-            .eq('telefone', telefone)
-            .single();
-        const nomeCliente = cliente && cliente.nome || 'Cliente';
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+
+        // 2. Se não achou, tenta com o formatado
+        if (!cliente) {
+            const { data: clienteFmt } = await supabase
+                .from('clientes_ativos')
+                .select('nome')
+                .eq('telefone', telefoneFormatado)
+                .maybeSingle();
+            cliente = clienteFmt;
+        }
+
+        // 3. Última tentativa: valor original (pode vir de outras origens)
+        if (!cliente && telefone !== telefoneLimpo && telefone !== telefoneFormatado) {
+            const { data: clienteOrig } = await supabase
+                .from('clientes_ativos')
+                .select('nome')
+                .eq('telefone', telefone)
+                .maybeSingle();
+            cliente = clienteOrig;
+        }
+
+        if (!cliente) {
+            console.warn(`⚠️ Cliente não encontrado para notificação: ${telefone}`);
+            return;
+        }
+
+        const nomeCliente = cliente.nome && !cliente.nome.startsWith('Cliente_') 
+            ? cliente.nome.split(' ')[0] 
+            : 'Cliente';
         const mensagem = gerarMensagemEtapa(novaEtapa, nomeCliente);
-        
+
         if (!mensagem) {
             console.log(`⏭️ Sem mensagem definida para etapa: ${novaEtapa}`);
             return;
         }
-        
-        await enviarWhatsApp(telefone, mensagem);
-        console.log('Notificacao enviada para ' + telefone + ': ' + novaEtapa);
+
+        const enviado = await enviarWhatsApp(telefoneLimpo, mensagem);
+        console.log(`Notificação enviada para ${telefoneLimpo} (${novaEtapa}): ${enviado ? 'SUCESSO' : 'FALHA'}`);
     } catch (error) {
         console.error('Erro ao notificar cliente:', error);
     }
-}
-
-function gerarMensagemEtapa(etapa, nomeCliente) {
-    const mensagens = {
-        'formulario_enviado': `📋 Olá ${nomeCliente}!\n\n` +
-                             `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
-                             `✅ Iniciamos a análise do seu processo.\n\n` +
-                             `📍 Próxima etapa: Análise e correções dos dados.\n\n` +
-                             `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,
-
-        'analise_correcoes': `🔍 Olá ${nomeCliente}!\n\n` +
-                            `Estamos analisando seu processo!\n\n` +
-                            `Nossa equipe está revisando todos os dados do seu formulário.\n\n` +
-                            `📱 Em breve entraremos em contato com o próximo passo.\n\n` +
-                            `Fique tranquilo(a), estamos cuidando de tudo!`,
-
-        'abertura_processo': `📋 Olá ${nomeCliente}!\n\n` +
-                             `Seu processo foi aberto no consulado americano!\n\n` +
-                             `📍 Próxima etapa: Emissão do boleto consular.\n\n` +
-                             `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`,
-
-        'boleto_emitido': `💰 Olá ${nomeCliente}!\n\n` +
-                          `O boleto do consulado foi gerado com sucesso!\n\n` +
-                          `📧 Você receberá o PDF por e-mail.\n\n` +
-                          `⏰ Não esqueça de pagar dentro do prazo!\n\n` +
-                          `⚠️ Aguardamos o pagamento para fazer o agendamento`,
-
-        'boleto_pago': `✅ Olá ${nomeCliente}!\n\n` +
-                       `Confirmamos o pagamento do seu boleto consular.\n\n` +
-                       `📍 Próxima etapa: Agendamento da entrevista.\n\n` +
-                       `🚀 Estamos avançando no seu processo!`,
-
-        'agendamento_realizado': `📅 Olá ${nomeCliente}!\n\n` +
-                                 `Sua entrevista foi agendada com sucesso!\n\n` +
-                                 `📧 Você receberá todos os detalhes por WhatsApp.\n\n` +
-                                 `🎯 Vamos agendar o treinamento/exclarecimentos para a entrevista?`,
-
-        'treinamento_realizado': `🎓 Olá ${nomeCliente}!\n\n` +
-                                 `Treinamento concluído com sucesso!\n\n` +
-                                 `💪 Você está preparado para a entrevista.\n\n` +
-                                 `Confie no seu potencial, você vai arrasar!`,
-
-        'passaporte_retornado': `🎉 PARABÉNS, ${nomeCliente}! 🎉\n\n` +
-                                `Seu passaporte com o visto foi retornado!\n\n` +
-                                `✅ Seu processo foi concluído com sucesso!\n\n` +
-                                `🌟 Agradecemos por confiar na GetVisa Assessoria!\n\n` +
-                                `✈️ Boa viagem! Vá realizar seus sonhos!`,
-
-        'visto_recusado': `😔 Olá ${nomeCliente}!\n\n` +
-                                `Sabemos que essa notícia dói, ainda mais depois de tanta dedicação na preparação.\n\n` +
-                                `É importante entender: a decisão final do visto acontece no momento da entrevista, e depende muito da avaliação pessoal do oficial consular naquele instante — algo que vai além da documentação e da preparação, por mais completa que tenha sido.\n\n` +
-                                `🔍 Vamos analisar com você os detalhes da entrevista para entender o que pesou na decisão e ajustar a estratégia para a próxima tentativa.\n\n` +
-                                `📱 Fale com a gente agora para uma análise gratuita:\n` +
-                                `https://wa.me/5521974601812\n\n` +
-                                `💪 Isso não muda o seu objetivo. Vamos trabalhar juntos para reverter esse cenário!`
-    };
-    
-    return mensagens[etapa] || `📌 ${nomeCliente}, seu processo avançou para: ${ETAPAS[etapa] ? ETAPAS[etapa].label : etapa}`;
-}
-
-function validateDS160(data) {
-    var errors = [];
-
-    if (data['radio-visto-negado'] === 'one') {
-        if (!data['text-visto-negado-ano'] || data['text-visto-negado-ano'] === '') {
-            errors.push('Ano da negativa do visto e obrigatorio');
-        }
-    }
-
-    if (data['radio-entrada-negada'] === 'one') {
-        if (!data['text-entrada-negada-ano'] || data['text-entrada-negada-ano'] === '') {
-            errors.push('Ano da negativa de entrada e obrigatorio');
-        }
-    }
-
-    if (data['radio-deportado'] === 'one') {
-        if (!data['text-deportado-ano'] || data['text-deportado-ano'] === '') {
-            errors.push('Ano da deportacao e obrigatorio');
-        }
-        if (!data['select-deportado-duracao'] || data['select-deportado-duracao'] === '') {
-            errors.push('Duracao da deportacao e obrigatoria');
-        }
-    }
-
-    return { isValid: errors.length === 0, errors: errors };
 }
 
 // ============================================================
