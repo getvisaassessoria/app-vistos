@@ -1647,9 +1647,6 @@ function renderizarTimeline(data) {
 // ============================================================
 //  FINALIZAR PROCESSO (APROVADO/RECUSADO)
 // ============================================================
-// ============================================================
-//  FINALIZAR PROCESSO (APROVADO/RECUSADO)
-// ============================================================
 async function finalizarProcesso(etapaFinal) {
     if (!clienteSelecionadoTimeline) {
         showToast('Selecione um cliente primeiro!', 'info');
@@ -1720,31 +1717,80 @@ async function finalizarProcesso(etapaFinal) {
 
 
 async function avancarEtapa() {
-    if (!clienteSelecionadoTimeline) { showToast('Selecione um cliente primeiro!', 'info'); return; }
-    if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) return;
-    const nota = document.getElementById('nota-avancar')?.value || '';
+    if (!clienteSelecionadoTimeline) {
+        showToast('Selecione um cliente primeiro!', 'info');
+        return;
+    }
+
+    if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) {
+        return;
+    }
+
+    const campoNota = document.getElementById('nota-avancar');
+    const nota = campoNota ? campoNota.value.trim() : '';
+
     try {
+        console.log('📤 Enviando avanço para o backend:', {
+            telefone: clienteSelecionadoTimeline,
+            nota: nota
+        });
+
         const response = await fetch('/api/etapas/avancar', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 telefone: clienteSelecionadoTimeline,
                 nota: nota || 'Avanço manual pelo painel',
                 observacao: 'Cliente avançado pelo painel administrativo'
             })
         });
-        const data = await response.json();
-        if (data.sucesso) {
-            showToast(`✅ Cliente avançou para: ${data.etapa_atual}`, 'success');
-            document.getElementById('nota-avancar').value = '';
-            await carregarTimeline(clienteSelecionadoTimeline);
-            await carregarDados();
-        } else {
-            showToast(`❌ Erro: ${data.erro || 'Erro desconhecido'}`, 'error');
+
+        const responseText = await response.text();
+
+        console.log('📥 Status da resposta:', response.status);
+        console.log('📥 Resposta bruta:', responseText);
+
+        let data;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (erroJson) {
+            throw new Error(
+                'O servidor retornou uma resposta inválida: ' + responseText
+            );
         }
+
+        if (!response.ok || !data.sucesso) {
+            throw new Error(
+                data.erro ||
+                data.detalhe ||
+                'Erro desconhecido ao avançar etapa'
+            );
+        }
+
+        console.log('✅ Cliente avançou pelo backend:', data);
+
+        showToast(
+            '✅ Cliente avançou para: ' + data.etapa_atual,
+            'success'
+        );
+
+        if (campoNota) {
+            campoNota.value = '';
+        }
+
+        await carregarTimeline(clienteSelecionadoTimeline);
+        await carregarDados();
+
     } catch (error) {
-        console.error('Erro ao avançar etapa:', error);
-        showToast('Erro ao avançar etapa', 'error');
+        console.error('❌ Erro ao avançar etapa:', error);
+
+        showToast(
+            '❌ Erro ao avançar etapa: ' + error.message,
+            'error'
+        );
     }
 }
 
