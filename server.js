@@ -1316,45 +1316,47 @@ function gerarMensagemEtapa(etapaId, nome) {
     const mensagens = {
         formulario_enviado:
             `🎉 Olá ${primeiroNome}!\n\n` +
+             `📋 Etapa atual: Formulário Enviado\n\n` +
             `Recebemos seu formulário e seu processo foi iniciado com sucesso.\n\n` +
-            `📋 Etapa atual: Formulário Enviado\n\n` +
             `Nossa equipe dará continuidade à análise das informações.`,
 
         analise_correcoes:
             `🔎 Olá ${primeiroNome}!\n\n` +
-            `Seu processo está em análise.\n\n` +
             `📋 Etapa atual: Análise e Correções\n\n` +
+            `Seu processo está em análise,.\n\n` +
             `Caso seja necessário algum ajuste, nossa equipe entrará em contato.`,
 
         abertura_processo:
             `📂 Olá ${primeiroNome}!\n\n` +
-            `Seu processo foi aberto com sucesso!\n\n` +
             `📋 Etapa atual: Abertura do Processo\n\n` +
-            `Seguiremos agora com os próximos procedimentos.`,
+            `Seu processo foi aberto com sucesso!\n\n` +
+            `Seguiremos agora com os próximos procedimentos.`
+            `Emitiremos o boleto para pagamento da taxa consular.`,
 
         boleto_emitido:
             `💳 Olá ${primeiroNome}!\n\n` +
-            `Uma nova atualização foi registrada no seu processo.\n\n` +
             `📋 Etapa atual: Boleto Emitido\n\n` +
+            `Após o pagamento, nos informe para realizamos o agendamento.\n\n` +
             `Verifique as orientações da nossa equipe para pagamento.`,
 
         boleto_pago:
             `✅ Olá ${primeiroNome}!\n\n` +
-            `O pagamento foi confirmado em seu processo.\n\n` +
             `📋 Etapa atual: Boleto Pago\n\n` +
-            `Agora seguiremos para as próximas etapas do agendamento.`,
+            `Em até 24h o consulado disponibilizará o agendamento\n\n` +
+            `Favor fazer o pagamento restante (50%) da assessoria`,
 
         agendamento_realizado:
             `📅 Olá ${primeiroNome}!\n\n` +
+            `📋 Etapa atual: agendamento CASV e Consulado\n\n` +
             `Seu agendamento foi realizado com sucesso!\n\n` +
-            `📋 Etapa atual: Agendamento Realizado\n\n` +
+            `Vamos agendar nossa reunião para treinamento da entrevista\n\n` +
             `Nossa equipe enviará as orientações necessárias para essa fase.`,
 
         treinamento_realizado:
             `🎯 Olá ${primeiroNome}!\n\n` +
-            `Seu treinamento foi concluído!\n\n` +
             `📋 Etapa atual: Treinamento Concluído\n\n` +
-            `Você está preparado(a) para a próxima fase do processo.`,
+            `Seu treinamento foi concluído!\n\n` +
+            `Você está preparado(a) para a entrevista!.`,
 
         entrevista_realizada:
             `🎤 Olá ${primeiroNome}!\n\n` +
