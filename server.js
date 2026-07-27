@@ -1183,9 +1183,17 @@ async function processarClienteFinalizado(cleanPhone, messageText, dadosCliente)
 // FUNÇÃO PARA PROCESSAR CLIENTE ATIVO
 // ============================================================
 
+// ============================================================
+// FUNÇÃO PARA PROCESSAR CLIENTE ATIVO
+// ============================================================
+
+// ============================================================
+// FUNÇÃO PARA PROCESSAR CLIENTE ATIVO
+// ============================================================
+
 async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     console.log('📌 Processando cliente ATIVO:', dadosCliente.nome);
-    
+
     // Buscar etapa atual
     let etapaMsg = '';
     let etapaAtual = '';
@@ -1195,7 +1203,7 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
             .select('etapa_atual')
             .eq('cliente_telefone', cleanPhone)
             .maybeSingle();
-        
+
         if (!error && etapa) {
             etapaAtual = etapa.etapa_atual;
             const etapaInfo = ETAPAS[etapa.etapa_atual];
@@ -1207,10 +1215,37 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
     } catch (err) {
         console.log('Erro ao buscar etapa:', err);
     }
-    
+
     const nomeCliente = dadosCliente.nome ? dadosCliente.nome.split(' ')[0] : 'Cliente';
-    
-    
+
+    // ============================================================
+    // NOVO TRECHO: Lógica para SUPRIMIR MENSAGEM GENÉRICA em etapas avançadas
+    // ============================================================
+    const etapasAvancadasSemMensagemGenerica = [
+        'analise_correcoes',
+        'abertura_processo',
+        'boleto_emitido',
+        'boleto_pago',
+        'agendamento_realizado',
+        'treinamento_realizado',
+        'entrevista_realizada',
+        'visto_aprovado',
+        'passaporte_retornado',
+        'visto_recusado'
+    ];
+
+    if (etapasAvancadasSemMensagemGenerica.includes(etapaAtual)) {
+        console.log(`🚫 Cliente ${nomeCliente} está na etapa "${etapaAtual}". Suprimindo mensagem genérica.`);
+        // Aqui você pode optar por:
+        // 1. Não fazer nada (deixar para o atendimento humano)
+        // 2. Enviar uma mensagem neutra, como "Sua mensagem foi recebida e será encaminhada ao consultor."
+        // Por enquanto, vamos apenas não enviar a mensagem genérica.
+        return; // Sai da função sem enviar a mensagem padrão
+    }
+    // ============================================================
+    // FIM DO NOVO TRECHO
+    // ============================================================
+
     // ============================================================
     // VERIFICA SE É COMANDO DE MENU
     // ============================================================
@@ -1220,16 +1255,16 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
         await processarMensagem(cleanPhone, messageText, {});
         return;
     }
-    
+
     // ============================================================
-    // MENSAGEM PADRÃO PARA CLIENTE ATIVO
+    // MENSAGEM PADRÃO PARA CLIENTE ATIVO (SÓ SERÁ ENVIADA SE NÃO FOI SUPRIMIDA ACIMA)
     // ============================================================
     let msg = `👋 Olá ${nomeCliente}!\n\n`;
     if (etapaMsg) msg += `📌 Última movimentação: **${etapaMsg}**\n\n`;
     msg += `📱 Tem alguma dúvida sobre seu processo?\n\n`;
     msg += `💬 Fique à vontade para perguntar.\n\n`;
     msg += `Digite 0 para acessar o menu principal.`;
-    
+
     console.log(`📨 Enviando mensagem padrão para ${cleanPhone}`);
     await sendReply(cleanPhone, msg);
 }
