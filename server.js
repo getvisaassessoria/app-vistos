@@ -962,35 +962,67 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
 
 async function enviarWhatsApp(telefone, mensagem) {
     try {
-        const instance = process.env.ZAPI_INSTANCE;
-        const token = process.env.ZAPI_TOKEN;
-        const securityToken = process.env.ZAPI_SECURITY_TOKEN;
+        const instance = String(process.env.ZAPI_INSTANCE || '').trim();
+        const token = String(process.env.ZAPI_TOKEN || '').trim();
+        const securityToken = String(
+            process.env.ZAPI_SECURITY_TOKEN || ''
+        ).trim();
+
         if (!instance || !token) {
-            console.log('Z-API nao configurada');
+            console.error('❌ Z-API não configurada corretamente.', {
+                instanciaConfigurada: Boolean(instance),
+                tokenConfigurado: Boolean(token)
+            });
             return false;
         }
-        const cleanPhone = telefone.toString().replace(/\D/g, '');
-        const url = 'https://api.z-api.io/instances/' + instance + '/token/' + token + '/send-text';
+
+        const cleanPhone = String(telefone || '').replace(/\D/g, '');
+
+        if (cleanPhone.length < 10) {
+            console.error('❌ Telefone inválido para WhatsApp:', telefone);
+            return false;
+        }
+
+        const url =
+            'https://api.z-api.io/instances/' +
+            encodeURIComponent(instance) +
+            '/token/' +
+            encodeURIComponent(token) +
+            '/send-text';
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (securityToken) {
+            headers['Client-Token'] = securityToken;
+        }
+
+        console.log('📨 ===== ENVIO Z-API =====');
+        console.log('📨 Telefone:', cleanPhone);
+        console.log('📨 Instância configurada:', instance);
+        console.log('📨 Token configurado:', Boolean(token));
+        console.log('📨 Client-Token configurado:', Boolean(securityToken));
+
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Client-Token': securityToken || ''
-            },
-            body: JSON.stringify({ phone: cleanPhone, message: mensagem })
+            headers,
+            body: JSON.stringify({
+                phone: cleanPhone,
+                message: mensagem
+            })
         });
+
         const result = await response.text();
 
-        console.log('📨 Z-API status para ' + cleanPhone + ': ' + response.status);
+        console.log(
+            '📨 Z-API status para ' + cleanPhone + ': ' + response.status
+        );
         console.log('📨 Z-API resposta:', result);
-<<<<<<< HEAD
 
-return response.status === 200 || response.status === 201;
-=======
-        return response.status === 200 || response.status === 201;
->>>>>>> 1cec2bb (feat: integração WhatsApp via Z-API e salvamento de leads)
+        return response.status >= 200 && response.status < 300;
     } catch (error) {
-        console.error('Erro ao enviar WhatsApp:', error.message);
+        console.error('❌ Erro ao enviar WhatsApp:', error.message);
         return false;
     }
 }
