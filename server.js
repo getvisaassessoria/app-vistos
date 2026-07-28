@@ -2057,10 +2057,6 @@ async function gerarPDF_DS160(data) {
         }
         hasContentInSection = true;
 
-        doc.moveDown(2);
-        doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
-        doc.end();
-    
         // ============================================================
 // SEÇÃO: IDIOMAS (CAMPO radio-19 e idiomas[])
 // ============================================================
@@ -2149,6 +2145,12 @@ if (viajouInternacional === 'one' || viajouInternacional === 'Sim') {
 }
 
 hasContentInSection = true;
+
+        doc.moveDown(2);
+        doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+        doc.end();
+    
+
     
     });
 }
