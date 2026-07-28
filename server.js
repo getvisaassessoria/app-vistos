@@ -2060,6 +2060,96 @@ async function gerarPDF_DS160(data) {
         doc.moveDown(2);
         doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
         doc.end();
+    
+        // ============================================================
+// SEÇÃO: IDIOMAS (CAMPO radio-19 e idiomas[])
+// ============================================================
+startSection('IDIOMAS');
+
+// Campo: Fala outros idiomas? (radio-19)
+var falaOutrosIdiomas = data['radio-19'] || '';
+if (falaOutrosIdiomas === 'one' || falaOutrosIdiomas === 'Sim') {
+    doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
+    doc.font('Helvetica').text('Sim');
+    doc.moveDown(0.3);
+    
+    // Lista de idiomas (idiomas[])
+    var idiomas = data['idiomas[]'] || data['idiomas'] || [];
+    if (!Array.isArray(idiomas)) {
+        idiomas = [idiomas];
+    }
+    
+    if (idiomas.length > 0 && idiomas[0] !== '') {
+        doc.font('Helvetica-Bold').fontSize(10).text('Idiomas:');
+        doc.moveDown(0.2);
+        
+        for (var i = 0; i < idiomas.length; i++) {
+            if (idiomas[i] && idiomas[i].trim() !== '') {
+                doc.font('Helvetica').fontSize(10).text('  • ' + idiomas[i].trim());
+                doc.moveDown(0.2);
+            }
+        }
+        doc.moveDown(0.3);
+    }
+    
+} else if (falaOutrosIdiomas === 'two' || falaOutrosIdiomas === 'Não') {
+    doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
+    doc.font('Helvetica').text('Não');
+    doc.moveDown(0.6);
+} else {
+    doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
+    doc.font('Helvetica').text('Não informado');
+    doc.moveDown(0.6);
+}
+
+hasContentInSection = true;
+
+// ============================================================
+// SEÇÃO: VIAGENS INTERNACIONAIS (CAMPO radio-20 e paises_visitados[])
+// ============================================================
+startSection('VIAGENS INTERNACIONAIS');
+
+// Campo: Viajou para outros países nos últimos 5 anos? (radio-20)
+var viajouInternacional = data['radio-20'] || '';
+var paisesVisitados = data['paises_visitados[]'] || data['paises_visitados'] || [];
+
+if (!Array.isArray(paisesVisitados)) {
+    paisesVisitados = [paisesVisitados];
+}
+
+if (viajouInternacional === 'one' || viajouInternacional === 'Sim') {
+    doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
+    doc.font('Helvetica').text('Sim');
+    doc.moveDown(0.3);
+    
+    // Filtra países vazios
+    var paisesFiltrados = paisesVisitados.filter(function(p) {
+        return p && p.trim() !== '';
+    });
+    
+    if (paisesFiltrados.length > 0) {
+        doc.font('Helvetica-Bold').fontSize(10).text('Países visitados:');
+        doc.moveDown(0.2);
+        
+        for (var i = 0; i < paisesFiltrados.length; i++) {
+            doc.font('Helvetica').fontSize(10).text('  • ' + paisesFiltrados[i].trim());
+            doc.moveDown(0.2);
+        }
+        doc.moveDown(0.3);
+    }
+    
+} else if (viajouInternacional === 'two' || viajouInternacional === 'Não') {
+    doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
+    doc.font('Helvetica').text('Não');
+    doc.moveDown(0.6);
+} else {
+    doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
+    doc.font('Helvetica').text('Não informado');
+    doc.moveDown(0.6);
+}
+
+hasContentInSection = true;
+    
     });
 }
 
