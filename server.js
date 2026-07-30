@@ -4159,7 +4159,32 @@ app.get('/api/clientes/buscar/:telefone', async function(req, res) {
     }
 });
 
-
+// Adicione esta rota no seu server.js (antes de app.listen)
+app.post('/api/test-receive', function(req, res) {
+    console.log('📨 ===== TESTE DE RECEBIMENTO =====');
+    console.log('📨 Headers:', req.headers);
+    console.log('📨 Body recebido:', JSON.stringify(req.body, null, 2));
+    console.log('📨 Body keys:', Object.keys(req.body));
+    
+    // Salva em um arquivo de log para debug
+    const fs = require('fs');
+    const logData = {
+        timestamp: new Date().toISOString(),
+        headers: req.headers,
+        body: req.body,
+        bodyKeys: Object.keys(req.body)
+    };
+    
+    fs.appendFileSync('teste-recebimento.log', JSON.stringify(logData, null, 2) + '\n---\n');
+    
+    res.json({
+        success: true,
+        received: true,
+        keys: Object.keys(req.body),
+        count: Object.keys(req.body).length,
+        timestamp: new Date().toISOString()
+    });
+});
 
 
 // ============================================================
