@@ -2374,6 +2374,108 @@ function validateDS160(data) {
   return { isValid: errors.length === 0, errors: errors };
 }
 
+
+    // ============================================================
+// FUNÇÃO GERAR PDF - PASSAPORTE
+// ============================================================
+
+function gerarPDF_Passaporte(data) {
+    return new Promise(function(resolve, reject) {
+        try {
+            const doc = new PDFDocument({
+                size: 'A4',
+                margin: 50,
+                bufferPages: true
+            });
+
+            const chunks = [];
+            doc.on('data', function(chunk) { chunks.push(chunk); });
+            doc.on('end', function() { resolve(Buffer.concat(chunks)); });
+            doc.on('error', reject);
+
+            const nome = data['full_name'] || 'Nao informado';
+            const cpf = data['cpf'] || 'Nao informado';
+            const dataNasc = formatDateToBrazilian(data['text-5']) || 'Nao informado';
+            const naturalidade = data['text-6'] || 'Nao informado';
+            const nomePai = data['text-7'] || 'Nao informado';
+            const nomeMae = data['text-8'] || 'Nao informado';
+            const email = data['email-1'] || 'Nao informado';
+            const telefone = data['phone'] || data['text-77'] || 'Nao informado';
+            const cidade = data['text-74'] || 'Nao informado';
+            const tipoPassaporte = data['tipo_passaporte'] || 'Nao informado';
+            const passaporteNumero = data['passaporte_anterior_numero'] || null;
+            const passaporteEmissao = data['passaporte_anterior_emissao'] ? formatDateToBrazilian(data['passaporte_anterior_emissao']) : null;
+
+            // CABEÇALHO
+            doc.rect(0, 0, doc.page.width, 100).fill('#003366');
+            doc.fillColor('#FFFFFF').fontSize(20).font('Helvetica-Bold')
+                .text('SOLICITACAO DE PASSAPORTE', 50, 30);
+            doc.fontSize(10).font('Helvetica')
+                .text('Assessoria GetVisa - Documentacao Consular', 50, 58);
+            doc.fillColor('#000000');
+
+            doc.moveDown(3);
+
+            drawSectionTitle(doc, 'DADOS PESSOAIS');
+            doc.fontSize(10);
+            doc.font('Helvetica-Bold').text('Nome Completo: ', { continued: true });
+            doc.font('Helvetica').text(nome);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('CPF: ', { continued: true });
+            doc.font('Helvetica').text(cpf);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('Data de Nascimento: ', { continued: true });
+            doc.font('Helvetica').text(dataNasc);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('Naturalidade: ', { continued: true });
+            doc.font('Helvetica').text(naturalidade);
+            doc.moveDown(0.5);
+
+            drawSectionTitle(doc, 'FILIACAO');
+            doc.font('Helvetica-Bold').text('Nome do Pai: ', { continued: true });
+            doc.font('Helvetica').text(nomePai);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('Nome da Mae: ', { continued: true });
+            doc.font('Helvetica').text(nomeMae);
+            doc.moveDown(0.5);
+
+            drawSectionTitle(doc, 'CONTATO');
+            doc.font('Helvetica-Bold').text('E-mail: ', { continued: true });
+            doc.font('Helvetica').text(email);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('Telefone: ', { continued: true });
+            doc.font('Helvetica').text(telefone);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').text('Cidade: ', { continued: true });
+            doc.font('Helvetica').text(cidade);
+            doc.moveDown(0.5);
+
+            drawSectionTitle(doc, 'TIPO DE PASSAPORTE');
+            doc.font('Helvetica-Bold').text('Solicitacao: ', { continued: true });
+            doc.font('Helvetica').text(tipoPassaporte);
+
+            if (passaporteNumero) {
+                doc.moveDown(0.3);
+                doc.font('Helvetica-Bold').text('Passaporte Anterior: ', { continued: true });
+                doc.font('Helvetica').text(passaporteNumero);
+            }
+            if (passaporteEmissao) {
+                doc.moveDown(0.3);
+                doc.font('Helvetica-Bold').text('Data de Emissao: ', { continued: true });
+                doc.font('Helvetica').text(passaporteEmissao);
+            }
+
+            doc.moveDown(2);
+            doc.fontSize(8).fillColor('#999999')
+                .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+            doc.end();
+
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
 // ============================================================
 // ROTAS DE FORMULÁRIO
 // ============================================================
@@ -2490,6 +2592,84 @@ app.post('/api/submit-ds160', async function(req, res) {
 
         } catch (err) {
             console.error('Erro no processamento DS-160 (background):', err);
+        }
+    })();
+});
+
+// ============================================================
+// ROTA DE FORMULÁRIO - PASSAPORTE
+// ============================================================
+
+app.post('/api/submit-passaporte', async function(req, res) {
+    var data = req.body;
+
+    if (isSpamData(data)) {
+        console.log('SPAM Passaporte - Dados rejeitados');
+        return res.status(200).json({ success: true, message: 'Recebido' });
+    }
+
+    console.log('Dados recebidos (Passaporte) - OK');
+    res.status(200).json({ success: true, message: 'Requisicao recebida, processando...' });
+
+    (async function() {
+        try {
+            var nome = data['full_name'] || 'Cliente_Sem_Nome';
+            var emailCliente = data['email-1'] || null;
+            var telefoneCliente = limparTelefone(data['phone'] || data['text-77'] || null);
+
+            if (telefoneCliente) {
+                try {
+                    var telefoneLimpo = limparTelefone(telefoneCliente);
+                    console.log('Telefone limpo: ' + telefoneLimpo);
+
+                    await supabase
+                        .from('clientes_ativos')
+                        .upsert({
+                            telefone: telefoneLimpo,
+                            nome: nome,
+                            atualizado_em: new Date().toISOString()
+                        }, {
+                            onConflict: 'telefone',
+                            ignoreDuplicates: false
+                        });
+
+                    console.log('Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
+
+                    await supabase
+                        .from('clientes_novos')
+                        .delete()
+                        .eq('telefone', telefoneLimpo);
+
+                } catch (err) {
+                    console.error('Erro ao processar cliente:', err.message);
+                }
+            }
+
+            var pdfBuffer = await gerarPDF_Passaporte(data);
+            console.log('PDF Passaporte gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
+
+            await resend.emails.send({
+                from: 'GetVisa <contato@getvisa.com.br>',
+                to: ['getvisa.assessoria@gmail.com'],
+                subject: 'PASSAPORTE: ' + nome,
+                html: '<strong>Formulario de Passaporte recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
+                attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
+            });
+            console.log('E-mail enviado para a equipe');
+
+            if (emailCliente && emailCliente.trim() !== '') {
+                await resend.emails.send({
+                    from: 'GetVisa <contato@getvisa.com.br>',
+                    to: [emailCliente],
+                    subject: 'Seu formulario de Passaporte foi recebido - ' + nome,
+                    html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos sua solicitacao de passaporte. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
+                    attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
+                });
+                console.log('E-mail enviado para o cliente: ' + emailCliente);
+            }
+
+        } catch (err) {
+            console.error('Erro no processamento Passaporte (background):', err);
         }
     })();
 });
