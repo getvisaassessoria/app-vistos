@@ -2380,204 +2380,103 @@ function validateDS160(data) {
 // ============================================================
 
 function gerarPDF_Passaporte(data) {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
         try {
-            const doc = new PDFDocument({
-                size: 'A4',
-                margin: 50,
-                bufferPages: true
-            });
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            let buffers = [];
+            doc.on('data', (chunk) => buffers.push(chunk));
+            doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-            const chunks = [];
-            doc.on('data', function(chunk) { chunks.push(chunk); });
-            doc.on('end', function() { resolve(Buffer.concat(chunks)); });
-            doc.on('error', reject);
-
-            const nome = data['full_name'] || 'Não informado';
-            const cpf = data['cpf'] || 'Não informado';
-            const dataNasc = formatDateToBrazilian(data['text-5']) || 'Não informado';
-            const naturalidade = data['text-6'] || 'Não informado';
-            const paisNasc = data['pais_nascimento'] || 'Não informado';
-            const sexo = data['sexo'] || 'Não informado';
-            const estadoCivil = data['estado_civil'] || 'Não informado';
-
-            const nomePai = data['text-7'] || 'Não informado';
-            const nomeMae = data['text-8'] || 'Não informado';
-
-            const rgNumero = data['rg_numero'] || 'Não informado';
-            const rgOrgao = data['rg_orgao'] || 'Não informado';
-            const rgData = data['rg_data_emissao'] ? formatDateToBrazilian(data['rg_data_emissao']) : 'Não informado';
-            const tituloEleitor = data['titulo_eleitor'] || null;
-            const certificadoMilitar = data['certificado_militar'] || null;
-            const naturalizacao = data['naturalizacao'] || null;
-
-            const tipoPassaporte = data['tipo_passaporte'] || 'Não informado';
-            const passaporteNumero = data['passaporte_anterior_numero'] || null;
-            const passaporteEmissao = data['passaporte_anterior_emissao'] ? formatDateToBrazilian(data['passaporte_anterior_emissao']) : null;
-            const passaporteValidade = data['passaporte_anterior_validade'] ? formatDateToBrazilian(data['passaporte_anterior_validade']) : null;
-            const passaporteOrgao = data['passaporte_anterior_orgao'] || null;
-            const passaportePerdidoNumero = data['passaporte_perdido_numero'] || null;
-            const passaportePerdidoData = data['passaporte_perdido_data'] ? formatDateToBrazilian(data['passaporte_perdido_data']) : null;
-            const boPerda = data['bo_perda'] || null;
-            const boNumero = data['bo_numero'] || null;
-
-            const enderecoRua = data['endereco_rua'] || 'Não informado';
-            const enderecoNumero = data['endereco_numero'] || 'Não informado';
-            const enderecoComplemento = data['endereco_complemento'] || null;
-            const enderecoBairro = data['endereco_bairro'] || 'Não informado';
-            const enderecoCidade = data['text-74'] || 'Não informado';
-            const enderecoUF = data['endereco_uf'] || 'Não informado';
-            const cep = data['cep'] || 'Não informado';
-            const profissao = data['profissao'] || null;
-
-            // CABEÇALHO
-            doc.rect(0, 0, doc.page.width, 100).fill('#003366');
+            // === CABEÇALHO ===
+            doc.fillColor('#003366').rect(0, 0, doc.page.width, 90).fill();
             doc.fillColor('#FFFFFF').fontSize(20).font('Helvetica-Bold')
-                .text('SOLICITACAO DE PASSAPORTE', 50, 30);
+                .text('SOLICITACAO DE PASSAPORTE', 50, 30, { width: doc.page.width - 100, align: 'center' });
             doc.fontSize(10).font('Helvetica')
-                .text('Assessoria GetVisa - Documentacao Consular', 50, 58);
-            doc.fillColor('#000000');
-            doc.moveDown(3);
-
-            // DADOS PESSOAIS
-            drawSectionTitle(doc, 'DADOS PESSOAIS');
-            doc.fontSize(10);
-            doc.font('Helvetica-Bold').text('Nome Completo: ', { continued: true });
-            doc.font('Helvetica').text(nome);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('CPF: ', { continued: true });
-            doc.font('Helvetica').text(cpf);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Sexo: ', { continued: true });
-            doc.font('Helvetica').text(sexo);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Data de Nascimento: ', { continued: true });
-            doc.font('Helvetica').text(dataNasc);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Naturalidade: ', { continued: true });
-            doc.font('Helvetica').text(naturalidade);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Pais de Nascimento: ', { continued: true });
-            doc.font('Helvetica').text(paisNasc);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Estado Civil: ', { continued: true });
-            doc.font('Helvetica').text(estadoCivil);
-
-            // FILIACAO
-            drawSectionTitle(doc, 'FILIACAO');
-            doc.font('Helvetica-Bold').text('Nome do Pai: ', { continued: true });
-            doc.font('Helvetica').text(nomePai);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Nome da Mae: ', { continued: true });
-            doc.font('Helvetica').text(nomeMae);
-
-            // DOCUMENTOS
-            drawSectionTitle(doc, 'DOCUMENTOS DE IDENTIFICACAO');
-            doc.font('Helvetica-Bold').text('RG: ', { continued: true });
-            doc.font('Helvetica').text(rgNumero);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Orgao Emissor: ', { continued: true });
-            doc.font('Helvetica').text(rgOrgao);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Data de Emissao RG: ', { continued: true });
-            doc.font('Helvetica').text(rgData);
-
-            if (tituloEleitor) {
-                doc.moveDown(0.3);
-                doc.font('Helvetica-Bold').text('Titulo de Eleitor: ', { continued: true });
-                doc.font('Helvetica').text(tituloEleitor);
+                .text('Assessoria GetVisa - Documentacao Consular', 50, 58, { width: doc.page.width - 100, align: 'center' });
+            doc.fillColor('#000000').font('Helvetica').fontSize(10);
+            doc.y = 110;
+            // === SEÇÃO 1: DADOS PESSOAIS ===
+            drawSectionTitle(doc, '1. DADOS PESSOAIS');
+            addField(doc, 'Nome completo', data.full_name);
+            addField(doc, 'Sexo', data.sexo);
+            addField(doc, 'Data de nascimento', formatDateToBrazilian(data['text-5'] || data.data_nascimento));
+            addField(doc, 'Raca ou cor', data.raca_cor);
+            addField(doc, 'Estado civil', data.estado_civil);
+            addField(doc, 'Nacionalidade', data.nacionalidade);
+            addField(doc, 'Local de nascimento', [data.pais_nascimento, data.estado_nascimento, data.cidade_nascimento].filter(Boolean).join(', '));
+            if (data.teve_nome_anterior === 'Sim') {
+                addField(doc, 'Nome anterior', data.nome_anterior);
+                addField(doc, 'Motivo da alteracao', data.motivo_alteracao_nome);
             }
-            if (certificadoMilitar) {
-                doc.moveDown(0.3);
-                doc.font('Helvetica-Bold').text('Certificado Militar: ', { continued: true });
-                doc.font('Helvetica').text(certificadoMilitar);
+            if (data.indicador_especial && data.indicador_especial !== 'Nenhum') {
+                addField(doc, 'Indicador especial', data.indicador_especial);
             }
-            if (naturalizacao && naturalizacao.toLowerCase() !== 'não se aplica' && naturalizacao.toLowerCase() !== 'nao se aplica') {
-                doc.moveDown(0.3);
-                doc.font('Helvetica-Bold').text('Naturalizacao: ', { continued: true });
-                doc.font('Helvetica').text(naturalizacao);
+            // === SEÇÃO 2: FILIAÇÃO ===
+            drawSectionTitle(doc, '2. FILIACAO');
+            addField(doc, 'Nome do pai', data.nome_pai);
+            addField(doc, 'Nome da mae', data.nome_mae);
+            // === SEÇÃO 3: DOCUMENTOS ===
+            drawSectionTitle(doc, '3. DOCUMENTOS');
+            addField(doc, 'Documento de identidade', data.doc_tipo + ' - ' + (data.doc_numero || ''));
+            addField(doc, 'Data de emissao', formatDateToBrazilian(data.doc_data_emissao));
+            addField(doc, 'Orgao emissor / UF', data.doc_orgao + (data.doc_uf ? ' / ' + data.doc_uf : ''));
+            addField(doc, 'CPF', data.cpf);
+            if (data['cpf-responsavel']) addField(doc, 'CPF do responsavel', data['cpf-responsavel']);
+            addField(doc, 'Certidao - Modelo', data.certidao_modelo);
+            if (data.certidao_modelo === 'Nascimento') addField(doc, 'Dados da certidao', data.certidao_nascimento);
+            if (data.certidao_modelo === 'Casamento') addField(doc, 'Dados da certidao', data.certidao_casamento);
+            if (data.certidao_modelo === 'Averbacao') addField(doc, 'Dados da certidao', data.certidao_averbacao);
+            // Passaporte anterior
+            drawSectionTitle(doc, 'PASSAPORTE ANTERIOR');
+            if (data.possui_passaporte_anterior === 'Sim') {
+                addField(doc, 'Situacao', data.passaporte_situacao);
+                addField(doc, 'Numero / Serie', data.passaporte_anterior_numero);
+                addField(doc, 'Data de emissao', formatDateToBrazilian(data.passaporte_anterior_emissao));
+                addField(doc, 'Data de validade', formatDateToBrazilian(data.passaporte_anterior_validade));
+                if (data.passaporte_situacao === 'Extraviado' || data.passaporte_situacao === 'Roubado') {
+                    addField(doc, 'B.O. Numero', data.bo_numero);
+                    addField(doc, 'B.O. Data', formatDateToBrazilian(data.bo_data));
+                    addField(doc, 'B.O. Delegacia', data.bo_delegacia);
+                }
+            } else {
+                addField(doc, 'Possui passaporte anterior', 'Nao');
             }
-
-            // PASSAPORTE
-            drawSectionTitle(doc, 'TIPO DE PASSAPORTE');
-            doc.font('Helvetica-Bold').text('Solicitacao: ', { continued: true });
-            doc.font('Helvetica').text(tipoPassaporte);
-
-            if (tipoPassaporte === 'Renovacao') {
-                if (passaporteNumero) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Passaporte Anterior N.: ', { continued: true });
-                    doc.font('Helvetica').text(passaporteNumero);
-                }
-                if (passaporteEmissao) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Data de Emissao: ', { continued: true });
-                    doc.font('Helvetica').text(passaporteEmissao);
-                }
-                if (passaporteValidade) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Data de Validade: ', { continued: true });
-                    doc.font('Helvetica').text(passaporteValidade);
-                }
-                if (passaporteOrgao) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Orgao Emissor: ', { continued: true });
-                    doc.font('Helvetica').text(passaporteOrgao);
-                }
+            // Situação militar (só se sexo = Masculino)
+            if (data.sexo === 'Masculino') {
+                drawSectionTitle(doc, 'SITUACAO MILITAR');
+                addField(doc, 'Tipo de documento militar', data.militar_tipo);
+                addField(doc, 'Numero do documento', data.militar_numero);
+                addField(doc, 'Orgao emissor', data.militar_orgao);
             }
-
-            if (tipoPassaporte === '2a via (perda/roubo)') {
-                if (passaportePerdidoNumero) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Passaporte Extraviado N.: ', { continued: true });
-                    doc.font('Helvetica').text(passaportePerdidoNumero);
-                }
-                if (passaportePerdidoData) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('Data do Extravio: ', { continued: true });
-                    doc.font('Helvetica').text(passaportePerdidoData);
-                }
-                if (boPerda === 'Sim' && boNumero) {
-                    doc.moveDown(0.3);
-                    doc.font('Helvetica-Bold').text('B.O. n.: ', { continued: true });
-                    doc.font('Helvetica').text(boNumero);
-                }
-            }
-
-            // ENDERECO
-            drawSectionTitle(doc, 'ENDERECO');
-            doc.font('Helvetica-Bold').text('CEP: ', { continued: true });
-            doc.font('Helvetica').text(cep);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Endereco: ', { continued: true });
-            doc.font('Helvetica').text(enderecoRua + ', ' + enderecoNumero);
-            if (enderecoComplemento) {
-                doc.moveDown(0.3);
-                doc.font('Helvetica-Bold').text('Complemento: ', { continued: true });
-                doc.font('Helvetica').text(enderecoComplemento);
-            }
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Bairro: ', { continued: true });
-            doc.font('Helvetica').text(enderecoBairro);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').text('Cidade/UF: ', { continued: true });
-            doc.font('Helvetica').text(enderecoCidade + '/' + enderecoUF);
-
-            if (profissao) {
-                doc.moveDown(0.3);
-                doc.font('Helvetica-Bold').text('Profissao: ', { continued: true });
-                doc.font('Helvetica').text(profissao);
-            }
-
+            // === SEÇÃO 4: DADOS COMPLEMENTARES ===
+            drawSectionTitle(doc, '4. DADOS COMPLEMENTARES');
+            addField(doc, 'Profissao', data.profissao);
+            addField(doc, 'E-mail de contato', data['email-1']);
+            addField(doc, 'Telefone', data.phone);
+            addField(doc, 'Endereco', [
+                data.endereco_rua, data.endereco_numero,
+                data.endereco_complemento, data.endereco_bairro,
+                data['text-74'], data.endereco_uf, data.cep
+            ].filter(Boolean).join(', '));
+            // === RODAPÉ ===
             doc.moveDown(2);
             doc.fontSize(8).fillColor('#999999')
                 .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
-            doc.end();
 
+            doc.end();
         } catch (err) {
             reject(err);
         }
     });
+}
+
+function addField(doc, label, value) {
+    const display = value && value.toString().trim() !== '' ? value.toString().trim() : 'Nao informado';
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#1e293b')
+       .text(label + ': ', { continued: true })
+       .font('Helvetica').fillColor('#333333')
+       .text(display);
+    doc.moveDown(0.3);
 }
 
 // ============================================================
