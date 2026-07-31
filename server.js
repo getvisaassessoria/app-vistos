@@ -3368,6 +3368,91 @@ app.get('/api/etapas/historico/:telefone', async function(req, res) {
     }
 });
 
+// ============================================================
+// ROTA PARA ENVIAR NOTIFICAÇÃO WHATSAPP VIA PAINEL
+// ============================================================
+
+app.post('/api/whatsapp/notificar', async function(req, res) {
+    try {
+        const { telefone, mensagem, tipo } = req.body;
+        
+        console.log('📨 ===== NOTIFICAÇÃO WHATSAPP =====');
+        console.log('📱 Telefone:', telefone);
+        console.log('📝 Mensagem:', mensagem);
+        console.log('🏷️ Tipo:', tipo);
+        
+        if (!telefone) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Telefone é obrigatório' 
+            });
+        }
+        
+        const telefoneLimpo = limparTelefone(telefone);
+        console.log('📱 Telefone limpo:', telefoneLimpo);
+        
+        // Mensagens padrão por tipo
+        const mensagensPadrao = {
+            'avancar_etapa': '✅ Olá! Seu processo foi atualizado para a próxima etapa. Acompanhe pelo nosso site.',
+            'finalizar_aprovado': '🎉 Parabéns! Seu visto foi APROVADO! Em breve entraremos em contato.',
+            'finalizar_recusado': '😔 Infelizmente seu visto foi recusado. Entre em contato conosco.',
+            'mover_ativo': '🟢 Seu processo foi iniciado! Acompanhe pelo nosso painel.',
+            'mover_amigo': '🤝 Você foi adicionado como amigo. Continue acompanhando!',
+            'reabrir': '🔄 Seu processo foi reaberto! Acompanhe as atualizações.',
+            'atualizacao': '📋 Seu processo foi atualizado. Acesse o painel para mais informações.'
+        };
+        
+        const mensagemFinal = mensagem || mensagensPadrao[tipo] || mensagensPadrao.atualizacao;
+        
+        // Busca o nome do cliente para personalizar
+        let nomeCliente = 'Cliente';
+        try {
+            const { data } = await supabase
+                .from('clientes_ativos')
+                .select('nome')
+                .eq('telefone', telefoneLimpo)
+                .maybeSingle();
+            
+            if (data && data.nome && !data.nome.startsWith('Cliente_')) {
+                nomeCliente = data.nome.split(' ')[0];
+            }
+        } catch (err) {
+            console.log('Erro ao buscar nome:', err);
+        }
+        
+        // Personaliza a mensagem com o nome
+        const mensagemPersonalizada = mensagemFinal.replace(/Cliente/g, nomeCliente);
+        
+        console.log('📨 Enviando mensagem personalizada:', mensagemPersonalizada);
+        
+        // Envia via WhatsApp
+        const enviado = await enviarWhatsApp(telefoneLimpo, mensagemPersonalizada);
+        
+        if (enviado) {
+            console.log('✅ Notificação enviada com sucesso');
+            res.json({ 
+                success: true, 
+                message: 'Notificação enviada com sucesso',
+                telefone: telefoneLimpo,
+                tipo: tipo
+            });
+        } else {
+            console.error('❌ Falha ao enviar notificação');
+            res.status(500).json({ 
+                success: false, 
+                error: 'Falha ao enviar mensagem WhatsApp' 
+            });
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao enviar notificação:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
 app.get('/api/etapas/estatisticas', async function(req, res) {
     try {
         var result = await supabase.from('etapas_processo').select('etapa_atual');
