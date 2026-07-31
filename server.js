@@ -2648,9 +2648,15 @@ app.post('/api/submit-passaporte', async function(req, res) {
                 }
             }
 
+            // ============================================================
+            // GERAR PDF
+            // ============================================================
             var pdfBuffer = await gerarPDF_Passaporte(data);
             console.log('PDF Passaporte gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
 
+            // ============================================================
+            // ENVIAR EMAIL PARA EQUIPE
+            // ============================================================
             await resend.emails.send({
                 from: 'GetVisa <contato@getvisa.com.br>',
                 to: ['getvisa.assessoria@gmail.com'],
@@ -2660,6 +2666,9 @@ app.post('/api/submit-passaporte', async function(req, res) {
             });
             console.log('E-mail enviado para a equipe');
 
+            // ============================================================
+            // ENVIAR EMAIL PARA CLIENTE
+            // ============================================================
             if (emailCliente && emailCliente.trim() !== '') {
                 await resend.emails.send({
                     from: 'GetVisa <contato@getvisa.com.br>',
@@ -2669,6 +2678,40 @@ app.post('/api/submit-passaporte', async function(req, res) {
                     attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
                 });
                 console.log('E-mail enviado para o cliente: ' + emailCliente);
+            }
+
+            // ============================================================
+            // ENVIAR WHATSAPP (NOVO!)
+            // ============================================================
+            try {
+                // Monta a mensagem
+                var cidade = data['text-74'] || data['cidade'] || 'Não informado';
+                var telefone = data['phone'] || data['text-77'] || 'Não informado';
+                
+                var mensagemWhats = `📋 *NOVO PASSAPORTE*\n\n`;
+                mensagemWhats += `👤 *Nome:* ${nome}\n`;
+                mensagemWhats += `📧 *Email:* ${emailCliente || 'Não informado'}\n`;
+                mensagemWhats += `📱 *Telefone:* ${telefone}\n`;
+                mensagemWhats += `📍 *Cidade:* ${cidade}\n`;
+                mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
+                mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
+
+                // Número para enviar (pode ser fixo ou o do cliente)
+                var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
+                
+                console.log('📤 Enviando WhatsApp para:', numeroWhats);
+                console.log('📤 Mensagem:', mensagemWhats);
+
+                const resultadoWhats = await enviarWhatsApp(numeroWhats, mensagemWhats);
+                
+                if (resultadoWhats) {
+                    console.log('✅ WhatsApp enviado com sucesso para:', numeroWhats);
+                } else {
+                    console.log('⚠️ Falha ao enviar WhatsApp para:', numeroWhats);
+                }
+
+            } catch (err) {
+                console.error('❌ Erro ao enviar WhatsApp:', err.message);
             }
 
         } catch (err) {
