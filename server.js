@@ -2513,44 +2513,86 @@ app.post('/api/submit-ds160', async function(req, res) {
             if (telefoneCliente) {
                 try {
                     var telefoneLimpo = limparTelefone(telefoneCliente);
-                    console.log('Telefone limpo: ' + telefoneLimpo);
+                    var telefoneFormatado = formatarTelefone(telefoneLimpo);
+                    
+                    console.log('📱 Telefone limpo: ' + telefoneLimpo);
+                    console.log('📱 Telefone formatado: ' + telefoneFormatado);
 
+                    // ============================================================
+                    // 1. SALVAR EM CLIENTES_ATIVOS
+                    // ============================================================
                     var insert = await supabase
                         .from('clientes_ativos')
                         .upsert({
                             telefone: telefoneLimpo,
                             nome: nome,
-                            atualizado_em: new Date().toISOString()
+                            email: emailCliente,
+                            criado_em: new Date().toISOString(),
+                            atualizado_em: new Date().toISOString(),
+                            status: 'em_processo'
                         }, {
                             onConflict: 'telefone',
                             ignoreDuplicates: false
                         });
 
                     if (insert.error) {
-                        console.error('Erro ao criar/atualizar cliente em ATIVOS:', insert.error);
+                        console.error('❌ Erro ao criar/atualizar cliente em ATIVOS:', insert.error);
                     } else {
-                        console.log('Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
+                        console.log('✅ Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
                     }
 
-                    var etapa = await supabase
-                        .from('etapas_processo')
-                        .insert({
-                            cliente_telefone: formatarTelefone(telefoneLimpo),
-                            etapa_atual: 'formulario_enviado',
-                            data_inicio: new Date().toISOString(),
-                            data_atualizacao: new Date().toISOString(),
-                            historico: [{
-                                etapa: 'formulario_enviado',
-                                data: new Date().toISOString(),
-                                nota: 'Inicio do processo',
-                                observacao: 'Cliente criado via formulario DS-160'
-                            }]
-                        });
+                    // ============================================================
+                    // 2. CRIAR ETAPA INICIAL (NOVO!)
+                    // ============================================================
+                    try {
+                        // Verifica se já existe etapa para este cliente
+                        const { data: etapaExistente } = await supabase
+                            .from('etapas_processo')
+                            .select('id')
+                            .eq('cliente_telefone', telefoneFormatado)
+                            .maybeSingle();
 
-                    if (etapa.error) {
-                        console.error('Erro ao criar etapa:', etapa.error);
+                        if (!etapaExistente) {
+                            const novaEtapa = {
+                                cliente_telefone: telefoneFormatado,
+                                etapa_atual: 'formulario_enviado',
+                                data_inicio: new Date().toISOString(),
+                                data_atualizacao: new Date().toISOString(),
+                                historico: [{
+                                    etapa: 'formulario_enviado',
+                                    data: new Date().toISOString(),
+                                    nota: 'Inicio do processo',
+                                    observacao: `Cliente criado via formulario DS-160 - ${nome}`
+                                }]
+                            };
+
+                            const { error: etapaError } = await supabase
+                                .from('etapas_processo')
+                                .insert(novaEtapa);
+
+                            if (etapaError) {
+                                console.error('❌ Erro ao criar etapa inicial:', etapaError);
+                            } else {
+                                console.log('✅ Etapa inicial criada para:', telefoneLimpo);
+                                
+                                // Envia notificação de boas-vindas
+                                try {
+                                    await notificarClienteEtapa(telefoneLimpo, 'formulario_enviado');
+                                    console.log('✅ Notificação de boas-vindas enviada para:', telefoneLimpo);
+                                } catch (notifyErr) {
+                                    console.error('❌ Erro ao enviar notificação:', notifyErr);
+                                }
+                            }
+                        } else {
+                            console.log('ℹ️ Etapa já existe para:', telefoneLimpo);
+                        }
+                    } catch (err) {
+                        console.error('❌ Erro ao criar etapa inicial:', err);
                     }
 
+                    // ============================================================
+                    // 3. REMOVER DE CLIENTES_NOVOS (se existir)
+                    // ============================================================
                     var clienteNovo = await supabase
                         .from('clientes_novos')
                         .select('*')
@@ -2562,22 +2604,22 @@ app.post('/api/submit-ds160', async function(req, res) {
                             .from('clientes_novos')
                             .delete()
                             .eq('telefone', telefoneLimpo);
-                        console.log('Cliente ' + telefoneLimpo + ' removido de NOVOS');
+                        console.log('🗑️ Cliente ' + telefoneLimpo + ' removido de NOVOS');
                     }
 
                 } catch (err) {
-                    console.error('Erro ao processar cliente:', err.message);
+                    console.error('❌ Erro ao processar cliente:', err.message);
                 }
             }
 
             // ============================================================
-            // GERAR PDF
+            // 4. GERAR PDF
             // ============================================================
             var pdfBuffer = await gerarPDF_DS160(data);
-            console.log('PDF gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
+            console.log('📄 PDF gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
 
             // ============================================================
-            // ENVIAR EMAIL PARA EQUIPE
+            // 5. ENVIAR EMAIL PARA EQUIPE
             // ============================================================
             await resend.emails.send({
                 from: 'GetVisa <contato@getvisa.com.br>',
@@ -2586,10 +2628,10 @@ app.post('/api/submit-ds160', async function(req, res) {
                 html: '<strong>Formulario DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
                 attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
             });
-            console.log('E-mail enviado para a equipe');
+            console.log('📧 E-mail enviado para a equipe');
 
             // ============================================================
-            // ENVIAR EMAIL PARA CLIENTE
+            // 6. ENVIAR EMAIL PARA CLIENTE
             // ============================================================
             if (emailCliente && emailCliente.trim() !== '') {
                 await resend.emails.send({
@@ -2599,25 +2641,22 @@ app.post('/api/submit-ds160', async function(req, res) {
                     html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
                     attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
                 });
-                console.log('E-mail enviado para o cliente: ' + emailCliente);
+                console.log('📧 E-mail enviado para o cliente: ' + emailCliente);
             }
 
             // ============================================================
-            // ENVIAR WHATSAPP (NOVO!)
+            // 7. ENVIAR WHATSAPP
             // ============================================================
             try {
-                // Dados para a mensagem
                 var cidade = data['text-74'] || data['cidade'] || 'N/A';
                 var consulado = data['consulado_cidade'] || 'N/A';
                 var telefone = data['text-77'] || data['phone'] || 'N/A';
                 var proposito = data['radio-28'] || 'N/A';
                 
-                // Mapeia o propósito da viagem
                 if (proposito === 'one') proposito = 'Turismo/Negócios (B1/B2)';
                 else if (proposito === 'two') proposito = 'Estudos';
                 else if (proposito === 'Outros') proposito = 'Outros';
                 
-                // Mensagem CURTA para o WhatsApp (evita erro)
                 var mensagemWhats = `📋 *NOVO DS-160*\n\n`;
                 mensagemWhats += `👤 *Nome:* ${nome}\n`;
                 mensagemWhats += `📧 *Email:* ${emailCliente || 'N/A'}\n`;
@@ -2628,7 +2667,6 @@ app.post('/api/submit-ds160', async function(req, res) {
                 mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
                 mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
 
-                // Número para enviar
                 var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
                 
                 console.log('📤 Enviando WhatsApp DS-160 para:', numeroWhats);
@@ -2647,7 +2685,7 @@ app.post('/api/submit-ds160', async function(req, res) {
             }
 
         } catch (err) {
-            console.error('Erro no processamento DS-160 (background):', err);
+            console.error('❌ Erro no processamento DS-160 (background):', err);
         }
     })();
 });
@@ -2676,39 +2714,100 @@ app.post('/api/submit-passaporte', async function(req, res) {
             if (telefoneCliente) {
                 try {
                     var telefoneLimpo = limparTelefone(telefoneCliente);
-                    console.log('Telefone limpo: ' + telefoneLimpo);
+                    var telefoneFormatado = formatarTelefone(telefoneLimpo);
+                    
+                    console.log('📱 Telefone limpo: ' + telefoneLimpo);
+                    console.log('📱 Telefone formatado: ' + telefoneFormatado);
 
+                    // ============================================================
+                    // 1. SALVAR EM CLIENTES_ATIVOS
+                    // ============================================================
                     await supabase
                         .from('clientes_ativos')
                         .upsert({
                             telefone: telefoneLimpo,
                             nome: nome,
-                            atualizado_em: new Date().toISOString()
+                            email: emailCliente,
+                            criado_em: new Date().toISOString(),
+                            atualizado_em: new Date().toISOString(),
+                            status: 'em_processo'
                         }, {
                             onConflict: 'telefone',
                             ignoreDuplicates: false
                         });
 
-                    console.log('Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
+                    console.log('✅ Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
 
+                    // ============================================================
+                    // 2. CRIAR ETAPA INICIAL (NOVO!)
+                    // ============================================================
+                    try {
+                        const { data: etapaExistente } = await supabase
+                            .from('etapas_processo')
+                            .select('id')
+                            .eq('cliente_telefone', telefoneFormatado)
+                            .maybeSingle();
+
+                        if (!etapaExistente) {
+                            const novaEtapa = {
+                                cliente_telefone: telefoneFormatado,
+                                etapa_atual: 'formulario_enviado',
+                                data_inicio: new Date().toISOString(),
+                                data_atualizacao: new Date().toISOString(),
+                                historico: [{
+                                    etapa: 'formulario_enviado',
+                                    data: new Date().toISOString(),
+                                    nota: 'Inicio do processo',
+                                    observacao: `Cliente criado via formulario Passaporte - ${nome}`
+                                }]
+                            };
+
+                            const { error: etapaError } = await supabase
+                                .from('etapas_processo')
+                                .insert(novaEtapa);
+
+                            if (etapaError) {
+                                console.error('❌ Erro ao criar etapa inicial:', etapaError);
+                            } else {
+                                console.log('✅ Etapa inicial criada para:', telefoneLimpo);
+                                
+                                try {
+                                    await notificarClienteEtapa(telefoneLimpo, 'formulario_enviado');
+                                    console.log('✅ Notificação de boas-vindas enviada para:', telefoneLimpo);
+                                } catch (notifyErr) {
+                                    console.error('❌ Erro ao enviar notificação:', notifyErr);
+                                }
+                            }
+                        } else {
+                            console.log('ℹ️ Etapa já existe para:', telefoneLimpo);
+                        }
+                    } catch (err) {
+                        console.error('❌ Erro ao criar etapa inicial:', err);
+                    }
+
+                    // ============================================================
+                    // 3. REMOVER DE CLIENTES_NOVOS (se existir)
+                    // ============================================================
                     await supabase
                         .from('clientes_novos')
                         .delete()
                         .eq('telefone', telefoneLimpo);
+                    
+                    console.log('🗑️ Cliente ' + telefoneLimpo + ' removido de NOVOS');
 
                 } catch (err) {
-                    console.error('Erro ao processar cliente:', err.message);
+                    console.error('❌ Erro ao processar cliente:', err.message);
                 }
             }
 
             // ============================================================
-            // GERAR PDF
+            // 4. GERAR PDF
             // ============================================================
             var pdfBuffer = await gerarPDF_Passaporte(data);
-            console.log('PDF Passaporte gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
+            console.log('📄 PDF Passaporte gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
 
             // ============================================================
-            // ENVIAR EMAIL PARA EQUIPE
+            // 5. ENVIAR EMAIL PARA EQUIPE
             // ============================================================
             await resend.emails.send({
                 from: 'GetVisa <contato@getvisa.com.br>',
@@ -2717,10 +2816,10 @@ app.post('/api/submit-passaporte', async function(req, res) {
                 html: '<strong>Formulario de Passaporte recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
                 attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
             });
-            console.log('E-mail enviado para a equipe');
+            console.log('📧 E-mail enviado para a equipe');
 
             // ============================================================
-            // ENVIAR EMAIL PARA CLIENTE
+            // 6. ENVIAR EMAIL PARA CLIENTE
             // ============================================================
             if (emailCliente && emailCliente.trim() !== '') {
                 await resend.emails.send({
@@ -2730,14 +2829,13 @@ app.post('/api/submit-passaporte', async function(req, res) {
                     html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos sua solicitacao de passaporte. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
                     attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
                 });
-                console.log('E-mail enviado para o cliente: ' + emailCliente);
+                console.log('📧 E-mail enviado para o cliente: ' + emailCliente);
             }
 
             // ============================================================
-            // ENVIAR WHATSAPP (NOVO!)
+            // 7. ENVIAR WHATSAPP
             // ============================================================
             try {
-                // Monta a mensagem
                 var cidade = data['text-74'] || data['cidade'] || 'Não informado';
                 var telefone = data['phone'] || data['text-77'] || 'Não informado';
                 
@@ -2749,7 +2847,6 @@ app.post('/api/submit-passaporte', async function(req, res) {
                 mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
                 mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
 
-                // Número para enviar (pode ser fixo ou o do cliente)
                 var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
                 
                 console.log('📤 Enviando WhatsApp para:', numeroWhats);
@@ -2768,7 +2865,7 @@ app.post('/api/submit-passaporte', async function(req, res) {
             }
 
         } catch (err) {
-            console.error('Erro no processamento Passaporte (background):', err);
+            console.error('❌ Erro no processamento Passaporte (background):', err);
         }
     })();
 });
