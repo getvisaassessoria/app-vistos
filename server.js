@@ -1277,19 +1277,19 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
 // Na função criarEtapaInicial, use SEMPRE o telefone limpo
 async function criarEtapaInicial(telefone) {
     try {
-        // Garantir que é o telefone limpo
+        // FORÇAR TELEFONE LIMPO
         var telefoneLimpo = limparTelefone(telefone);
         console.log('📱 Criando etapa para telefone limpo:', telefoneLimpo);
         
         // Buscar cliente em clientes_ativos com telefone limpo
-        const { data: cliente, error: clienteError } = await supabase
+        const { data: cliente, error } = await supabase
             .from('clientes_ativos')
             .select('telefone, nome, criado_em')
             .eq('telefone', telefoneLimpo)
             .maybeSingle();
         
-        if (clienteError) {
-            console.error('❌ Erro ao buscar cliente:', clienteError);
+        if (error) {
+            console.error('❌ Erro ao buscar cliente:', error);
             return null;
         }
         
@@ -1300,7 +1300,7 @@ async function criarEtapaInicial(telefone) {
         
         console.log('✅ Cliente encontrado:', cliente);
         
-        // Verificar se já existe etapa
+        // Verificar se já existe etapa com telefone limpo
         const { data: etapaExistente } = await supabase
             .from('etapas_processo')
             .select('id')
@@ -1312,9 +1312,9 @@ async function criarEtapaInicial(telefone) {
             return etapaExistente;
         }
         
-        // Criar nova etapa
+        // Criar nova etapa com TELEFONE LIMPO
         const novaEtapa = {
-            cliente_telefone: telefoneLimpo,
+            cliente_telefone: telefoneLimpo,  // ← SEMPRE LIMPO
             etapa_atual: 'formulario_enviado',
             data_inicio: new Date().toISOString(),
             data_atualizacao: new Date().toISOString(),
@@ -1326,14 +1326,14 @@ async function criarEtapaInicial(telefone) {
             }]
         };
 
-        const { data, error } = await supabase
+        const { data, error: insertError } = await supabase
             .from('etapas_processo')
             .insert(novaEtapa)
             .select()
             .single();
 
-        if (error) {
-            console.error('❌ Erro ao criar etapa:', error);
+        if (insertError) {
+            console.error('❌ Erro ao criar etapa:', insertError);
             return null;
         }
         
@@ -2542,13 +2542,11 @@ app.post('/api/submit-ds160', async function(req, res) {
             if (telefoneCliente) {
                 try {
                     var telefoneLimpo = limparTelefone(telefoneCliente);
-                    var telefoneFormatado = formatarTelefone(telefoneLimpo);
                     
                     console.log('📱 Telefone limpo: ' + telefoneLimpo);
-                    console.log('📱 Telefone formatado: ' + telefoneFormatado);
 
                     // ============================================================
-                    // 1. SALVAR EM CLIENTES_ATIVOS
+                    // 1. SALVAR EM CLIENTES_ATIVOS (com telefone LIMPO)
                     // ============================================================
                     var insert = await supabase
                         .from('clientes_ativos')
@@ -2571,19 +2569,19 @@ app.post('/api/submit-ds160', async function(req, res) {
                     }
 
                     // ============================================================
-                    // 2. CRIAR ETAPA INICIAL (NOVO!)
+                    // 2. CRIAR ETAPA INICIAL (com telefone LIMPO)
                     // ============================================================
                     try {
-                        // Verifica se já existe etapa para este cliente
+                        // Verifica se já existe etapa para este cliente (com telefone LIMPO)
                         const { data: etapaExistente } = await supabase
                             .from('etapas_processo')
                             .select('id')
-                            .eq('cliente_telefone', telefoneFormatado)
+                            .eq('cliente_telefone', telefoneLimpo)
                             .maybeSingle();
 
                         if (!etapaExistente) {
                             const novaEtapa = {
-                                cliente_telefone: telefoneFormatado,
+                                cliente_telefone: telefoneLimpo,  // ← SEMPRE LIMPO
                                 etapa_atual: 'formulario_enviado',
                                 data_inicio: new Date().toISOString(),
                                 data_atualizacao: new Date().toISOString(),
@@ -2715,186 +2713,6 @@ app.post('/api/submit-ds160', async function(req, res) {
 
         } catch (err) {
             console.error('❌ Erro no processamento DS-160 (background):', err);
-        }
-    })();
-});
-
-// ============================================================
-// ROTA DE FORMULÁRIO - PASSAPORTE
-// ============================================================
-
-app.post('/api/submit-passaporte', async function(req, res) {
-    var data = req.body;
-
-    if (isSpamData(data)) {
-        console.log('SPAM Passaporte - Dados rejeitados');
-        return res.status(200).json({ success: true, message: 'Recebido' });
-    }
-
-    console.log('Dados recebidos (Passaporte) - OK');
-    res.status(200).json({ success: true, message: 'Requisicao recebida, processando...' });
-
-    (async function() {
-        try {
-            var nome = data['full_name'] || 'Cliente_Sem_Nome';
-            var emailCliente = data['email-1'] || null;
-            var telefoneCliente = limparTelefone(data['phone'] || data['text-77'] || null);
-
-            if (telefoneCliente) {
-                try {
-                    var telefoneLimpo = limparTelefone(telefoneCliente);
-                    var telefoneFormatado = formatarTelefone(telefoneLimpo);
-                    
-                    console.log('📱 Telefone limpo: ' + telefoneLimpo);
-                    console.log('📱 Telefone formatado: ' + telefoneFormatado);
-
-                    // ============================================================
-                    // 1. SALVAR EM CLIENTES_ATIVOS
-                    // ============================================================
-                    await supabase
-                        .from('clientes_ativos')
-                        .upsert({
-                            telefone: telefoneLimpo,
-                            nome: nome,
-                            email: emailCliente,
-                            criado_em: new Date().toISOString(),
-                            atualizado_em: new Date().toISOString(),
-                            status: 'em_processo'
-                        }, {
-                            onConflict: 'telefone',
-                            ignoreDuplicates: false
-                        });
-
-                    console.log('✅ Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
-
-                    // ============================================================
-                    // 2. CRIAR ETAPA INICIAL (NOVO!)
-                    // ============================================================
-                    try {
-                        const { data: etapaExistente } = await supabase
-                            .from('etapas_processo')
-                            .select('id')
-                            .eq('cliente_telefone', telefoneFormatado)
-                            .maybeSingle();
-
-                        if (!etapaExistente) {
-                            const novaEtapa = {
-                                cliente_telefone: telefoneFormatado,
-                                etapa_atual: 'formulario_enviado',
-                                data_inicio: new Date().toISOString(),
-                                data_atualizacao: new Date().toISOString(),
-                                historico: [{
-                                    etapa: 'formulario_enviado',
-                                    data: new Date().toISOString(),
-                                    nota: 'Inicio do processo',
-                                    observacao: `Cliente criado via formulario Passaporte - ${nome}`
-                                }]
-                            };
-
-                            const { error: etapaError } = await supabase
-                                .from('etapas_processo')
-                                .insert(novaEtapa);
-
-                            if (etapaError) {
-                                console.error('❌ Erro ao criar etapa inicial:', etapaError);
-                            } else {
-                                console.log('✅ Etapa inicial criada para:', telefoneLimpo);
-                                
-                                try {
-                                    await notificarClienteEtapa(telefoneLimpo, 'formulario_enviado');
-                                    console.log('✅ Notificação de boas-vindas enviada para:', telefoneLimpo);
-                                } catch (notifyErr) {
-                                    console.error('❌ Erro ao enviar notificação:', notifyErr);
-                                }
-                            }
-                        } else {
-                            console.log('ℹ️ Etapa já existe para:', telefoneLimpo);
-                        }
-                    } catch (err) {
-                        console.error('❌ Erro ao criar etapa inicial:', err);
-                    }
-
-                    // ============================================================
-                    // 3. REMOVER DE CLIENTES_NOVOS (se existir)
-                    // ============================================================
-                    await supabase
-                        .from('clientes_novos')
-                        .delete()
-                        .eq('telefone', telefoneLimpo);
-                    
-                    console.log('🗑️ Cliente ' + telefoneLimpo + ' removido de NOVOS');
-
-                } catch (err) {
-                    console.error('❌ Erro ao processar cliente:', err.message);
-                }
-            }
-
-            // ============================================================
-            // 4. GERAR PDF
-            // ============================================================
-            var pdfBuffer = await gerarPDF_Passaporte(data);
-            console.log('📄 PDF Passaporte gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
-
-            // ============================================================
-            // 5. ENVIAR EMAIL PARA EQUIPE
-            // ============================================================
-            await resend.emails.send({
-                from: 'GetVisa <contato@getvisa.com.br>',
-                to: ['getvisa.assessoria@gmail.com'],
-                subject: 'PASSAPORTE: ' + nome,
-                html: '<strong>Formulario de Passaporte recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
-                attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
-            });
-            console.log('📧 E-mail enviado para a equipe');
-
-            // ============================================================
-            // 6. ENVIAR EMAIL PARA CLIENTE
-            // ============================================================
-            if (emailCliente && emailCliente.trim() !== '') {
-                await resend.emails.send({
-                    from: 'GetVisa <contato@getvisa.com.br>',
-                    to: [emailCliente],
-                    subject: 'Seu formulario de Passaporte foi recebido - ' + nome,
-                    html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos sua solicitacao de passaporte. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
-                    attachments: [{ filename: 'Passaporte_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
-                });
-                console.log('📧 E-mail enviado para o cliente: ' + emailCliente);
-            }
-
-            // ============================================================
-            // 7. ENVIAR WHATSAPP
-            // ============================================================
-            try {
-                var cidade = data['text-74'] || data['cidade'] || 'Não informado';
-                var telefone = data['phone'] || data['text-77'] || 'Não informado';
-                
-                var mensagemWhats = `📋 *NOVO PASSAPORTE*\n\n`;
-                mensagemWhats += `👤 *Nome:* ${nome}\n`;
-                mensagemWhats += `📧 *Email:* ${emailCliente || 'Não informado'}\n`;
-                mensagemWhats += `📱 *Telefone:* ${telefone}\n`;
-                mensagemWhats += `📍 *Cidade:* ${cidade}\n`;
-                mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
-                mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
-
-                var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
-                
-                console.log('📤 Enviando WhatsApp para:', numeroWhats);
-                console.log('📤 Mensagem:', mensagemWhats);
-
-                const resultadoWhats = await enviarWhatsApp(numeroWhats, mensagemWhats);
-                
-                if (resultadoWhats) {
-                    console.log('✅ WhatsApp enviado com sucesso para:', numeroWhats);
-                } else {
-                    console.log('⚠️ Falha ao enviar WhatsApp para:', numeroWhats);
-                }
-
-            } catch (err) {
-                console.error('❌ Erro ao enviar WhatsApp:', err.message);
-            }
-
-        } catch (err) {
-            console.error('❌ Erro no processamento Passaporte (background):', err);
         }
     })();
 });
@@ -3136,13 +2954,9 @@ app.post('/api/etapas/avancar', async function(req, res) {
             .maybeSingle();
 
         if (!etapaAtual.data) {
-            console.error('❌ Cliente não encontrado em etapas_processo:', {
-                original: telefone,
-                limpo: telefoneLimpo
-            });
+            console.log('⚠️ Etapa não encontrada, tentando criar...');
             
-            // Tenta criar a etapa se não existir
-            console.log('🆕 Tentando criar etapa automaticamente...');
+            // Tenta criar a etapa
             var novaEtapa = await criarEtapaInicial(telefoneLimpo);
             if (novaEtapa) {
                 console.log('✅ Etapa criada automaticamente!');
