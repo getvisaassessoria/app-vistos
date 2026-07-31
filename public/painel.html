@@ -49,6 +49,47 @@
             font-size: 14px;
         }
 
+        /* Busca rápida no header */
+        .busca-rapida-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.15);
+            padding: 5px 15px;
+            border-radius: 25px;
+            transition: all 0.3s;
+        }
+        .busca-rapida-container:focus-within {
+            background: rgba(255,255,255,0.25);
+            box-shadow: 0 0 15px rgba(255,255,255,0.1);
+        }
+        .busca-rapida-container input {
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 8px 0;
+            width: 200px;
+            outline: none;
+            font-size: 14px;
+        }
+        .busca-rapida-container input::placeholder {
+            color: rgba(255,255,255,0.6);
+        }
+        .busca-rapida-container .btn-buscar {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .busca-rapida-container .btn-buscar:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+
         /* ===== STATS CARDS ===== */
         .stats {
             display: grid;
@@ -154,6 +195,19 @@
         .table-header select {
             min-width: 200px;
         }
+        .busca-telefone {
+            width: 150px;
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .busca-telefone:focus {
+            border-color: #003366;
+            box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.1);
+            outline: none;
+        }
 
         /* ===== BOTÕES ===== */
         .btn {
@@ -179,6 +233,41 @@
         .btn-secondary:hover { background: #5a6268; }
         .btn-sm { padding: 4px 12px; font-size: 12px; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Validação de campos */
+        .input-valido {
+            border-color: #10b981 !important;
+            border-width: 2px !important;
+            background-color: #f0fdf4 !important;
+        }
+        .input-invalido {
+            border-color: #ef4444 !important;
+            border-width: 2px !important;
+            background-color: #fef2f2 !important;
+            animation: shake 0.3s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .mensagem-validacao {
+            font-size: 12px;
+            margin-top: 5px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            display: none;
+        }
+        .mensagem-validacao.erro {
+            display: block;
+            color: #ef4444;
+            background: #fef2f2;
+        }
+        .mensagem-validacao.sucesso {
+            display: block;
+            color: #10b981;
+            background: #f0fdf4;
+        }
 
         /* ===== TABELA ===== */
         table {
@@ -474,6 +563,7 @@
             .timeline-actions { flex-direction: column; }
             .timeline-actions input { width: 100%; }
             .barra-label { width: 100px; font-size: 11px; }
+            .busca-rapida-container input { width: 120px; }
         }
 
         /* ===== MODAIS ===== */
@@ -567,7 +657,22 @@
     <!-- HEADER -->
     <div class="header">
         <h1>📋 Painel GetVisa</h1>
-        <div class="badge">🔄 <span id="ultima-atualizacao">-</span></div>
+        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <!-- Busca rápida -->
+            <div class="busca-rapida-container">
+                <span>🔍</span>
+                <input 
+                    type="text" 
+                    id="busca-rapida" 
+                    placeholder="Buscar cliente por telefone..." 
+                    onkeypress="buscarClienteInput(event)"
+                >
+                <button class="btn-buscar" onclick="buscarCliente(document.getElementById('busca-rapida').value)">
+                    Ir
+                </button>
+            </div>
+            <div class="badge">🔄 <span id="ultima-atualizacao">-</span></div>
+        </div>
     </div>
 
     <!-- STATS -->
@@ -591,25 +696,24 @@
     </div>
 
     <!-- TABS -->
-    <!-- TABS -->
-<div class="tabs">
-    <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
-    <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
-    <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
-    <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
-    <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
-    <!-- NOVA ABA - FINALIZADOS -->
-    <button class="tab-btn" data-tab="finalizados" onclick="mudarAba('finalizados')">✅ Finalizados</button>
-</div>
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="pendentes" onclick="mudarAba('pendentes')">📞 Pendentes</button>
+        <button class="tab-btn" data-tab="ativos" onclick="mudarAba('ativos')">🟢 Em Processo</button>
+        <button class="tab-btn" data-tab="amigos" onclick="mudarAba('amigos')">🤝 Amigos</button>
+        <button class="tab-btn" data-tab="etapas" onclick="mudarAba('etapas')">📊 Etapas</button>
+        <button class="tab-btn" data-tab="dashboard" onclick="mudarAba('dashboard')">📈 Dashboard</button>
+        <button class="tab-btn" data-tab="finalizados" onclick="mudarAba('finalizados')">✅ Finalizados</button>
+    </div>
 
     <!-- TAB: PENDENTES -->
     <div class="tab-content active" id="tab-pendentes">
         <div class="table-container">
             <div class="table-header">
                 <span style="font-weight:600;color:#1e293b;">📞 Contatos Pendentes</span>
-                <div>
-                    <input type="text" id="buscar-pendentes" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('pendentes')">
-                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <input type="text" id="buscar-pendentes" placeholder="🔍 Buscar por nome..." onkeyup="filtrarTabela('pendentes')">
+                    <input type="text" id="busca-rapida-pendentes" placeholder="📱 Telefone específico..." class="busca-telefone" onkeypress="if(event.key === 'Enter') buscarCliente(this.value)">
+                    <button class="btn btn-primary" onclick="carregarDados()">🔄 Atualizar</button>
                 </div>
             </div>
             <div id="tabela-pendentes"><div class="loading">🔄 Carregando...</div></div>
@@ -628,9 +732,10 @@
         <div class="table-container">
             <div class="table-header">
                 <span style="font-weight:600;color:#1e293b;">🟢 Clientes em Processo</span>
-                <div>
-                    <input type="text" id="buscar-ativos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('ativos')">
-                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <input type="text" id="buscar-ativos" placeholder="🔍 Buscar por nome..." onkeyup="filtrarTabela('ativos')">
+                    <input type="text" id="busca-rapida-ativos" placeholder="📱 Telefone específico..." class="busca-telefone" onkeypress="if(event.key === 'Enter') buscarCliente(this.value)">
+                    <button class="btn btn-primary" onclick="carregarDados()">🔄 Atualizar</button>
                 </div>
             </div>
             <div id="tabela-ativos"><div class="loading">🔄 Carregando...</div></div>
@@ -642,9 +747,10 @@
         <div class="table-container">
             <div class="table-header">
                 <span style="font-weight:600;color:#1e293b;">🤝 Contatos Amigos</span>
-                <div>
-                    <input type="text" id="buscar-amigos" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('amigos')">
-                    <button class="btn btn-primary" onclick="carregarDados()" style="margin-left:10px;">🔄 Atualizar</button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <input type="text" id="buscar-amigos" placeholder="🔍 Buscar por nome..." onkeyup="filtrarTabela('amigos')">
+                    <input type="text" id="busca-rapida-amigos" placeholder="📱 Telefone específico..." class="busca-telefone" onkeypress="if(event.key === 'Enter') buscarCliente(this.value)">
+                    <button class="btn btn-primary" onclick="carregarDados()">🔄 Atualizar</button>
                 </div>
             </div>
             <div id="tabela-amigos"><div class="loading">🔄 Carregando...</div></div>
@@ -652,53 +758,49 @@
     </div>
 
     <!-- TAB: ETAPAS (TIMELINE) -->
-<div class="tab-content" id="tab-etapas">
-    <div class="table-container">
-        <div class="table-header">
-            <span style="font-weight:600;color:#1e293b;">📊 Timeline do Processo</span>
-            <div>
-                <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()">
-                    <option value="">Selecione um cliente...</option>
-                </select>
-                <button class="btn btn-primary" onclick="carregarClientesParaTimeline()" style="margin-left:10px;">🔄 Atualizar</button>
-            </div>
-        </div>
-        <div id="timeline-container" style="padding:20px;">
-            <div class="empty">📊 Selecione um cliente para ver a timeline</div>
-        </div>
-        <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-            <div class="timeline-actions">
-                <input type="text" id="nota-avancar" placeholder="Nota sobre este avanço (opcional)">
-                <button class="btn btn-success" onclick="avancarEtapa()">➡️ Avançar Etapa</button>
-                <button class="btn btn-info" onclick="verHistorico()">📜 Ver Histórico</button>
-                <button class="btn btn-danger" onclick="fecharTimeline()">✕ Fechar</button>
-            </div>
-        </div>
-        
-        <!-- ========================================================== -->
-        <!-- CONTAINER DE DECISÃO (aparece após a entrevista)           -->
-        <!-- ========================================================== -->
-        <div id="decisao-container" style="display:none; padding:15px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                <h4 style="margin:0;color:#1e293b;">🎤 Decisão da Entrevista</h4>
-                <p style="margin:0;color:#64748b;font-size:14px;">Qual foi o resultado da entrevista do cliente?</p>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-success" onclick="finalizarProcesso('passaporte_retornado')">
-                        ✅ Visto Aprovado
-                    </button>
-                    <button class="btn btn-danger" onclick="finalizarProcesso('visto_recusado')">
-                        ❌ Visto Recusado
-                    </button>
-                </div>
-                <div style="margin-top:5px;">
-                    <input type="text" id="nota-finalizacao" placeholder="Observação sobre a decisão (opcional)" style="width:100%;padding:8px 15px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+    <div class="tab-content" id="tab-etapas">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">📊 Timeline do Processo</span>
+                <div>
+                    <select id="select-cliente-etapa" onchange="carregarTimelinePorSelect()">
+                        <option value="">Selecione um cliente...</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="carregarClientesParaTimeline()" style="margin-left:10px;">🔄 Atualizar</button>
                 </div>
             </div>
+            <div id="timeline-container" style="padding:20px;">
+                <div class="empty">📊 Selecione um cliente para ver a timeline</div>
+            </div>
+            <div id="timeline-actions" style="display:none;padding:15px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+                <div class="timeline-actions">
+                    <input type="text" id="nota-avancar" placeholder="Nota sobre este avanço (opcional)">
+                    <button class="btn btn-success" onclick="avancarEtapa()">➡️ Avançar Etapa</button>
+                    <button class="btn btn-info" onclick="verHistorico()">📜 Ver Histórico</button>
+                    <button class="btn btn-danger" onclick="fecharTimeline()">✕ Fechar</button>
+                </div>
+            </div>
+            
+            <!-- CONTAINER DE DECISÃO (aparece após a entrevista) -->
+            <div id="decisao-container" style="display:none; padding:15px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <h4 style="margin:0;color:#1e293b;">🎤 Decisão da Entrevista</h4>
+                    <p style="margin:0;color:#64748b;font-size:14px;">Qual foi o resultado da entrevista do cliente?</p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-success" onclick="finalizarProcesso('passaporte_retornado')">
+                            ✅ Visto Aprovado
+                        </button>
+                        <button class="btn btn-danger" onclick="finalizarProcesso('visto_recusado')">
+                            ❌ Visto Recusado
+                        </button>
+                    </div>
+                    <div style="margin-top:5px;">
+                        <input type="text" id="nota-finalizacao" placeholder="Observação sobre a decisão (opcional)" style="width:100%;padding:8px 15px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                    </div>
+                </div>
+            </div>
         </div>
-        <!-- ========================================================== -->
-        
     </div>
-</div>
 
     <!-- TAB: DASHBOARD -->
     <div class="tab-content" id="tab-dashboard">
@@ -741,19 +843,20 @@
             </div>
         </div>
     </div>
-</div>
 
-<!-- TAB: FINALIZADOS -->
-<div class="tab-content" id="tab-finalizados">
-    <div class="table-container">
-        <div class="table-header">
-            <span style="font-weight:600;color:#1e293b;">✅ Clientes Finalizados</span>
-            <div>
-                <input type="text" id="buscar-finalizados" placeholder="🔍 Buscar..." onkeyup="filtrarTabela('finalizados')">
-                <button class="btn btn-primary" onclick="carregarFinalizados()" style="margin-left:10px;">🔄 Atualizar</button>
+    <!-- TAB: FINALIZADOS -->
+    <div class="tab-content" id="tab-finalizados">
+        <div class="table-container">
+            <div class="table-header">
+                <span style="font-weight:600;color:#1e293b;">✅ Clientes Finalizados</span>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <input type="text" id="buscar-finalizados" placeholder="🔍 Buscar por nome..." onkeyup="filtrarTabela('finalizados')">
+                    <input type="text" id="busca-rapida-finalizados" placeholder="📱 Telefone específico..." class="busca-telefone" onkeypress="if(event.key === 'Enter') buscarCliente(this.value)">
+                    <button class="btn btn-primary" onclick="carregarFinalizados()">🔄 Atualizar</button>
+                </div>
             </div>
+            <div id="tabela-finalizados"><div class="loading">🔄 Carregando...</div></div>
         </div>
-        <div id="tabela-finalizados"><div class="loading">🔄 Carregando...</div></div>
     </div>
 </div>
 
@@ -795,19 +898,151 @@ let clienteSelecionadoTimeline = null;
 let dadosCompletos = { pendentes: [], ativos: [], amigos: [] };
 
 // ============================================================
+//  FUNÇÕES DE UTILITÁRIO
+// ============================================================
+
+function normalizarTelefone(telefone) {
+    if (!telefone) return '';
+    return telefone.toString().replace(/\D/g, '');
+}
+
+function formatarTelefone(telefone) {
+    const limpo = normalizarTelefone(telefone);
+    if (limpo.length === 11) {
+        return `(${limpo.substring(0, 2)}) ${limpo.substring(2, 3)} ${limpo.substring(3, 7)}-${limpo.substring(7, 11)}`;
+    } else if (limpo.length === 10) {
+        return `(${limpo.substring(0, 2)}) ${limpo.substring(2, 6)}-${limpo.substring(6, 10)}`;
+    }
+    return telefone;
+}
+
+function validarTelefone(telefone) {
+    if (!telefone || telefone.trim() === '') {
+        showToast('⚠️ Telefone não pode estar vazio', 'error');
+        return null;
+    }
+    
+    const limpo = normalizarTelefone(telefone);
+    
+    if (limpo.length < 10 || limpo.length > 11) {
+        showToast(`⚠️ Telefone inválido (${limpo.length} dígitos). Use DDD + número`, 'error');
+        return null;
+    }
+    
+    const ddd = parseInt(limpo.substring(0, 2));
+    if (ddd < 11 || ddd > 99) {
+        showToast(`⚠️ DDD inválido: ${ddd}. Use um DDD válido (11 a 99)`, 'error');
+        return null;
+    }
+    
+    return limpo;
+}
+
+function mascaraTelefone(input) {
+    let valor = input.value.replace(/\D/g, '');
+    if (valor.length > 11) valor = valor.substring(0, 11);
+    
+    if (valor.length <= 2) {
+        input.value = `(${valor}`;
+    } else if (valor.length <= 3) {
+        input.value = `(${valor.substring(0, 2)}) ${valor.substring(2)}`;
+    } else if (valor.length <= 7) {
+        input.value = `(${valor.substring(0, 2)}) ${valor.substring(2, 3)} ${valor.substring(3, 7)}`;
+    } else if (valor.length <= 11) {
+        input.value = `(${valor.substring(0, 2)}) ${valor.substring(2, 3)} ${valor.substring(3, 7)}-${valor.substring(7, 11)}`;
+    }
+    return valor;
+}
+
+function validarCampoTelefone(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return null;
+    
+    const telefone = input.value;
+    const limpo = validarTelefone(telefone);
+    
+    if (limpo) {
+        input.className = 'input-valido';
+        const msg = document.getElementById('mensagem-' + inputId);
+        if (msg) { msg.textContent = '✅ Telefone válido!'; msg.className = 'mensagem-validacao sucesso'; }
+        return limpo;
+    } else {
+        input.className = 'input-invalido';
+        const msg = document.getElementById('mensagem-' + inputId);
+        if (msg) { msg.textContent = '⚠️ Telefone inválido'; msg.className = 'mensagem-validacao erro'; }
+        setTimeout(() => { input.className = ''; }, 3000);
+        return null;
+    }
+}
+
+// ============================================================
+//  BUSCA DE CLIENTES
+// ============================================================
+
+function buscarCliente(telefone) {
+    const telefoneLimpo = normalizarTelefone(telefone);
+    
+    if (!telefoneLimpo || telefoneLimpo.length < 10) {
+        showToast('⚠️ Digite um telefone válido (DDD + número)', 'error');
+        return;
+    }
+    
+    showToast(`🔍 Buscando cliente...`, 'info');
+    
+    fetch(`/api/clientes/buscar/${telefoneLimpo}`)
+        .then(response => {
+            if (!response.ok) throw new Error('Cliente não encontrado');
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.cliente) {
+                showToast(`✅ Cliente encontrado: ${data.cliente.nome || 'Sem nome'}`, 'success');
+                mudarAba('etapas');
+                const select = document.getElementById('select-cliente-etapa');
+                if (select) {
+                    select.value = telefoneLimpo;
+                    carregarTimelinePorSelect();
+                } else {
+                    carregarTimeline(telefoneLimpo);
+                }
+            } else {
+                showToast(`❌ Cliente ${telefoneLimpo} não encontrado`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('❌ Erro na busca:', error);
+            showToast(`❌ Erro: ${error.message}`, 'error');
+        });
+}
+
+function buscarClienteInput(event) {
+    if (event.key === 'Enter') {
+        const input = document.getElementById('busca-rapida');
+        if (input && input.value) {
+            buscarCliente(input.value);
+        }
+    }
+}
+
+// ============================================================
 //  ABA/NAVEGAÇÃO
 // ============================================================
 function mudarAba(aba) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-    document.getElementById(`tab-${aba}`).classList.add('active');
-    document.querySelector(`.tab-btn[data-tab="${aba}"]`).classList.add('active');
+    
+    const tabContent = document.getElementById(`tab-${aba}`);
+    if (tabContent) tabContent.classList.add('active');
+    
+    const tabBtn = document.querySelector(`.tab-btn[data-tab="${aba}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
     
     if (aba === 'pendentes') renderPendentes();
     else if (aba === 'ativos') renderAtivos();
     else if (aba === 'amigos') renderAmigos();
     else if (aba === 'etapas') carregarClientesParaTimeline();
     else if (aba === 'dashboard') carregarDashboard();
+    else if (aba === 'finalizados') carregarFinalizados();
 }
 
 // ============================================================
@@ -851,9 +1086,6 @@ function abrirModalEtapas() {
     carregarEtapasModal();
 }
 
-// ============================================================
-//  TORNAR FUNÇÕES GLOBAIS (para os onclick dos cards)
-// ============================================================
 window.abrirModalClientes = abrirModalClientes;
 window.abrirModalProcessos = abrirModalProcessos;
 window.abrirModalAgendamentos = abrirModalAgendamentos;
@@ -870,30 +1102,19 @@ async function carregarClientesModal() {
     try {
         const response = await fetch('/api/clientes/listar');
         const data = await response.json();
-        
         if (!data.success) throw new Error(data.message);
         
         let html = '<table><thead><tr><th>Nome</th><th>Email</th><th>Telefone</th></tr></thead><tbody>';
-        
         (data.clientes || []).forEach(c => {
-            html += `
-                <tr>
-                    <td>${c.nome_completo || 'N/A'}</td>
-                    <td>${c.email || 'N/A'}</td>
-                    <td>${c.telefone || 'N/A'}</td>
-                </tr>
-            `;
+            html += `<tr><td>${c.nome_completo || 'N/A'}</td><td>${c.email || 'N/A'}</td><td>${c.telefone || 'N/A'}</td></tr>`;
         });
-        
         html += '</tbody></table>';
         body.innerHTML = html;
-        
     } catch (error) {
         body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
     }
 }
 
-// Carregar processos ativos no modal
 async function carregarProcessosModal() {
     const body = document.getElementById('modal-processos-body');
     if (!body) return;
@@ -902,32 +1123,20 @@ async function carregarProcessosModal() {
     try {
         const response = await fetch('/api/clientes/ativos');
         const data = await response.json();
-        
         if (!data.success) throw new Error(data.message);
         
         let html = '<table><thead><tr><th>Telefone</th><th>Nome</th><th>Status</th><th>Início</th></tr></thead><tbody>';
-        
         (data.ativos || []).forEach(c => {
             const inicio = c.criado_em ? new Date(c.criado_em).toLocaleDateString('pt-BR') : '-';
-            html += `
-                <tr>
-                    <td>${c.telefone || 'N/A'}</td>
-                    <td>${c.nome || 'N/A'}</td>
-                    <td><span class="badge-status">${c.status || 'em_processo'}</span></td>
-                    <td>${inicio}</td>
-                </tr>
-            `;
+            html += `<tr><td>${c.telefone || 'N/A'}</td><td>${c.nome || 'N/A'}</td><td><span class="badge-status">${c.status || 'em_processo'}</span></td><td>${inicio}</td></tr>`;
         });
-        
         html += '</tbody></table>';
         body.innerHTML = html;
-        
     } catch (error) {
         body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
     }
 }
 
-// Carregar agendamentos no modal
 async function carregarAgendamentosModal() {
     const body = document.getElementById('modal-agendamentos-body');
     if (!body) return;
@@ -936,38 +1145,21 @@ async function carregarAgendamentosModal() {
     try {
         const response = await fetch('/api/agendamentos/listar');
         const data = await response.json();
-        
         if (!data.success) throw new Error(data.message);
         
         let html = '<table><thead><tr><th>Cliente</th><th>Tipo</th><th>Data/Hora</th><th>Local</th><th>Status</th></tr></thead><tbody>';
-        
         (data.agendamentos || []).forEach(a => {
             const dataHora = new Date(a.data_hora).toLocaleString('pt-BR');
-            const statusMap = {
-                'agendado': '🟡 Agendado',
-                'realizado': '✅ Realizado',
-                'cancelado': '❌ Cancelado'
-            };
-            html += `
-                <tr>
-                    <td>${a.cliente_nome || 'N/A'}</td>
-                    <td>${a.tipo || 'N/A'}</td>
-                    <td>${dataHora}</td>
-                    <td>${a.local || 'N/A'}</td>
-                    <td>${statusMap[a.status] || a.status}</td>
-                </tr>
-            `;
+            const statusMap = { 'agendado': '🟡 Agendado', 'realizado': '✅ Realizado', 'cancelado': '❌ Cancelado' };
+            html += `<tr><td>${a.cliente_nome || 'N/A'}</td><td>${a.tipo || 'N/A'}</td><td>${dataHora}</td><td>${a.local || 'N/A'}</td><td>${statusMap[a.status] || a.status}</td></tr>`;
         });
-        
         html += '</tbody></table>';
         body.innerHTML = html;
-        
     } catch (error) {
         body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
     }
 }
 
-// Carregar etapas no modal
 async function carregarEtapasModal() {
     const body = document.getElementById('modal-etapas-body');
     if (!body) return;
@@ -976,24 +1168,14 @@ async function carregarEtapasModal() {
     try {
         const response = await fetch('/api/etapas/estatisticas');
         const data = await response.json();
-        
         if (data.erro) throw new Error(data.erro);
         
         let html = '<table><thead><tr><th>Etapa</th><th>Quantidade</th><th>Porcentagem</th></tr></thead><tbody>';
-        
         (data.distribuicao || []).forEach(e => {
-            html += `
-                <tr>
-                    <td>${e.label || e.etapa}</td>
-                    <td><strong>${e.quantidade}</strong></td>
-                    <td>${e.porcentagem}%</td>
-                </tr>
-            `;
+            html += `<tr><td>${e.label || e.etapa}</td><td><strong>${e.quantidade}</strong></td><td>${e.porcentagem}%</td></tr>`;
         });
-        
         html += '</tbody></table>';
         body.innerHTML = html;
-        
     } catch (error) {
         body.innerHTML = `<div class="empty">❌ Erro: ${error.message}</div>`;
     }
@@ -1052,16 +1234,17 @@ function renderPendentes() {
     </tr></thead><tbody>`;
     dados.forEach(item => {
         const data = item.data_contato ? new Date(item.data_contato).toLocaleString('pt-BR') : '-';
+        const telefoneLimpo = normalizarTelefone(item.telefone);
         html += `
-            <tr data-telefone="${item.telefone}">
-                <td class="checkbox-column"><input type="checkbox" class="selecionar-item" data-telefone="${item.telefone}"></td>
-                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+            <tr data-telefone="${telefoneLimpo}">
+                <td class="checkbox-column"><input type="checkbox" class="selecionar-item" data-telefone="${telefoneLimpo}"></td>
+                <td><a href="https://wa.me/55${telefoneLimpo}" target="_blank" class="telefone-link">${formatarTelefone(item.telefone)}</a></td>
                 <td>${item.nome || 'Sem nome'}</td>
                 <td class="data-hora">${data}</td>
                 <td>
                     <div class="acoes">
-                        <button class="btn btn-success btn-sm" onclick="moverCliente('${item.telefone}', 'ativo')">🟢 Em Processo</button>
-                        <button class="btn btn-warning btn-sm" onclick="moverCliente('${item.telefone}', 'amigo')">🤝 Amigo</button>
+                        <button class="btn btn-success btn-sm" onclick="moverCliente('${telefoneLimpo}', 'ativo')">🟢 Em Processo</button>
+                        <button class="btn btn-warning btn-sm" onclick="moverCliente('${telefoneLimpo}', 'amigo')">🤝 Amigo</button>
                     </div>
                 </td>
             </tr>
@@ -1086,20 +1269,20 @@ function renderAtivos() {
     </tr></thead><tbody>`;
     dados.forEach(item => {
         const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
+        const telefoneLimpo = normalizarTelefone(item.telefone);
         html += `
-            <tr data-telefone="${item.telefone}">
-                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+            <tr data-telefone="${telefoneLimpo}">
+                <td><a href="https://wa.me/55${telefoneLimpo}" target="_blank" class="telefone-link">${formatarTelefone(item.telefone)}</a></td>
                 <td>${item.nome || 'Sem nome'}</td>
                 <td><span class="badge-status">${item.status || 'em_processo'}</span></td>
                 <td class="data-hora">${data}</td>
                 <td>
-            <div class="acoes">
-                <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${item.telefone}')">📊 Timeline</button>
-                <button class="btn btn-warning btn-sm" onclick="moverParaAmigo('${item.telefone}')">🤝 Amigo</button>
-                <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${item.telefone}')">✅ Finalizar</button>
-            </div>
-        </td>
-
+                    <div class="acoes">
+                        <button class="btn btn-info btn-sm" onclick="verTimelineCliente('${telefoneLimpo}')">📊 Timeline</button>
+                        <button class="btn btn-warning btn-sm" onclick="moverParaAmigo('${telefoneLimpo}')">🤝 Amigo</button>
+                        <button class="btn btn-danger btn-sm" onclick="finalizarCliente('${telefoneLimpo}')">✅ Finalizar</button>
+                    </div>
+                </td>
             </tr>
         `;
     });
@@ -1120,9 +1303,10 @@ function renderAmigos() {
     let html = `<table><thead><tr><th>Telefone</th><th>Nome</th><th>Adicionado</th></tr></thead><tbody>`;
     dados.forEach(item => {
         const data = item.criado_em ? new Date(item.criado_em).toLocaleString('pt-BR') : '-';
+        const telefoneLimpo = normalizarTelefone(item.telefone);
         html += `
             <tr>
-                <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                <td><a href="https://wa.me/55${telefoneLimpo}" target="_blank" class="telefone-link">${formatarTelefone(item.telefone)}</a></td>
                 <td>${item.nome || 'Sem nome'}</td>
                 <td class="data-hora">${data}</td>
             </tr>
@@ -1144,14 +1328,9 @@ async function carregarFinalizados() {
         const response = await fetch('/api/clientes/finalizados');
         const data = await response.json();
         
-        if (!data.success) {
-            throw new Error(data.error || 'Erro ao carregar finalizados');
-        }
+        if (!data.success) throw new Error(data.error || 'Erro ao carregar finalizados');
         
         const finalizados = data.finalizados || [];
-        
-        // Atualiza o contador no card de estatísticas (opcional)
-        // document.getElementById('total-finalizados').textContent = finalizados.length;
         
         if (finalizados.length === 0) {
             container.innerHTML = `<div class="empty">✅ Nenhum cliente finalizado ainda</div>`;
@@ -1175,9 +1354,8 @@ async function carregarFinalizados() {
         `;
         
         finalizados.forEach(item => {
-            const dataFinal = item.data_finalizacao 
-                ? new Date(item.data_finalizacao).toLocaleString('pt-BR') 
-                : '-';
+            const dataFinal = item.data_finalizacao ? new Date(item.data_finalizacao).toLocaleString('pt-BR') : '-';
+            const telefoneLimpo = normalizarTelefone(item.telefone);
             
             const isAprovado = item.observacoes && 
                 (item.observacoes.toLowerCase().includes('aprovado') || 
@@ -1187,20 +1365,18 @@ async function carregarFinalizados() {
                 ? '<span style="color:#10b981;font-weight:bold;">✅ Aprovado</span>' 
                 : '<span style="color:#ef4444;font-weight:bold;">❌ Recusado</span>';
             
-            const observacoes = item.observacoes || '-';
-            
             html += `
                 <tr>
-                    <td><a href="https://wa.me/55${item.telefone}" target="_blank" class="telefone-link">${item.telefone}</a></td>
+                    <td><a href="https://wa.me/55${telefoneLimpo}" target="_blank" class="telefone-link">${formatarTelefone(item.telefone)}</a></td>
                     <td>${item.nome || 'Sem nome'}</td>
                     <td>${item.servico || 'Visto Americano'}</td>
                     <td>${resultado}</td>
                     <td class="data-hora">${dataFinal}</td>
-                    <td style="max-width:200px;font-size:13px;color:#64748b;">${observacoes}</td>
+                    <td style="max-width:200px;font-size:13px;color:#64748b;">${item.observacoes || '-'}</td>
                     <td>
                         <div class="acoes">
-                            <button class="btn btn-info btn-sm" onclick="abrirHistoricoFinalizado('${item.telefone}')">📜 Histórico</button>
-                            <button class="btn btn-danger btn-sm" onclick="reabrirProcesso('${item.telefone}')">🔄 Reabrir</button>
+                            <button class="btn btn-info btn-sm" onclick="abrirHistoricoFinalizado('${telefoneLimpo}')">📜 Histórico</button>
+                            <button class="btn btn-danger btn-sm" onclick="reabrirProcesso('${telefoneLimpo}')">🔄 Reabrir</button>
                         </div>
                     </td>
                 </tr>
@@ -1209,11 +1385,9 @@ async function carregarFinalizados() {
         
         html += `</tbody></table>`;
         container.innerHTML = html;
-        
     } catch (error) {
         console.error('❌ Erro ao carregar finalizados:', error);
-        document.getElementById('tabela-finalizados').innerHTML = 
-            `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
+        document.getElementById('tabela-finalizados').innerHTML = `<div class="empty">❌ Erro ao carregar: ${error.message}</div>`;
     }
 }
 
@@ -1225,24 +1399,19 @@ async function abrirHistoricoFinalizado(telefone) {
     try {
         showToast('⏳ Carregando histórico...', 'info');
         
-        // Buscar dados do cliente finalizado
-        const responseCliente = await fetch(`/api/clientes/finalizados/${telefone}`);
+        const telefoneLimpo = normalizarTelefone(telefone);
+        const responseCliente = await fetch(`/api/clientes/finalizados/${telefoneLimpo}`);
         const dataCliente = await responseCliente.json();
         
-        if (!dataCliente.success) {
-            throw new Error(dataCliente.error || 'Erro ao buscar cliente');
-        }
+        if (!dataCliente.success) throw new Error(dataCliente.error || 'Erro ao buscar cliente');
         
         const cliente = dataCliente.cliente;
         
-        // Buscar o histórico de etapas (tenta em etapas_processo primeiro)
         let historico = [];
         let etapaAtual = '';
         
         try {
-            const telefoneLimpo = telefone.toString().replace(/\D/g, '');
             const responseEtapas = await fetch(`/api/etapas/historico/${telefoneLimpo}`);
-            
             if (responseEtapas.ok) {
                 const dataEtapas = await responseEtapas.json();
                 if (!dataEtapas.erro) {
@@ -1254,12 +1423,9 @@ async function abrirHistoricoFinalizado(telefone) {
             console.log('⚠️ Não foi possível buscar histórico de etapas:', err);
         }
         
-        // Se não encontrou histórico, tenta buscar da tabela de etapas com formato diferente
         if (historico.length === 0) {
             try {
-                const telefoneLimpo = telefone.toString().replace(/\D/g, '');
                 const responseEtapas2 = await fetch(`/api/etapas/cliente/${telefoneLimpo}`);
-                
                 if (responseEtapas2.ok) {
                     const dataEtapas2 = await responseEtapas2.json();
                     if (!dataEtapas2.erro && dataEtapas2.historico) {
@@ -1272,7 +1438,6 @@ async function abrirHistoricoFinalizado(telefone) {
             }
         }
         
-        // Montar a mensagem com histórico completo
         let msg = '📜 HISTÓRICO COMPLETO DO PROCESSO\n\n';
         msg += `📱 Cliente: ${cliente.nome || 'N/A'}\n`;
         msg += `📋 Serviço: ${cliente.servico || 'Visto Americano'}\n`;
@@ -1287,7 +1452,6 @@ async function abrirHistoricoFinalizado(telefone) {
             msg += `• Início: ${cliente.data_inicio ? new Date(cliente.data_inicio).toLocaleString('pt-BR') : 'N/A'}\n`;
             msg += `• Finalização: ${new Date(cliente.data_finalizacao).toLocaleString('pt-BR')}\n`;
         } else {
-            // Mostrar cada etapa do histórico
             historico.forEach((item, index) => {
                 const etapaInfo = ETAPAS_CONFIG[item.etapa] || { label: item.etapa || 'Etapa desconhecida' };
                 const dataFormatada = item.data ? new Date(item.data).toLocaleString('pt-BR') : 'Data não registrada';
@@ -1300,7 +1464,6 @@ async function abrirHistoricoFinalizado(telefone) {
                 msg += `\n`;
             });
             
-            // Mostrar etapa atual (se houver)
             if (etapaAtual) {
                 const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual };
                 msg += `✅ Etapa final: ${etapaInfo.label || etapaAtual}\n`;
@@ -1310,21 +1473,15 @@ async function abrirHistoricoFinalizado(telefone) {
         msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         msg += `📌 Cliente movido para finalizados em ${new Date(cliente.created_at || cliente.data_finalizacao).toLocaleString('pt-BR')}`;
         
-        // Exibir em um alert com quebras de linha
         alert(msg);
-        
     } catch (error) {
         console.error('❌ Erro ao buscar histórico:', error);
         showToast(`❌ Erro: ${error.message}`, 'error');
     }
 }
 
-///============================================================
+// ============================================================
 //  REABRIR PROCESSO (VOLTAR PARA ATIVOS)
-// ============================================================
-
-// ============================================================
-//  REABRIR PROCESSO (VOLTAR PARA ATIVOS) - VERSÃO CORRIGIDA
 // ============================================================
 
 async function reabrirProcesso(telefone) {
@@ -1335,21 +1492,15 @@ async function reabrirProcesso(telefone) {
     try {
         showToast('⏳ Reabrindo processo...', 'info');
         
-        // Limpa o telefone para enviar apenas números
-        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        const telefoneLimpo = normalizarTelefone(telefone);
         console.log('📌 Reabrindo telefone:', telefoneLimpo);
         
         const response = await fetch('/api/clientes/reabrir', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                telefone: telefoneLimpo 
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone: telefoneLimpo })
         });
         
-        // Verifica se a resposta é JSON
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             const text = await response.text();
@@ -1361,13 +1512,11 @@ async function reabrirProcesso(telefone) {
         
         if (data.success) {
             showToast(`✅ Processo reaberto com sucesso!`, 'success');
-            // Recarregar ambas as abas
             await carregarFinalizados();
             await carregarDados();
         } else {
             showToast(`❌ Erro: ${data.error || 'Erro desconhecido'}`, 'error');
         }
-        
     } catch (error) {
         console.error('❌ Erro ao reabrir:', error);
         showToast(`❌ Erro: ${error.message}`, 'error');
@@ -1375,38 +1524,16 @@ async function reabrirProcesso(telefone) {
 }
 
 // ============================================================
-//  ATUALIZAR O mudarAba() PARA INCLUIR FINALIZADOS
-// ============================================================
-
-// Substitua a função mudarAba existente por esta versão atualizada:
-function mudarAba(aba) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-    
-    const tabContent = document.getElementById(`tab-${aba}`);
-    if (tabContent) tabContent.classList.add('active');
-    
-    const tabBtn = document.querySelector(`.tab-btn[data-tab="${aba}"]`);
-    if (tabBtn) tabBtn.classList.add('active');
-    
-    // Carregar dados conforme a aba
-    if (aba === 'pendentes') renderPendentes();
-    else if (aba === 'ativos') renderAtivos();
-    else if (aba === 'amigos') renderAmigos();
-    else if (aba === 'etapas') carregarClientesParaTimeline();
-    else if (aba === 'dashboard') carregarDashboard();
-    else if (aba === 'finalizados') carregarFinalizados();
-}
-
-// ============================================================
 //  MOVER PARA AMIGO (DIRETO DE ATIVOS)
 // ============================================================
 async function moverParaAmigo(telefone) {
-    if (!confirm(`Mover ${telefone} para AMIGO? (Não receberá mais mensagens do bot)`)) return;
+    const telefoneLimpo = validarTelefone(telefone);
+    if (!telefoneLimpo) return;
+    
+    if (!confirm(`Mover ${formatarTelefone(telefoneLimpo)} para AMIGO? (Não receberá mais mensagens do bot)`)) return;
     
     try {
-        // 1. Buscar dados do cliente em ativos
-        const response = await fetch(`/api/clientes/buscar/${telefone}`);
+        const response = await fetch(`/api/clientes/buscar/${telefoneLimpo}`);
         const data = await response.json();
         
         if (!data.success) {
@@ -1416,26 +1543,23 @@ async function moverParaAmigo(telefone) {
         
         const cliente = data.cliente;
         
-        // 2. Inserir em contatos_amigos
         await fetch('/api/contatos/mover-para-amigo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                telefone: cliente.telefone,
+                telefone: telefoneLimpo,
                 nome: cliente.nome
             })
         });
         
-        // 3. Remover de clientes_ativos
         await fetch('/api/contatos/remover-ativo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefone: cliente.telefone })
+            body: JSON.stringify({ telefone: telefoneLimpo })
         });
         
-        showToast(`✅ ${telefone} movido para AMIGO!`, 'success');
-        carregarDados(); // Recarregar a tabela
-        
+        showToast(`✅ ${formatarTelefone(telefoneLimpo)} movido para AMIGO!`, 'success');
+        carregarDados();
     } catch (error) {
         showToast(`❌ Erro: ${error.message}`, 'error');
     }
@@ -1453,8 +1577,9 @@ async function carregarClientesParaTimeline() {
         if (data.success && data.ativos && data.ativos.length > 0) {
             data.ativos.forEach(cliente => {
                 const option = document.createElement('option');
-                option.value = cliente.telefone;
-                option.textContent = `${cliente.nome || 'Sem nome'} (${cliente.telefone})`;
+                const telefoneLimpo = normalizarTelefone(cliente.telefone);
+                option.value = telefoneLimpo;
+                option.textContent = `${cliente.nome || 'Sem nome'} (${formatarTelefone(cliente.telefone)})`;
                 select.appendChild(option);
             });
             document.getElementById('timeline-container').innerHTML = `
@@ -1486,17 +1611,19 @@ async function carregarTimelinePorSelect() {
 }
 
 async function verTimelineCliente(telefone) {
+    const telefoneLimpo = normalizarTelefone(telefone);
     mudarAba('etapas');
-    document.getElementById('select-cliente-etapa').value = telefone;
-    await carregarTimeline(telefone);
+    document.getElementById('select-cliente-etapa').value = telefoneLimpo;
+    await carregarTimeline(telefoneLimpo);
 }
 
 async function carregarTimeline(telefone) {
     try {
-        const response = await fetch(`/api/etapas/cliente/${telefone}`);
+        const telefoneLimpo = normalizarTelefone(telefone);
+        const response = await fetch(`/api/etapas/cliente/${telefoneLimpo}`);
         const data = await response.json();
         if (data.erro) { showToast('Erro: ' + data.erro, 'error'); return; }
-        clienteSelecionadoTimeline = telefone;
+        clienteSelecionadoTimeline = telefoneLimpo;
         renderizarTimeline(data);
         document.getElementById('timeline-actions').style.display = 'block';
     } catch (error) {
@@ -1510,7 +1637,6 @@ function renderizarTimeline(data) {
     const etapaAtual = data.etapa_atual;
     const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
     
-    // 🔥 FUNÇÕES QUE USAM O HISTÓRICO
     const isEtapaConcluida = (etapa) => {
         if (!data.historico) return false;
         return data.historico.some(item => item.etapa === etapa);
@@ -1530,10 +1656,9 @@ function renderizarTimeline(data) {
     
     let nomeCliente = 'Cliente';
     const allClientes = [...dadosCompletos.ativos, ...dadosCompletos.pendentes];
-    const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
+    const cliente = allClientes.find(c => normalizarTelefone(c.telefone) === clienteSelecionadoTimeline);
     if (cliente) nomeCliente = cliente.nome || 'Cliente';
     
-    // Verificar se é uma etapa final (aprovado/recusado)
     const isFinalizada = ['passaporte_retornado', 'visto_recusado'].includes(etapaAtual);
     
     let html = `
@@ -1545,16 +1670,13 @@ function renderizarTimeline(data) {
         <div class="timeline">
     `;
     
-    // Mostrar etapas normais (até entrevista)
     ETAPAS_ORDEM.forEach((etapa, index) => {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
         
-        // 🔥 USA O HISTÓRICO PARA VERIFICAR
         const isConcluida = isEtapaConcluida(etapa);
         const dataValue = getDataEtapa(etapa);
         const notaValue = getNotaEtapa(etapa);
         
-        // Verifica se é a etapa atual (não concluída e não finalizada)
         const isAtual = (etapa === etapaAtual) && !isConcluida && !isFinalizada;
         const isPendente = !isConcluida && !isAtual && !isFinalizada;
         
@@ -1593,7 +1715,6 @@ function renderizarTimeline(data) {
         `;
     });
     
-    // Se o processo já foi finalizado, mostrar a etapa final
     if (isFinalizada) {
         const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual, color: '#6c757d' };
         const dataValue = getDataEtapa(etapaAtual);
@@ -1621,14 +1742,12 @@ function renderizarTimeline(data) {
     html += '</div>';
     container.innerHTML = html;
     
-    // Mostrar/Esconder botões de decisão
     const isEntrevista = etapaAtual === 'entrevista_realizada' && !isFinalizada;
     const decisaoContainer = document.getElementById('decisao-container');
     if (decisaoContainer) {
         decisaoContainer.style.display = isEntrevista ? 'block' : 'none';
     }
     
-    // Atualizar botão de avanço
     const btnAvancar = document.querySelector('#timeline-actions .btn-success');
     if (btnAvancar) {
         if (isFinalizada) {
@@ -1653,9 +1772,11 @@ async function finalizarProcesso(etapaFinal) {
         return;
     }
     
+    const telefoneLimpo = validarTelefone(clienteSelecionadoTimeline);
+    if (!telefoneLimpo) return;
+    
     const nomeEtapa = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
     
-    // Se for aprovação, perguntar se o passaporte já chegou
     if (etapaFinal === 'passaporte_retornado') {
         const passaporteChegou = confirm(
             '✅ O passaporte do cliente JÁ CHEGOU?\n\n' +
@@ -1668,7 +1789,7 @@ async function finalizarProcesso(etapaFinal) {
         }
     }
     
-    if (!confirm(`Tem certeza que deseja finalizar o processo com "${ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal}"?`)) {
+    if (!confirm(`Tem certeza que deseja finalizar o processo de ${formatarTelefone(telefoneLimpo)} com "${ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal}"?`)) {
         return;
     }
     
@@ -1682,7 +1803,7 @@ async function finalizarProcesso(etapaFinal) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                telefone: clienteSelecionadoTimeline,
+                telefone: telefoneLimpo,
                 etapa_final: etapaFinal,
                 nota: nota || 'Processo finalizado'
             })
@@ -1694,14 +1815,11 @@ async function finalizarProcesso(etapaFinal) {
             const nomeEtapaFinal = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
             showToast(`✅ Processo finalizado: ${nomeEtapaFinal}`, 'success');
             
-            // Limpar campo de nota
             if (notaInput) notaInput.value = '';
             
-            // Recarregar timeline
-            await carregarTimeline(clienteSelecionadoTimeline);
+            await carregarTimeline(telefoneLimpo);
             await carregarDados();
             
-            // Esconder container de decisão
             const decisaoContainer = document.getElementById('decisao-container');
             if (decisaoContainer) {
                 decisaoContainer.style.display = 'none';
@@ -1715,14 +1833,17 @@ async function finalizarProcesso(etapaFinal) {
     }
 }
 
-
+// ============================================================
+//  AVANÇAR ETAPA
+// ============================================================
 async function avancarEtapa() {
-    alert('TESTE: função avancarEtapa do backend foi chamada');
-
     if (!clienteSelecionadoTimeline) {
         showToast('Selecione um cliente primeiro!', 'info');
         return;
     }
+
+    const telefoneLimpo = validarTelefone(clienteSelecionadoTimeline);
+    if (!telefoneLimpo) return;
 
     if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) {
         return;
@@ -1732,79 +1853,63 @@ async function avancarEtapa() {
     const nota = campoNota ? campoNota.value.trim() : '';
 
     try {
-        console.log('📤 Enviando avanço para o backend:', {
-            telefone: clienteSelecionadoTimeline,
-            nota: nota
-        });
-
         const response = await fetch('/api/etapas/avancar', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                telefone: clienteSelecionadoTimeline,
+                telefone: telefoneLimpo,
                 nota: nota || 'Avanço manual pelo painel',
                 observacao: 'Cliente avançado pelo painel administrativo'
             })
         });
 
         const responseText = await response.text();
-
-        console.log('📥 Status da resposta:', response.status);
-        console.log('📥 Resposta bruta:', responseText);
-
         let data;
 
         try {
             data = JSON.parse(responseText);
         } catch (erroJson) {
-            throw new Error(
-                'O servidor retornou uma resposta inválida: ' + responseText
-            );
+            throw new Error('O servidor retornou uma resposta inválida: ' + responseText);
         }
 
         if (!response.ok || !data.sucesso) {
-            throw new Error(
-                data.erro ||
-                data.detalhe ||
-                'Erro desconhecido ao avançar etapa'
-            );
+            throw new Error(data.erro || data.detalhe || 'Erro desconhecido ao avançar etapa');
         }
 
-        console.log('✅ Cliente avançou pelo backend:', data);
+        showToast('✅ Cliente avançou para: ' + data.etapa_atual, 'success');
 
-        showToast(
-            '✅ Cliente avançou para: ' + data.etapa_atual,
-            'success'
-        );
+        if (campoNota) campoNota.value = '';
 
-        if (campoNota) {
-            campoNota.value = '';
-        }
-
-        await carregarTimeline(clienteSelecionadoTimeline);
+        await carregarTimeline(telefoneLimpo);
         await carregarDados();
 
     } catch (error) {
         console.error('❌ Erro ao avançar etapa:', error);
-
-        showToast(
-            '❌ Erro ao avançar etapa: ' + error.message,
-            'error'
-        );
+        showToast('❌ Erro ao avançar etapa: ' + error.message, 'error');
     }
 }
 
+// ============================================================
+//  VER HISTÓRICO
+// ============================================================
 async function verHistorico() {
-    if (!clienteSelecionadoTimeline) { showToast('Selecione um cliente primeiro!', 'info'); return; }
+    if (!clienteSelecionadoTimeline) { 
+        showToast('Selecione um cliente primeiro!', 'info'); 
+        return; 
+    }
     try {
-        const response = await fetch(`/api/etapas/historico/${clienteSelecionadoTimeline}`);
+        const telefoneLimpo = normalizarTelefone(clienteSelecionadoTimeline);
+        const response = await fetch(`/api/etapas/historico/${telefoneLimpo}`);
         const data = await response.json();
-        if (data.erro) { showToast('Erro: ' + data.erro, 'error'); return; }
+        if (data.erro) { 
+            showToast('Erro: ' + data.erro, 'error'); 
+            return; 
+        }
         let msg = '📜 HISTÓRICO DO PROCESSO\n\n';
         const historico = data.historico || [];
-        if (historico.length === 0) { msg += 'Nenhum histórico registrado'; } else {
+        if (historico.length === 0) { 
+            msg += 'Nenhum histórico registrado'; 
+        } else {
             historico.forEach((item, index) => {
                 const etapaInfo = ETAPAS_CONFIG[item.etapa] || { label: item.etapa };
                 const dataFormatada = new Date(item.data).toLocaleString('pt-BR');
@@ -1831,17 +1936,21 @@ function fecharTimeline() {
 //  AÇÕES DOS CLIENTES
 // ============================================================
 async function moverCliente(telefone, destino) {
+    const telefoneLimpo = validarTelefone(telefone);
+    if (!telefoneLimpo) return;
+    
     const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
-    if (!confirm(`Mover ${telefone} para ${destinoNome}?`)) return;
+    if (!confirm(`Mover ${formatarTelefone(telefoneLimpo)} para ${destinoNome}?`)) return;
+    
     try {
         const response = await fetch('/api/painel/mover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefone, destino })
+            body: JSON.stringify({ telefone: telefoneLimpo, destino })
         });
         const result = await response.json();
         if (result.success) {
-            showToast(`✅ ${telefone} movido para ${destinoNome}!`, 'success');
+            showToast(`✅ ${formatarTelefone(telefoneLimpo)} movido para ${destinoNome}!`, 'success');
             await carregarDados();
         } else {
             showToast(`❌ ${result.message}`, 'error');
@@ -1852,17 +1961,26 @@ async function moverCliente(telefone, destino) {
 }
 
 async function finalizarCliente(telefone) {
-    if (!confirm(`Finalizar processo de ${telefone}?`)) return;
+    const telefoneLimpo = validarTelefone(telefone);
+    if (!telefoneLimpo) return;
+    
+    if (!confirm(`Finalizar processo de ${formatarTelefone(telefoneLimpo)}?`)) return;
     showToast(`✅ Cliente finalizado!`, 'success');
     await carregarDados();
 }
 
 async function moverSelecionados(destino) {
     const selecionados = document.querySelectorAll('.selecionar-item:checked');
-    if (selecionados.length === 0) { showToast('⚠️ Selecione pelo menos um contato', 'info'); return; }
+    if (selecionados.length === 0) { 
+        showToast('⚠️ Selecione pelo menos um contato', 'info'); 
+        return; 
+    }
+    
     const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
     if (!confirm(`Mover ${selecionados.length} contato(s) para ${destinoNome}?`)) return;
-    const telefones = Array.from(selecionados).map(el => el.dataset.telefone);
+    
+    const telefones = Array.from(selecionados).map(el => normalizarTelefone(el.dataset.telefone));
+    
     try {
         const response = await fetch('/api/painel/mover-varios', {
             method: 'POST',
@@ -1906,9 +2024,7 @@ async function carregarDashboard() {
         const response = await fetch('/api/dashboard/estatisticas');
         const data = await response.json();
         
-        if (!data.success) {
-            throw new Error(data.message || 'Erro ao carregar dashboard');
-        }
+        if (!data.success) throw new Error(data.message || 'Erro ao carregar dashboard');
         
         document.getElementById('dash-total-clientes').textContent = data.estatisticas.total_clientes || 0;
         document.getElementById('dash-processos-ativos').textContent = data.estatisticas.total_ativos || 0;
@@ -1919,7 +2035,6 @@ async function carregarDashboard() {
         renderGraficoAgendamentos(data.estatisticas.agendamentos_por_status);
         
         await carregarProximosAgendamentos();
-        
     } catch (error) {
         console.error('❌ Erro ao carregar dashboard:', error);
         document.getElementById('dash-proximos-agendamentos').innerHTML = 
