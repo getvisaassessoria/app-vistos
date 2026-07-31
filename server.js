@@ -2365,39 +2365,31 @@ app.use((err, req, res, next) => {
 // WEBHOOK CORRIGIDO - USA A FUNÇÃO buscarClienteEmQualquerTabela
 // ============================================================
 
-app.post('/api/webhook/zapi', function(req, res) {
-    console.log('📨 WEBHOOK Z-API RECEBIDO');
-    console.log('Body:', JSON.stringify(req.body, null, 2));
+// ============================================================
+// WEBHOOK SIMPLIFICADO - VERSÃO DE TESTE
+// ============================================================
 
+app.post('/api/webhook/zapi', function(req, res) {
+    console.log('📨 WEBHOOK Z-API RECEBIDO (SIMPLIFICADO)');
+    console.log('📨 Body:', JSON.stringify(req.body, null, 2));
+
+    // Responde imediatamente
     res.status(200).json({
         status: 'ok',
         received: true,
         timestamp: new Date().toISOString()
     });
 
+    // Processamento em background
     (async function() {
         try {
             var body = req.body;
-
-            if (body.isGroup === true || body.isGroupMsg === true || 
-                (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
-                console.log('👥 Mensagem de grupo ignorada');
-                return;
-            }
             
-            if (body.fromMe === true) {
-                console.log('🤖 Mensagem do próprio bot ignorada');
-                return;
-            }
-            
-            if (body.isStatusReply === true || body.waitingMessage === true) {
-                console.log('📊 Mensagem de status/waiting ignorada');
-                return;
-            }
-
+            // Extrair dados básicos
             var messageText = '';
             var senderPhone = '';
-
+            
+            // Tentar extrair a mensagem
             if (body.text) {
                 if (typeof body.text === 'string') messageText = body.text;
                 else if (body.text.message) messageText = body.text.message;
@@ -2414,116 +2406,54 @@ app.post('/api/webhook/zapi', function(req, res) {
             if (!messageText && body.content) messageText = body.content;
             if (!messageText && body.body) messageText = body.body;
             if (!messageText && body.conversation) messageText = body.conversation;
-
+            
+            // Extrair o telefone
             if (body.phone) senderPhone = body.phone;
             else if (body.from) senderPhone = body.from;
             else if (body.sender) senderPhone = body.sender;
             else if (body.wa_id) senderPhone = body.wa_id;
             else if (body.chatId) senderPhone = body.chatId;
             else if (body.author) senderPhone = body.author;
-
-            console.log('📝 Mensagem bruta: "' + messageText + '"');
-            console.log('📱 Telefone bruto: "' + senderPhone + '"');
-
+            
+            console.log('📝 Mensagem extraída: "' + messageText + '"');
+            console.log('📱 Telefone extraído: "' + senderPhone + '"');
+            
+            // Verificar se tem dados suficientes
             if (!senderPhone || !messageText || messageText.trim().length === 0) {
-                console.log('❌ Dados inválidos - ignorando');
+                console.log('❌ Dados insuficientes - ignorando');
                 return;
             }
-
-            messageText = messageText.trim();
-
+            
+            // Limpar telefone
             var cleanPhone = senderPhone.toString().replace(/\D/g, '');
             if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
-            if (cleanPhone.length < 10) {
-                console.log('❌ Telefone inválido (' + cleanPhone + ')');
-                await sendReply(senderPhone, 'Desculpe, não conseguimos identificar seu número. Tente novamente.');
-                return;
-            }
-
+            
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
             
             // ============================================================
-            // VERIFICAÇÕES DE CLIENTE - USA A FUNÇÃO CORRETA
+            // ENVIAR UMA RESPOSTA DE TESTE
             // ============================================================
+            const respostaTeste = `🤖 TESTE DE CONEXÃO\n\n` +
+                                 `✅ Webhook funcionando!\n` +
+                                 `📱 Seu telefone: ${cleanPhone}\n` +
+                                 `💬 Sua mensagem: "${messageText}"\n\n` +
+                                 `🌐 GetVisa Assessoria\n` +
+                                 `📱 WhatsApp: https://wa.me/5521974601812`;
             
-            console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
-            console.log('📱 Telefone:', cleanPhone);
-
-            // 1. VERIFICAR AMIGO
-            console.log('🔍 Verificando AMIGO...');
-            var { data: amigo, error: amigoError } = await supabase
-                .from('contatos_amigos')
-                .select('*')
-                .eq('telefone', cleanPhone)
-                .maybeSingle();
-
-            if (amigoError) console.log('Erro ao buscar amigo:', amigoError);
-            console.log('📌 Resultado AMIGO:', amigo ? '✅ ENCONTRADO' : '❌ NÃO ENCONTRADO');
-
-            if (amigo) {
-                console.log('👤 Contato AMIGO - SILÊNCIO TOTAL');
-                return;
-            }
-
-            // 2. VERIFICAR FINALIZADO - usa buscarClienteEmQualquerTabela
-            console.log('🔍 Verificando FINALIZADO...');
-            const finalizado = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_finalizados');
+            console.log('📨 Enviando resposta de teste para:', cleanPhone);
+            const enviado = await enviarWhatsApp(cleanPhone, respostaTeste);
             
-            if (finalizado) {
-                console.log('✅ Cliente FINALIZADO encontrado:', finalizado.nome);
-                await processarClienteFinalizado(cleanPhone, messageText, finalizado);
-                return;
-            }
-
-            // 3. VERIFICAR ATIVO - usa buscarClienteEmQualquerTabela
-            console.log('🔍 Verificando ATIVO...');
-            const ativo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_ativos');
-            
-            if (ativo) {
-                console.log('🔄 Cliente ATIVO encontrado:', ativo.nome);
-                await processarClienteAtivo(cleanPhone, messageText, ativo);
-                return;
-            }
-
-            // 4. VERIFICAR NOVO - usa buscarClienteEmQualquerTabela
-            console.log('🔍 Verificando NOVO...');
-            const novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-            
-            if (novo) {
-                console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
-                await processarMensagem(cleanPhone, messageText, body);
-                return;
-            }
-
-            // 5. CRIA NOVO CLIENTE
-            console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
-            var resultado = await cadastrarCliente(cleanPhone, null);
-            if (!resultado) {
-                console.error('❌ Falha ao cadastrar cliente');
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                return;
+            if (enviado) {
+                console.log('✅ Mensagem de teste enviada com sucesso!');
+            } else {
+                console.error('❌ Falha ao enviar mensagem de teste');
             }
             
-            console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
-            await processarMensagem(cleanPhone, messageText, body);
-
         } catch (error) {
             console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
-            console.error('Mensagem:', error.message);
-            console.error('Stack:', error.stack);
-            
-            try {
-                var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
-                if (phone) {
-                    var cleanPhone = phone.toString().replace(/\D/g, '');
-                    if (cleanPhone.length >= 10) {
-                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
-                    }
-                }
-            } catch (e) {
-                console.error('Falha ao enviar mensagem de erro:', e);
-            }
+            console.error(error.message);
+            console.error(error.stack);
         }
     })();
 });
