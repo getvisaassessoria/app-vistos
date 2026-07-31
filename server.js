@@ -3999,6 +3999,133 @@ app.post('/api/painel/mover-com-notificacao', async function(req, res) {
     }
 });
 
+
+// ============================================================
+// ROTA PARA REGERAR PDF DS-160 A PARTIR DOS DADOS SALVOS
+// ============================================================
+
+app.post('/api/admin/regenerar-pdf', async function(req, res) {
+    try {
+        const adminKey = req.headers['x-admin-key'];
+        if (adminKey !== ADMIN_API_KEY) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { telefone, email, enviar_whatsapp } = req.body;
+
+        if (!telefone) {
+            return res.status(400).json({ error: 'Telefone é obrigatório' });
+        }
+
+        console.log(`📌 Regenerando PDF para telefone: ${telefone}`);
+
+        const telefoneLimpo = limparTelefone(telefone);
+        
+        // Buscar o cliente em clientes_ativos
+        const { data: cliente, error } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+
+        if (error) {
+            console.error('❌ Erro ao buscar cliente:', error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        if (!cliente) {
+            return res.status(404).json({ error: 'Cliente não encontrado em clientes_ativos' });
+        }
+
+        // Aqui você precisa ter os dados completos do formulário
+        // Se você salvou os dados em uma tabela específica, busque lá
+        // Vou assumir que você salvou em uma tabela 'formularios_ds160'
+        const { data: formulario, error: formError } = await supabase
+            .from('formularios_ds160')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+
+        if (formError) {
+            console.error('❌ Erro ao buscar formulário:', formError);
+            // Se não tiver tabela específica, usar os dados do cliente
+            // const dadosFormulario = cliente;
+        }
+
+        if (!formulario) {
+            return res.status(404).json({ 
+                error: 'Dados do formulário não encontrados. O cliente pode ter preenchido antes de salvarmos os dados completos.' 
+            });
+        }
+
+        // Regenerar o PDF com os dados completos
+        const pdfBuffer = await gerarPDF_DS160(formulario);
+        console.log(`📄 PDF regenerado para ${cliente.nome}, tamanho: ${pdfBuffer.length} bytes`);
+
+        // Enviar por e-mail se solicitado
+        if (email) {
+            await resend.emails.send({
+                from: 'GetVisa <contato@getvisa.com.br>',
+                to: [email],
+                subject: 'PDF Regenerado - DS-160 ' + cliente.nome,
+                html: '<strong>Olá!</strong><br><p>Segue o PDF regenerado com os dados completos do formulário DS-160.</p>',
+                attachments: [{ 
+                    filename: 'DS160_' + cliente.nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', 
+                    content: pdfBuffer.toString('base64') 
+                }]
+            });
+            console.log('📧 PDF enviado por e-mail para:', email);
+        }
+
+        // Enviar por WhatsApp se solicitado
+        if (enviar_whatsapp) {
+            try {
+                const nomeCliente = cliente.nome.split(' ')[0];
+                await enviarPDFWhatsApp(telefoneLimpo, pdfBuffer, nomeCliente);
+                console.log('📱 PDF enviado por WhatsApp para:', telefoneLimpo);
+            } catch (err) {
+                console.error('❌ Erro ao enviar PDF por WhatsApp:', err);
+            }
+        }
+
+        // Salvar o PDF em algum lugar (opcional)
+        const fs = require('fs');
+        const path = require('path');
+        const pastaPDFs = path.join(__dirname, 'pdfs_regenerados');
+        
+        if (!fs.existsSync(pastaPDFs)) {
+            fs.mkdirSync(pastaPDFs, { recursive: true });
+        }
+
+        const nomeArquivo = `DS160_${cliente.nome.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+        const caminhoArquivo = path.join(pastaPDFs, nomeArquivo);
+        fs.writeFileSync(caminhoArquivo, pdfBuffer);
+
+        console.log(`💾 PDF salvo em: ${caminhoArquivo}`);
+
+        res.json({
+            success: true,
+            message: 'PDF regenerado com sucesso!',
+            cliente: {
+                nome: cliente.nome,
+                telefone: cliente.telefone
+            },
+            pdf_gerado: true,
+            email_enviado: !!email,
+            whatsapp_enviado: !!enviar_whatsapp,
+            arquivo_salvo: caminhoArquivo
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao regenerar PDF:', error);
+        res.status(500).json({ 
+            error: 'Erro ao regenerar PDF', 
+            detalhe: error.message 
+        });
+    }
+});
+
+
 // ============================================================
 // ROTA PARA BUSCAR DADOS DO FORMULÁRIO
 // ============================================================
