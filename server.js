@@ -3083,52 +3083,73 @@ app.post('/api/etapas/avancar', async function(req, res) {
         var nota = req.body.nota;
         var observacao = req.body.observacao;
         
+        // ============================================================
+        // LIMPA E FORMATADA O TELEFONE PARA BUSCA
+        // ============================================================
         var telefoneLimpo = telefone.replace(/\D/g, '');
         var telefoneFormatado = formatarTelefone(telefoneLimpo);
-
-        console.log('Avançando etapa para: ' + telefoneFormatado);
+        
+        console.log('📱 Telefone original:', telefone);
+        console.log('📱 Telefone limpo:', telefoneLimpo);
+        console.log('📱 Telefone formatado:', telefoneFormatado);
 
         if (!FEATURES.SISTEMA_ETAPAS.ativo) {
             return res.status(503).json({ erro: 'Sistema de etapas esta temporariamente desativado' });
         }
 
+        // ============================================================
+        // BUSCA ETAPA - TENTA FORMATADO E DEPOIS LIMPO
+        // ============================================================
         var etapaAtual = await supabase
             .from('etapas_processo')
             .select('*')
             .eq('cliente_telefone', telefoneFormatado)
             .maybeSingle();
 
+        // Se não encontrou com formato, tenta com limpo
         if (!etapaAtual.data) {
-            var etapaLimpo = await supabase
+            console.log('🔍 Tentando buscar com telefone limpo:', telefoneLimpo);
+            etapaAtual = await supabase
                 .from('etapas_processo')
                 .select('*')
                 .eq('cliente_telefone', telefoneLimpo)
                 .maybeSingle();
-
-            if (etapaLimpo.data) {
-                await supabase
-                    .from('etapas_processo')
-                    .update({ cliente_telefone: telefoneFormatado })
-                    .eq('cliente_telefone', telefoneLimpo);
-
-                var etapaCorrigida = await supabase
-                    .from('etapas_processo')
-                    .select('*')
-                    .eq('cliente_telefone', telefoneFormatado)
-                    .maybeSingle();
-
-                if (etapaCorrigida.data) {
-                    return processarAvanco(res, etapaCorrigida.data, nota, observacao, telefoneFormatado);
-                }
-            }
-
-            return res.status(404).json({ erro: 'Cliente nao encontrado em etapas_processo' });
         }
 
+        // Se ainda não encontrou, tenta com o original
+        if (!etapaAtual.data) {
+            console.log('🔍 Tentando buscar com telefone original:', telefone);
+            etapaAtual = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefone)
+                .maybeSingle();
+        }
+
+        if (!etapaAtual.data) {
+            console.error('❌ Cliente não encontrado em etapas_processo para:', {
+                original: telefone,
+                limpo: telefoneLimpo,
+                formatado: telefoneFormatado
+            });
+            return res.status(404).json({ 
+                erro: 'Cliente não encontrado em etapas_processo',
+                telefone_buscado: telefone,
+                telefone_limpo: telefoneLimpo,
+                telefone_formatado: telefoneFormatado
+            });
+        }
+
+        console.log('✅ Etapa encontrada:', etapaAtual.data);
+
         return processarAvanco(res, etapaAtual.data, nota, observacao, telefoneFormatado);
+        
     } catch (error) {
-        console.error('Erro ao avançar etapa:', error);
-        res.status(500).json({ erro: 'Erro ao avançar etapa', detalhe: error.message });
+        console.error('❌ Erro ao avançar etapa:', error);
+        res.status(500).json({ 
+            erro: 'Erro ao avançar etapa', 
+            detalhe: error.message 
+        });
     }
 });
 
