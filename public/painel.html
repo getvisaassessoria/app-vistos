@@ -1933,8 +1933,9 @@ function fecharTimeline() {
 }
 
 // ============================================================
-//  AÇÕES DOS CLIENTES
+//  FUNÇÃO MOVER CLIENTE - COM NOTIFICAÇÃO
 // ============================================================
+
 async function moverCliente(telefone, destino) {
     const telefoneLimpo = validarTelefone(telefone);
     if (!telefoneLimpo) return;
@@ -1949,13 +1950,264 @@ async function moverCliente(telefone, destino) {
             body: JSON.stringify({ telefone: telefoneLimpo, destino })
         });
         const result = await response.json();
+        
         if (result.success) {
             showToast(`✅ ${formatarTelefone(telefoneLimpo)} movido para ${destinoNome}!`, 'success');
+            
+            // 🔥 ENVIA NOTIFICAÇÃO
+            if (destino === 'ativo') {
+                await enviarNotificacaoWhatsApp(
+                    telefoneLimpo,
+                    null,
+                    'mover_ativo'
+                );
+            } else {
+                await enviarNotificacaoWhatsApp(
+                    telefoneLimpo,
+                    null,
+                    'mover_amigo'
+                );
+            }
+            
             await carregarDados();
         } else {
             showToast(`❌ ${result.message}`, 'error');
         }
     } catch (error) {
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================
+//  FUNÇÃO AVANÇAR ETAPA - COM NOTIFICAÇÃO
+// ============================================================
+
+async function avancarEtapa() {
+    if (!clienteSelecionadoTimeline) {
+        showToast('Selecione um cliente primeiro!', 'info');
+        return;
+    }
+
+    const telefoneLimpo = validarTelefone(clienteSelecionadoTimeline);
+    if (!telefoneLimpo) return;
+
+    if (!confirm('Tem certeza que deseja avançar este cliente para a próxima etapa?')) {
+        return;
+    }
+
+    const campoNota = document.getElementById('nota-avancar');
+    const nota = campoNota ? campoNota.value.trim() : '';
+
+    try {
+        const response = await fetch('/api/etapas/avancar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telefone: telefoneLimpo,
+                nota: nota || 'Avanço manual pelo painel',
+                observacao: 'Cliente avançado pelo painel administrativo'
+            })
+        });
+
+        const responseText = await response.text();
+        let data;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (erroJson) {
+            throw new Error('O servidor retornou uma resposta inválida: ' + responseText);
+        }
+
+        if (!response.ok || !data.sucesso) {
+            throw new Error(data.erro || data.detalhe || 'Erro desconhecido ao avançar etapa');
+        }
+
+        showToast('✅ Cliente avançou para: ' + data.etapa_atual, 'success');
+
+        // 🔥 ENVIA NOTIFICAÇÃO
+        await enviarNotificacaoWhatsApp(
+            telefoneLimpo,
+            `✅ Seu processo foi atualizado para a etapa: ${ETAPAS_CONFIG[data.etapa_atual]?.label || data.etapa_atual}`,
+            'avancar_etapa'
+        );
+
+        if (campoNota) campoNota.value = '';
+
+        await carregarTimeline(telefoneLimpo);
+        await carregarDados();
+
+    } catch (error) {
+        console.error('❌ Erro ao avançar etapa:', error);
+        showToast('❌ Erro ao avançar etapa: ' + error.message, 'error');
+    }
+}
+
+// ============================================================
+//  FUNÇÃO FINALIZAR PROCESSO - COM NOTIFICAÇÃO
+// ============================================================
+
+async function finalizarProcesso(etapaFinal) {
+    if (!clienteSelecionadoTimeline) {
+        showToast('Selecione um cliente primeiro!', 'info');
+        return;
+    }
+    
+    const telefoneLimpo = validarTelefone(clienteSelecionadoTimeline);
+    if (!telefoneLimpo) return;
+    
+    const nomeEtapa = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
+    
+    if (etapaFinal === 'passaporte_retornado') {
+        const passaporteChegou = confirm(
+            '✅ O passaporte do cliente JÁ CHEGOU?\n\n' +
+            'Clique em "OK" se já chegou (vai para Passaporte Retornado)\n' +
+            'Clique em "Cancelar" se ainda não chegou (vai para Aguardando Passaporte)'
+        );
+        
+        if (!passaporteChegou) {
+            etapaFinal = 'aguardando_passaporte';
+        }
+    }
+    
+    if (!confirm(`Tem certeza que deseja finalizar o processo de ${formatarTelefone(telefoneLimpo)} com "${ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal}"?`)) {
+        return;
+    }
+    
+    const notaInput = document.getElementById('nota-finalizacao');
+    const nota = notaInput ? notaInput.value : 'Processo finalizado';
+    
+    try {
+        showToast('⏳ Processando...', 'info');
+        
+        const response = await fetch('/api/etapas/finalizar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telefone: telefoneLimpo,
+                etapa_final: etapaFinal,
+                nota: nota || 'Processo finalizado'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.sucesso) {
+            const nomeEtapaFinal = ETAPAS_CONFIG[etapaFinal]?.label || etapaFinal;
+            showToast(`✅ Processo finalizado: ${nomeEtapaFinal}`, 'success');
+            
+            // 🔥 ENVIA NOTIFICAÇÃO
+            const tipoNotificacao = etapaFinal === 'passaporte_retornado' 
+                ? 'finalizar_aprovado' 
+                : 'finalizar_recusado';
+            
+            await enviarNotificacaoWhatsApp(
+                telefoneLimpo,
+                null,
+                tipoNotificacao
+            );
+            
+            if (notaInput) notaInput.value = '';
+            
+            await carregarTimeline(telefoneLimpo);
+            await carregarDados();
+            
+            const decisaoContainer = document.getElementById('decisao-container');
+            if (decisaoContainer) {
+                decisaoContainer.style.display = 'none';
+            }
+        } else {
+            showToast(`❌ Erro: ${data.erro || data.detalhe || 'Erro desconhecido'}`, 'error');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao finalizar:', error);
+        showToast('❌ Erro ao finalizar processo', 'error');
+    }
+}
+
+// ============================================================
+//  FUNÇÃO MOVER SELEÇÃO EM MASSA - COM NOTIFICAÇÃO
+// ============================================================
+
+async function moverSelecionados(destino) {
+    const selecionados = document.querySelectorAll('.selecionar-item:checked');
+    if (selecionados.length === 0) { 
+        showToast('⚠️ Selecione pelo menos um contato', 'info'); 
+        return; 
+    }
+    
+    const destinoNome = destino === 'ativo' ? 'EM PROCESSO' : 'AMIGO';
+    if (!confirm(`Mover ${selecionados.length} contato(s) para ${destinoNome}?`)) return;
+    
+    const telefones = Array.from(selecionados).map(el => normalizarTelefone(el.dataset.telefone));
+    
+    // Pergunta se quer enviar notificações
+    const enviarNotif = confirm(`Deseja enviar notificação WhatsApp para os ${telefones.length} cliente(s)?`);
+    
+    try {
+        const response = await fetch('/api/painel/mover-varios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefones, destino })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`✅ ${result.movidos} contato(s) movidos!`, 'success');
+            
+            // 🔥 ENVIA NOTIFICAÇÕES EM MASSA
+            if (enviarNotif && result.movidos > 0) {
+                const tipoNotif = destino === 'ativo' ? 'mover_ativo' : 'mover_amigo';
+                await enviarNotificacaoEmMassa(telefones, null, tipoNotif);
+            }
+            
+            await carregarDados();
+        } else {
+            showToast(`❌ ${result.message}`, 'error');
+        }
+    } catch (error) {
+        showToast(`❌ Erro: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================
+//  FUNÇÃO REABRIR PROCESSO - COM NOTIFICAÇÃO
+// ============================================================
+
+async function reabrirProcesso(telefone) {
+    if (!confirm(`Tem certeza que deseja REABRIR o processo de ${telefone}?\n\nO cliente voltará para a lista de "Em Processo".`)) {
+        return;
+    }
+    
+    try {
+        showToast('⏳ Reabrindo processo...', 'info');
+        
+        const telefoneLimpo = normalizarTelefone(telefone);
+        
+        const response = await fetch('/api/clientes/reabrir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone: telefoneLimpo })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`✅ Processo reaberto com sucesso!`, 'success');
+            
+            // 🔥 ENVIA NOTIFICAÇÃO
+            await enviarNotificacaoWhatsApp(
+                telefoneLimpo,
+                null,
+                'reabrir'
+            );
+            
+            await carregarFinalizados();
+            await carregarDados();
+        } else {
+            showToast(`❌ Erro: ${data.error || 'Erro desconhecido'}`, 'error');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao reabrir:', error);
         showToast(`❌ Erro: ${error.message}`, 'error');
     }
 }
@@ -2192,6 +2444,109 @@ function showToast(mensagem, tipo = 'info') {
     toast.className = `toast ${tipo}`;
     setTimeout(() => toast.classList.add('show'), 10);
     setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ============================================================
+//  FUNÇÕES DE NOTIFICAÇÃO WHATSAPP
+// ============================================================
+
+// ============================================================
+//  ENVIAR NOTIFICAÇÃO WHATSAPP VIA BACKEND
+// ============================================================
+
+async function enviarNotificacaoWhatsApp(telefone, mensagem, tipo = 'atualizacao') {
+    try {
+        const telefoneLimpo = normalizarTelefone(telefone);
+        
+        if (!telefoneLimpo || telefoneLimpo.length < 10) {
+            console.warn('⚠️ Telefone inválido para notificação:', telefone);
+            return false;
+        }
+
+        // Se não passou mensagem, usa mensagem padrão por tipo
+        const mensagensPadrao = {
+            'avancar_etapa': '✅ Olá! Seu processo foi atualizado para a próxima etapa. Acompanhe pelo nosso site.',
+            'finalizar_aprovado': '🎉 Parabéns! Seu visto foi APROVADO! Em breve entraremos em contato.',
+            'finalizar_recusado': '😔 Infelizmente seu visto foi recusado. Entre em contato conosco.',
+            'mover_ativo': '🟢 Seu processo foi iniciado! Acompanhe pelo nosso painel.',
+            'mover_amigo': '🤝 Você foi adicionado como amigo. Continue acompanhando!',
+            'reabrir': '🔄 Seu processo foi reaberto! Acompanhe as atualizações.',
+            'atualizacao': '📋 Seu processo foi atualizado. Acesse o painel para mais informações.'
+        };
+
+        const mensagemFinal = mensagem || mensagensPadrao[tipo] || mensagensPadrao.atualizacao;
+
+        console.log(`📤 Enviando notificação para ${telefoneLimpo}:`, mensagemFinal);
+
+        // Chama a API do backend
+        const response = await fetch('/api/whatsapp/notificar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                telefone: telefoneLimpo,
+                mensagem: mensagemFinal,
+                tipo: tipo
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ Erro ao enviar notificação:', errorText);
+            return false;
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log(`✅ Notificação enviada para ${telefoneLimpo}`);
+            return true;
+        } else {
+            console.error('❌ Erro no envio:', data.error);
+            return false;
+        }
+
+    } catch (error) {
+        console.error('❌ Erro ao enviar notificação WhatsApp:', error);
+        return false;
+    }
+}
+
+// ============================================================
+//  ENVIAR NOTIFICAÇÃO EM MASSA
+// ============================================================
+
+async function enviarNotificacaoEmMassa(telefones, mensagem, tipo = 'atualizacao') {
+    if (!telefones || telefones.length === 0) {
+        showToast('⚠️ Nenhum telefone selecionado', 'info');
+        return;
+    }
+
+    if (!confirm(`Enviar notificação para ${telefones.length} cliente(s)?`)) {
+        return;
+    }
+
+    showToast(`📤 Enviando notificações para ${telefones.length} cliente(s)...`, 'info');
+
+    let enviados = 0;
+    let falhas = 0;
+
+    for (const telefone of telefones) {
+        const sucesso = await enviarNotificacaoWhatsApp(telefone, mensagem, tipo);
+        if (sucesso) {
+            enviados++;
+        } else {
+            falhas++;
+        }
+        // Pequeno delay para não sobrecarregar a API
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    showToast(
+        `📱 Notificações: ${enviados} sucesso, ${falhas} falhas`,
+        falhas === 0 ? 'success' : 'info'
+    );
 }
 
 // ============================================================
