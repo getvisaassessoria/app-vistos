@@ -1372,6 +1372,10 @@ async function criarEtapaComCliente(cliente, telefone) {
 }
 
 
+// ============================================================
+// FUNÇÃO GERAR MENSAGEM POR ETAPA - CORRIGIDA
+// ============================================================
+
 function gerarMensagemEtapa(etapaId, nome) {
     const primeiroNome = nome && typeof nome === 'string'
         ? nome.trim().split(' ')[0]
@@ -1380,52 +1384,52 @@ function gerarMensagemEtapa(etapaId, nome) {
     const mensagens = {
         formulario_enviado:
             `🎉 Olá ${primeiroNome}!\n\n` +
-             `📋 Etapa atual: Formulário Enviado\n\n` +
+            `📋 Etapa atual: Formulário Enviado\n\n` +
             `Recebemos seu formulário e seu processo foi iniciado com sucesso.\n\n` +
             `Nossa equipe dará continuidade à análise das informações.`,
 
         analise_correcoes:
             `🔎 Olá ${primeiroNome}!\n\n` +
             `📋 Etapa atual: Análise e Correções\n\n` +
-            `Seu processo está em análise,.\n\n` +
+            `Seu processo está em análise.\n\n` +
             `Caso seja necessário algum ajuste, nossa equipe entrará em contato.`,
 
         abertura_processo:
             `📂 Olá ${primeiroNome}!\n\n` +
             `📋 Etapa atual: Abertura do Processo\n\n` +
             `Seu processo foi aberto com sucesso!\n\n` +
-            `Seguiremos agora com os próximos procedimentos.`
-            `Emitiremos o boleto para pagamento da taxa consular.`,
+            `Seguiremos agora com os próximos procedimentos.`,
 
         boleto_emitido:
             `💳 Olá ${primeiroNome}!\n\n` +
             `📋 Etapa atual: Boleto Emitido\n\n` +
-            `Após o pagamento, nos informe para realizamos o agendamento.\n\n` +
+            `O boleto para pagamento da taxa consular foi emitido.\n\n` +
+            `Após o pagamento, nos informe para realizarmos o agendamento.\n\n` +
             `Verifique as orientações da nossa equipe para pagamento.`,
 
         boleto_pago:
             `✅ Olá ${primeiroNome}!\n\n` +
             `📋 Etapa atual: Boleto Pago\n\n` +
-            `Em até 24h o consulado disponibilizará o agendamento\n\n` +
-            `Favor fazer o pagamento restante (50%) da assessoria`,
+            `Em até 24h o consulado disponibilizará o agendamento.\n\n` +
+            `Favor fazer o pagamento restante (50%) da assessoria.`,
 
         agendamento_realizado:
             `📅 Olá ${primeiroNome}!\n\n` +
-            `📋 Etapa atual: agendamento CASV e Consulado\n\n` +
+            `📋 Etapa atual: Agendamento CASV e Consulado\n\n` +
             `Seu agendamento foi realizado com sucesso!\n\n` +
-            `Vamos agendar nossa reunião para treinamento da entrevista\n\n` +
+            `Vamos agendar nossa reunião para treinamento da entrevista.\n\n` +
             `Nossa equipe enviará as orientações necessárias para essa fase.`,
 
         treinamento_realizado:
             `🎯 Olá ${primeiroNome}!\n\n` +
             `📋 Etapa atual: Treinamento Concluído\n\n` +
             `Seu treinamento foi concluído!\n\n` +
-            `Você está preparado(a) para a entrevista!.`,
+            `Você está preparado(a) para a entrevista!`,
 
         entrevista_realizada:
             `🎤 Olá ${primeiroNome}!\n\n` +
-            `Registramos a realização da sua entrevista.\n\n` +
             `📋 Etapa atual: Entrevista Realizada\n\n` +
+            `Registramos a realização da sua entrevista.\n\n` +
             `Agora aguardaremos a definição do resultado consular.`,
 
         visto_aprovado:
@@ -1441,7 +1445,7 @@ function gerarMensagemEtapa(etapaId, nome) {
             `A GetVisa agradece a sua confiança e deseja uma ótima viagem! ✈️`,
 
         visto_recusado:
-            `Olá ${primeiroNome}.\n\n` +
+            `😔 Olá ${primeiroNome}.\n\n` +
             `Recebemos a atualização de que o visto não foi aprovado nesta solicitação.\n\n` +
             `Sabemos que esse momento pode ser difícil. Nossa equipe analisará os detalhes para orientar você sobre os próximos passos e uma possível nova estratégia.\n\n` +
             `Conte com a GetVisa.`
