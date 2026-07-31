@@ -1632,13 +1632,18 @@ async function carregarTimeline(telefone) {
     }
 }
 
+// ============================================================
+// RENDERIZAR TIMELINE - VERSÃO CORRIGIDA
+// ============================================================
+
 function renderizarTimeline(data) {
     const container = document.getElementById('timeline-container');
     const etapaAtual = data.etapa_atual;
-    const indexAtual = ETAPAS_ORDEM.indexOf(etapaAtual);
     
+    // 🔥 FUNÇÕES QUE USAM O HISTÓRICO - CORRIGIDAS
     const isEtapaConcluida = (etapa) => {
         if (!data.historico) return false;
+        // Verifica se a etapa está no histórico
         return data.historico.some(item => item.etapa === etapa);
     };
     
@@ -1656,27 +1661,36 @@ function renderizarTimeline(data) {
     
     let nomeCliente = 'Cliente';
     const allClientes = [...dadosCompletos.ativos, ...dadosCompletos.pendentes];
-    const cliente = allClientes.find(c => normalizarTelefone(c.telefone) === clienteSelecionadoTimeline);
+    const cliente = allClientes.find(c => c.telefone === clienteSelecionadoTimeline);
     if (cliente) nomeCliente = cliente.nome || 'Cliente';
     
+    // Verificar se é uma etapa final (aprovado/recusado)
     const isFinalizada = ['passaporte_retornado', 'visto_recusado'].includes(etapaAtual);
+    
+    // Verificar se a etapa atual está no histórico (já foi concluída)
+    const etapaAtualConcluida = isEtapaConcluida(etapaAtual);
     
     let html = `
         <div style="margin-bottom:15px;">
             <h4>📋 Timeline - ${nomeCliente}</h4>
             <small class="text-muted">Etapa atual: <strong>${ETAPAS_CONFIG[etapaAtual]?.label || etapaAtual}</strong></small>
             ${isFinalizada ? ' <span style="background:#10b981;color:white;padding:2px 10px;border-radius:12px;font-size:12px;">✅ PROCESSO FINALIZADO</span>' : ''}
+            ${etapaAtualConcluida && !isFinalizada ? ' <span style="background:#f59e0b;color:white;padding:2px 10px;border-radius:12px;font-size:12px;">⏳ AGUARDANDO PRÓXIMA ETAPA</span>' : ''}
         </div>
         <div class="timeline">
     `;
     
+    // Mostrar etapas normais (até entrevista)
     ETAPAS_ORDEM.forEach((etapa, index) => {
         const etapaInfo = ETAPAS_CONFIG[etapa] || { label: etapa, color: '#6c757d' };
         
+        // 🔥 USA O HISTÓRICO PARA VERIFICAR SE ESTÁ CONCLUÍDA
         const isConcluida = isEtapaConcluida(etapa);
         const dataValue = getDataEtapa(etapa);
         const notaValue = getNotaEtapa(etapa);
         
+        // Verifica se é a etapa atual (não concluída)
+        // Se a etapa atual está no histórico, ela já foi concluída
         const isAtual = (etapa === etapaAtual) && !isConcluida && !isFinalizada;
         const isPendente = !isConcluida && !isAtual && !isFinalizada;
         
@@ -1706,6 +1720,7 @@ function renderizarTimeline(data) {
                     <h6 style="color: ${corTexto}; ${isAtual ? 'font-weight: bold;' : ''}">
                         ${etapaInfo.label || etapa}
                         ${isAtual ? ' <span style="font-size:11px;background:#f39c12;color:white;padding:2px 8px;border-radius:12px;">ATUAL</span>' : ''}
+                        ${isConcluida ? ' <span style="font-size:11px;background:#27ae60;color:white;padding:2px 8px;border-radius:12px;">✓ CONCLUÍDA</span>' : ''}
                     </h6>
                     <small>${statusText}</small>
                     ${dataValue ? `<br><small class="text-muted">📅 ${new Date(dataValue).toLocaleDateString('pt-BR')} ${new Date(dataValue).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</small>` : ''}
@@ -1715,6 +1730,7 @@ function renderizarTimeline(data) {
         `;
     });
     
+    // Se o processo já foi finalizado, mostrar a etapa final
     if (isFinalizada) {
         const etapaInfo = ETAPAS_CONFIG[etapaAtual] || { label: etapaAtual, color: '#6c757d' };
         const dataValue = getDataEtapa(etapaAtual);
@@ -1742,12 +1758,14 @@ function renderizarTimeline(data) {
     html += '</div>';
     container.innerHTML = html;
     
-    const isEntrevista = etapaAtual === 'entrevista_realizada' && !isFinalizada;
+    // Mostrar/Esconder botões de decisão
+    const isEntrevista = etapaAtual === 'entrevista_realizada' && !isFinalizada && !etapaAtualConcluida;
     const decisaoContainer = document.getElementById('decisao-container');
     if (decisaoContainer) {
         decisaoContainer.style.display = isEntrevista ? 'block' : 'none';
     }
     
+    // Atualizar botão de avanço
     const btnAvancar = document.querySelector('#timeline-actions .btn-success');
     if (btnAvancar) {
         if (isFinalizada) {
@@ -1756,6 +1774,10 @@ function renderizarTimeline(data) {
         } else if (isEntrevista) {
             btnAvancar.disabled = true;
             btnAvancar.textContent = '🎤 Aguardando Decisão';
+        } else if (etapaAtualConcluida) {
+            // Se a etapa atual já foi concluída, permite avançar para a próxima
+            btnAvancar.disabled = false;
+            btnAvancar.textContent = '➡️ Avançar para Próxima Etapa';
         } else {
             btnAvancar.disabled = false;
             btnAvancar.textContent = '➡️ Avançar Etapa';
