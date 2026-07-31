@@ -2570,9 +2570,15 @@ app.post('/api/submit-ds160', async function(req, res) {
                 }
             }
 
+            // ============================================================
+            // GERAR PDF
+            // ============================================================
             var pdfBuffer = await gerarPDF_DS160(data);
             console.log('PDF gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
 
+            // ============================================================
+            // ENVIAR EMAIL PARA EQUIPE
+            // ============================================================
             await resend.emails.send({
                 from: 'GetVisa <contato@getvisa.com.br>',
                 to: ['getvisa.assessoria@gmail.com'],
@@ -2582,6 +2588,9 @@ app.post('/api/submit-ds160', async function(req, res) {
             });
             console.log('E-mail enviado para a equipe');
 
+            // ============================================================
+            // ENVIAR EMAIL PARA CLIENTE
+            // ============================================================
             if (emailCliente && emailCliente.trim() !== '') {
                 await resend.emails.send({
                     from: 'GetVisa <contato@getvisa.com.br>',
@@ -2591,6 +2600,50 @@ app.post('/api/submit-ds160', async function(req, res) {
                     attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
                 });
                 console.log('E-mail enviado para o cliente: ' + emailCliente);
+            }
+
+            // ============================================================
+            // ENVIAR WHATSAPP (NOVO!)
+            // ============================================================
+            try {
+                // Dados para a mensagem
+                var cidade = data['text-74'] || data['cidade'] || 'N/A';
+                var consulado = data['consulado_cidade'] || 'N/A';
+                var telefone = data['text-77'] || data['phone'] || 'N/A';
+                var proposito = data['radio-28'] || 'N/A';
+                
+                // Mapeia o propósito da viagem
+                if (proposito === 'one') proposito = 'Turismo/Negócios (B1/B2)';
+                else if (proposito === 'two') proposito = 'Estudos';
+                else if (proposito === 'Outros') proposito = 'Outros';
+                
+                // Mensagem CURTA para o WhatsApp (evita erro)
+                var mensagemWhats = `📋 *NOVO DS-160*\n\n`;
+                mensagemWhats += `👤 *Nome:* ${nome}\n`;
+                mensagemWhats += `📧 *Email:* ${emailCliente || 'N/A'}\n`;
+                mensagemWhats += `📱 *Telefone:* ${telefone}\n`;
+                mensagemWhats += `📍 *Cidade:* ${cidade}\n`;
+                mensagemWhats += `🏛️ *Consulado:* ${consulado}\n`;
+                mensagemWhats += `✈️ *Propósito:* ${proposito}\n`;
+                mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
+                mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
+
+                // Número para enviar
+                var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
+                
+                console.log('📤 Enviando WhatsApp DS-160 para:', numeroWhats);
+                console.log('📤 Tamanho da mensagem:', mensagemWhats.length, 'caracteres');
+
+                const resultadoWhats = await enviarWhatsApp(numeroWhats, mensagemWhats);
+                
+                if (resultadoWhats) {
+                    console.log('✅ WhatsApp DS-160 enviado com sucesso para:', numeroWhats);
+                } else {
+                    console.log('⚠️ Falha ao enviar WhatsApp DS-160 para:', numeroWhats);
+                }
+
+            } catch (err) {
+                console.error('❌ Erro ao enviar WhatsApp DS-160:', err.message);
             }
 
         } catch (err) {
