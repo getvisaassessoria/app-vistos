@@ -1208,6 +1208,91 @@ async function sendReply(phone, message) {
 }
 
 // ============================================================
+// FUNÇÃO PARA ENVIAR PDF POR WHATSAPP
+// ============================================================
+
+async function enviarPDFWhatsApp(telefone, pdfBuffer, nomeCliente, tipo = 'ds160') {
+    try {
+        const instance = String(process.env.ZAPI_INSTANCE || '').trim();
+        const token = String(process.env.ZAPI_TOKEN || '').trim();
+        const securityToken = String(process.env.ZAPI_SECURITY_TOKEN || '').trim();
+
+        if (!instance || !token) {
+            console.error('❌ Z-API não configurada para envio de PDF');
+            return false;
+        }
+
+        const cleanPhone = String(telefone || '').replace(/\D/g, '');
+
+        if (cleanPhone.length < 10) {
+            console.error('❌ Telefone inválido para PDF:', telefone);
+            return false;
+        }
+
+        // Primeiro, enviar a mensagem com o link
+        const mensagemLink = `📄 *Olá ${nomeCliente}!*\n\n` +
+                            `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
+                            `📎 Segue em anexo o PDF com as informações que você preencheu.\n\n` +
+                            `✅ *Próximos passos:*\n` +
+                            `• Nossa equipe fará a análise dos dados\n` +
+                            `• Você receberá atualizações por aqui\n` +
+                            `• Iniciaremos o agendamento da entrevista\n\n` +
+                            `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812\n\n` +
+                            `🌟 *Bem-vindo(a) à GetVisa!*`;
+
+        // Enviar a mensagem
+        const enviado = await enviarWhatsApp(cleanPhone, mensagemLink);
+        
+        if (!enviado) {
+            console.error('❌ Falha ao enviar mensagem de confirmação');
+            return false;
+        }
+
+        // Esperar um pouco e enviar o PDF
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Enviar o PDF via Z-API
+        const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-document`;
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (securityToken) {
+            headers['Client-Token'] = securityToken;
+        }
+
+        const nomeArquivo = `DS160_${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+
+        const body = {
+            phone: cleanPhone,
+            document: pdfBuffer.toString('base64'),
+            fileName: nomeArquivo,
+            caption: `📄 Formulário DS-160 - ${nomeCliente}`
+        };
+
+        console.log(`📨 Enviando PDF para: ${cleanPhone}`);
+        console.log(`📄 Arquivo: ${nomeArquivo}`);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+        });
+
+        const result = await response.text();
+        console.log(`📨 Z-API PDF status: ${response.status}`);
+        console.log(`📨 Z-API PDF resposta: ${result}`);
+
+        return response.status >= 200 && response.status < 300;
+
+    } catch (error) {
+        console.error('❌ Erro ao enviar PDF por WhatsApp:', error.message);
+        return false;
+    }
+}
+
+// ============================================================
 // FUNÇÕES DE BANCO DE DADOS
 // ============================================================
 
@@ -2061,10 +2146,44 @@ app.post('/api/submit-ds160', async function(req, res) {
             var emailCliente = data['email-1'] || null;
             var telefoneCliente = limparTelefone(data['text-77'] || data['telefone'] || null);
 
+            // ============================================================
+            // 1. GERAR PDF
+            // ============================================================
+            var pdfBuffer = await gerarPDF_DS160(data);
+            console.log('📄 PDF gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
+
+            // ============================================================
+            // 2. ENVIAR EMAIL PARA EQUIPE
+            // ============================================================
+            await resend.emails.send({
+                from: 'GetVisa <contato@getvisa.com.br>',
+                to: ['getvisa.assessoria@gmail.com'],
+                subject: 'DS-160: ' + nome,
+                html: '<strong>Formulario DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
+                attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
+            });
+            console.log('📧 E-mail enviado para a equipe');
+
+            // ============================================================
+            // 3. ENVIAR EMAIL PARA CLIENTE
+            // ============================================================
+            if (emailCliente && emailCliente.trim() !== '') {
+                await resend.emails.send({
+                    from: 'GetVisa <contato@getvisa.com.br>',
+                    to: [emailCliente],
+                    subject: 'Seu formulario DS-160 foi recebido - ' + nome,
+                    html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
+                    attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
+                });
+                console.log('📧 E-mail enviado para o cliente: ' + emailCliente);
+            }
+
+            // ============================================================
+            // 4. SALVAR EM CLIENTES_ATIVOS (com telefone LIMPO)
+            // ============================================================
             if (telefoneCliente) {
                 try {
                     var telefoneLimpo = limparTelefone(telefoneCliente);
-                    
                     console.log('📱 Telefone limpo: ' + telefoneLimpo);
 
                     var insert = await supabase
@@ -2087,6 +2206,9 @@ app.post('/api/submit-ds160', async function(req, res) {
                         console.log('✅ Cliente ' + telefoneLimpo + ' criado/atualizado em ATIVOS');
                     }
 
+                    // ============================================================
+                    // 5. CRIAR ETAPA INICIAL (com telefone LIMPO)
+                    // ============================================================
                     try {
                         const { data: etapaExistente } = await supabase
                             .from('etapas_processo')
@@ -2116,12 +2238,6 @@ app.post('/api/submit-ds160', async function(req, res) {
                                 console.error('❌ Erro ao criar etapa inicial:', etapaError);
                             } else {
                                 console.log('✅ Etapa inicial criada para:', telefoneLimpo);
-                                try {
-                                    await notificarClienteEtapa(telefoneLimpo, 'formulario_enviado');
-                                    console.log('✅ Notificação de boas-vindas enviada para:', telefoneLimpo);
-                                } catch (notifyErr) {
-                                    console.error('❌ Erro ao enviar notificação:', notifyErr);
-                                }
                             }
                         } else {
                             console.log('ℹ️ Etapa já existe para:', telefoneLimpo);
@@ -2130,6 +2246,9 @@ app.post('/api/submit-ds160', async function(req, res) {
                         console.error('❌ Erro ao criar etapa inicial:', err);
                     }
 
+                    // ============================================================
+                    // 6. REMOVER DE CLIENTES_NOVOS (se existir)
+                    // ============================================================
                     var clienteNovo = await supabase
                         .from('clientes_novos')
                         .select('*')
@@ -2144,70 +2263,84 @@ app.post('/api/submit-ds160', async function(req, res) {
                         console.log('🗑️ Cliente ' + telefoneLimpo + ' removido de NOVOS');
                     }
 
+                    // ============================================================
+                    // 7. 🔥 ENVIAR NOTIFICAÇÃO WHATSAPP COM PDF
+                    // ============================================================
+                    try {
+                        // Enviar mensagem de confirmação + PDF
+                        const primeiroNome = nome.split(' ')[0];
+                        const enviado = await enviarPDFWhatsApp(telefoneLimpo, pdfBuffer, primeiroNome);
+                        
+                        if (enviado) {
+                            console.log(`✅ PDF e confirmação enviados para ${telefoneLimpo}`);
+                        } else {
+                            console.log(`⚠️ Falha ao enviar PDF para ${telefoneLimpo}, enviando apenas mensagem`);
+                            // Fallback: enviar apenas a mensagem
+                            const mensagemFallback = `📄 *Olá ${primeiroNome}!*\n\n` +
+                                                    `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
+                                                    `✅ *Próximos passos:*\n` +
+                                                    `• Nossa equipe fará a análise dos dados\n` +
+                                                    `• Você receberá atualizações por aqui\n` +
+                                                    `• Iniciaremos o agendamento da entrevista\n\n` +
+                                                    `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812\n\n` +
+                                                    `🌟 *Bem-vindo(a) à GetVisa!*`;
+                            await enviarWhatsApp(telefoneLimpo, mensagemFallback);
+                        }
+                    } catch (err) {
+                        console.error('❌ Erro ao enviar notificação WhatsApp:', err);
+                        // Tenta pelo menos enviar a mensagem
+                        try {
+                            const primeiroNome = nome.split(' ')[0];
+                            await enviarWhatsApp(telefoneLimpo, 
+                                `📄 *Olá ${primeiroNome}!*\n\n` +
+                                `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
+                                `✅ Nossa equipe dará continuidade ao seu processo.\n\n` +
+                                `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812`
+                            );
+                        } catch (e) {
+                            console.error('❌ Falha total no WhatsApp:', e);
+                        }
+                    }
+
+                    // ============================================================
+                    // 8. ENVIAR WHATSAPP PARA EQUIPE
+                    // ============================================================
+                    try {
+                        var cidade = data['text-74'] || data['cidade'] || 'N/A';
+                        var consulado = data['consulado_cidade'] || 'N/A';
+                        var telefone = data['text-77'] || data['phone'] || 'N/A';
+                        var proposito = data['radio-28'] || 'N/A';
+                        
+                        if (proposito === 'one') proposito = 'Turismo/Negócios (B1/B2)';
+                        else if (proposito === 'two') proposito = 'Estudos';
+                        else if (proposito === 'Outros') proposito = 'Outros';
+                        
+                        var mensagemWhats = `📋 *NOVO DS-160*\n\n`;
+                        mensagemWhats += `👤 *Nome:* ${nome}\n`;
+                        mensagemWhats += `📧 *Email:* ${emailCliente || 'N/A'}\n`;
+                        mensagemWhats += `📱 *Telefone:* ${telefone}\n`;
+                        mensagemWhats += `📍 *Cidade:* ${cidade}\n`;
+                        mensagemWhats += `🏛️ *Consulado:* ${consulado}\n`;
+                        mensagemWhats += `✈️ *Propósito:* ${proposito}\n`;
+                        mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
+                        mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
+
+                        var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
+                        
+                        console.log('📤 Enviando WhatsApp DS-160 para equipe:', numeroWhats);
+                        await enviarWhatsApp(numeroWhats, mensagemWhats);
+                        console.log('✅ WhatsApp DS-160 enviado para equipe');
+
+                    } catch (err) {
+                        console.error('❌ Erro ao enviar WhatsApp para equipe:', err.message);
+                    }
+
                 } catch (err) {
                     console.error('❌ Erro ao processar cliente:', err.message);
                 }
             }
 
-            var pdfBuffer = await gerarPDF_DS160(data);
-            console.log('📄 PDF gerado para ' + nome + ', tamanho: ' + pdfBuffer.length + ' bytes');
-
-            await resend.emails.send({
-                from: 'GetVisa <contato@getvisa.com.br>',
-                to: ['getvisa.assessoria@gmail.com'],
-                subject: 'DS-160: ' + nome,
-                html: '<strong>Formulario DS-160 recebido.</strong><br><p><strong>Cliente:</strong> ' + nome + '</p><p>PDF em anexo (' + pdfBuffer.length + ' bytes).</p>',
-                attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
-            });
-            console.log('📧 E-mail enviado para a equipe');
-
-            if (emailCliente && emailCliente.trim() !== '') {
-                await resend.emails.send({
-                    from: 'GetVisa <contato@getvisa.com.br>',
-                    to: [emailCliente],
-                    subject: 'Seu formulario DS-160 foi recebido - ' + nome,
-                    html: '<strong>Ola ' + nome + ',</strong><br><p>Recebemos seu formulario. Segue em anexo uma copia.</p><p>Em breve nossa equipe entrara em contato.</p>',
-                    attachments: [{ filename: 'DS160_' + nome.replace(/[^a-z0-9]/gi, '_') + '.pdf', content: pdfBuffer.toString('base64') }]
-                });
-                console.log('📧 E-mail enviado para o cliente: ' + emailCliente);
-            }
-
-            try {
-                var cidade = data['text-74'] || data['cidade'] || 'N/A';
-                var consulado = data['consulado_cidade'] || 'N/A';
-                var telefone = data['text-77'] || data['phone'] || 'N/A';
-                var proposito = data['radio-28'] || 'N/A';
-                
-                if (proposito === 'one') proposito = 'Turismo/Negócios (B1/B2)';
-                else if (proposito === 'two') proposito = 'Estudos';
-                else if (proposito === 'Outros') proposito = 'Outros';
-                
-                var mensagemWhats = `📋 *NOVO DS-160*\n\n`;
-                mensagemWhats += `👤 *Nome:* ${nome}\n`;
-                mensagemWhats += `📧 *Email:* ${emailCliente || 'N/A'}\n`;
-                mensagemWhats += `📱 *Telefone:* ${telefone}\n`;
-                mensagemWhats += `📍 *Cidade:* ${cidade}\n`;
-                mensagemWhats += `🏛️ *Consulado:* ${consulado}\n`;
-                mensagemWhats += `✈️ *Propósito:* ${proposito}\n`;
-                mensagemWhats += `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n`;
-                mensagemWhats += `🔗 Acesse o painel para ver os dados completos.`;
-
-                var numeroWhats = process.env.ZAPI_PHONE_TO || '5521991868954';
-                
-                console.log('📤 Enviando WhatsApp DS-160 para:', numeroWhats);
-                console.log('📤 Tamanho da mensagem:', mensagemWhats.length, 'caracteres');
-
-                const resultadoWhats = await enviarWhatsApp(numeroWhats, mensagemWhats);
-                
-                if (resultadoWhats) {
-                    console.log('✅ WhatsApp DS-160 enviado com sucesso para:', numeroWhats);
-                } else {
-                    console.log('⚠️ Falha ao enviar WhatsApp DS-160 para:', numeroWhats);
-                }
-
-            } catch (err) {
-                console.error('❌ Erro ao enviar WhatsApp DS-160:', err.message);
-            }
+            console.log('✅ Processamento DS-160 concluído com sucesso!');
 
         } catch (err) {
             console.error('❌ Erro no processamento DS-160 (background):', err);
