@@ -3040,36 +3040,55 @@ app.post('/api/painel/mover-varios', async function(req, res) {
 
 app.get('/api/etapas/cliente/:telefone', async function(req, res) {
     try {
-        var telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+        var telefone = req.params.telefone;
+        var telefoneLimpo = telefone.replace(/\D/g, '');
         var telefoneFormatado = formatarTelefone(telefoneLimpo);
 
+        console.log('🔍 Buscando etapa para:', {
+            original: telefone,
+            limpo: telefoneLimpo,
+            formatado: telefoneFormatado
+        });
+
+        // Tenta com telefone formatado
         var result = await supabase
             .from('etapas_processo')
             .select('*')
             .eq('cliente_telefone', telefoneFormatado)
             .maybeSingle();
 
+        // Se não encontrou, tenta com limpo
         if (!result.data) {
-            var resultLimpo = await supabase
+            console.log('🔍 Tentando com telefone limpo:', telefoneLimpo);
+            result = await supabase
                 .from('etapas_processo')
                 .select('*')
                 .eq('cliente_telefone', telefoneLimpo)
                 .maybeSingle();
-
-            if (resultLimpo.data) {
-                return res.json(resultLimpo.data);
-            }
         }
 
+        // Se não encontrou, tenta com original
         if (!result.data) {
+            console.log('🔍 Tentando com telefone original:', telefone);
+            result = await supabase
+                .from('etapas_processo')
+                .select('*')
+                .eq('cliente_telefone', telefone)
+                .maybeSingle();
+        }
+
+        // Se ainda não encontrou, cria uma nova etapa
+        if (!result.data) {
+            console.log('🆕 Criando nova etapa para:', telefoneFormatado);
             var novaEtapa = await criarEtapaInicial(telefoneFormatado);
             if (novaEtapa) return res.json(novaEtapa);
             return res.status(404).json({ erro: 'Cliente nao encontrado' });
         }
 
         res.json(result.data);
+        
     } catch (error) {
-        console.error('Erro ao buscar etapa:', error);
+        console.error('❌ Erro ao buscar etapa:', error);
         res.status(500).json({ erro: 'Erro ao buscar etapa do cliente' });
     }
 });
