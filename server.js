@@ -1273,46 +1273,75 @@ async function processarClienteAtivo(cleanPhone, messageText, dadosCliente) {
 // FUNÇÕES DE CRIAÇÃO DE ETAPAS E NOTIFICAÇÕES
 // ============================================================
 
+// Na função criarEtapaInicial, use SEMPRE o telefone limpo
+// Na função criarEtapaInicial, use SEMPRE o telefone limpo
 async function criarEtapaInicial(telefone) {
     try {
-        const telefoneFormatado = formatarTelefone(telefone);
-
+        // Garantir que é o telefone limpo
+        var telefoneLimpo = limparTelefone(telefone);
+        console.log('📱 Criando etapa para telefone limpo:', telefoneLimpo);
+        
+        // Buscar cliente em clientes_ativos com telefone limpo
         const { data: cliente, error: clienteError } = await supabase
             .from('clientes_ativos')
             .select('telefone, nome, criado_em')
-            .eq('telefone', telefoneFormatado)
+            .eq('telefone', telefoneLimpo)
             .maybeSingle();
-
-        if (!cliente) {
-            const telefoneLimpo = limparTelefone(telefone);
-            const { data: clienteLimpo } = await supabase
-                .from('clientes_ativos')
-                .select('telefone, nome, criado_em')
-                .eq('telefone', telefoneLimpo)
-                .maybeSingle();
-
-            if (clienteLimpo) {
-                await supabase
-                    .from('clientes_ativos')
-                    .update({ telefone: telefoneFormatado })
-                    .eq('telefone', telefoneLimpo);
-
-                const { data: clienteAtualizado } = await supabase
-                    .from('clientes_ativos')
-                    .select('telefone, nome, criado_em')
-                    .eq('telefone', telefoneFormatado)
-                    .maybeSingle();
-
-                if (clienteAtualizado) {
-                    return criarEtapaComCliente(clienteAtualizado, telefoneFormatado);
-                }
-            }
-            console.log('Cliente ' + telefone + ' nao encontrado em clientes_ativos.');
+        
+        if (clienteError) {
+            console.error('❌ Erro ao buscar cliente:', clienteError);
             return null;
         }
-        return criarEtapaComCliente(cliente, telefoneFormatado);
+        
+        if (!cliente) {
+            console.log('⚠️ Cliente não encontrado em clientes_ativos:', telefoneLimpo);
+            return null;
+        }
+        
+        console.log('✅ Cliente encontrado:', cliente);
+        
+        // Verificar se já existe etapa
+        const { data: etapaExistente } = await supabase
+            .from('etapas_processo')
+            .select('id')
+            .eq('cliente_telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        if (etapaExistente) {
+            console.log('ℹ️ Etapa já existe para:', telefoneLimpo);
+            return etapaExistente;
+        }
+        
+        // Criar nova etapa
+        const novaEtapa = {
+            cliente_telefone: telefoneLimpo,
+            etapa_atual: 'formulario_enviado',
+            data_inicio: new Date().toISOString(),
+            data_atualizacao: new Date().toISOString(),
+            historico: [{
+                etapa: 'formulario_enviado',
+                data: new Date().toISOString(),
+                nota: 'Inicio do processo',
+                observacao: `Cliente movido para clientes_ativos - ${cliente.nome || 'Sem nome'}`
+            }]
+        };
+
+        const { data, error } = await supabase
+            .from('etapas_processo')
+            .insert(novaEtapa)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('❌ Erro ao criar etapa:', error);
+            return null;
+        }
+        
+        console.log('✅ Etapa inicial criada para:', telefoneLimpo);
+        return data;
+        
     } catch (error) {
-        console.error('Erro ao criar etapa inicial:', error);
+        console.error('❌ Erro ao criar etapa inicial:', error);
         return null;
     }
 }
@@ -3041,48 +3070,31 @@ app.post('/api/painel/mover-varios', async function(req, res) {
 app.get('/api/etapas/cliente/:telefone', async function(req, res) {
     try {
         var telefone = req.params.telefone;
-        var telefoneLimpo = telefone.replace(/\D/g, '');
-        var telefoneFormatado = formatarTelefone(telefoneLimpo);
+        var telefoneLimpo = limparTelefone(telefone);
 
         console.log('🔍 Buscando etapa para:', {
             original: telefone,
-            limpo: telefoneLimpo,
-            formatado: telefoneFormatado
+            limpo: telefoneLimpo
         });
 
-        // Tenta com telefone formatado
+        // Buscar com telefone limpo
         var result = await supabase
             .from('etapas_processo')
             .select('*')
-            .eq('cliente_telefone', telefoneFormatado)
+            .eq('cliente_telefone', telefoneLimpo)
             .maybeSingle();
 
-        // Se não encontrou, tenta com limpo
+        // Se não encontrou, criar nova etapa
         if (!result.data) {
-            console.log('🔍 Tentando com telefone limpo:', telefoneLimpo);
-            result = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefoneLimpo)
-                .maybeSingle();
-        }
-
-        // Se não encontrou, tenta com original
-        if (!result.data) {
-            console.log('🔍 Tentando com telefone original:', telefone);
-            result = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefone)
-                .maybeSingle();
-        }
-
-        // Se ainda não encontrou, cria uma nova etapa
-        if (!result.data) {
-            console.log('🆕 Criando nova etapa para:', telefoneFormatado);
-            var novaEtapa = await criarEtapaInicial(telefoneFormatado);
-            if (novaEtapa) return res.json(novaEtapa);
-            return res.status(404).json({ erro: 'Cliente nao encontrado' });
+            console.log('🆕 Criando nova etapa para:', telefoneLimpo);
+            var novaEtapa = await criarEtapaInicial(telefoneLimpo);
+            if (novaEtapa) {
+                return res.json(novaEtapa);
+            }
+            return res.status(404).json({ 
+                erro: 'Cliente nao encontrado',
+                telefone_limpo: telefoneLimpo 
+            });
         }
 
         res.json(result.data);
@@ -3103,65 +3115,50 @@ app.post('/api/etapas/avancar', async function(req, res) {
         var observacao = req.body.observacao;
         
         // ============================================================
-        // LIMPA E FORMATADA O TELEFONE PARA BUSCA
+        // SEMPRE USAR TELEFONE LIMPO
         // ============================================================
-        var telefoneLimpo = telefone.replace(/\D/g, '');
-        var telefoneFormatado = formatarTelefone(telefoneLimpo);
+        var telefoneLimpo = limparTelefone(telefone);
         
         console.log('📱 Telefone original:', telefone);
         console.log('📱 Telefone limpo:', telefoneLimpo);
-        console.log('📱 Telefone formatado:', telefoneFormatado);
 
         if (!FEATURES.SISTEMA_ETAPAS.ativo) {
             return res.status(503).json({ erro: 'Sistema de etapas esta temporariamente desativado' });
         }
 
         // ============================================================
-        // BUSCA ETAPA - TENTA FORMATADO E DEPOIS LIMPO
+        // BUSCA ETAPA - SEMPRE COM TELEFONE LIMPO
         // ============================================================
         var etapaAtual = await supabase
             .from('etapas_processo')
             .select('*')
-            .eq('cliente_telefone', telefoneFormatado)
+            .eq('cliente_telefone', telefoneLimpo)
             .maybeSingle();
 
-        // Se não encontrou com formato, tenta com limpo
         if (!etapaAtual.data) {
-            console.log('🔍 Tentando buscar com telefone limpo:', telefoneLimpo);
-            etapaAtual = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefoneLimpo)
-                .maybeSingle();
-        }
-
-        // Se ainda não encontrou, tenta com o original
-        if (!etapaAtual.data) {
-            console.log('🔍 Tentando buscar com telefone original:', telefone);
-            etapaAtual = await supabase
-                .from('etapas_processo')
-                .select('*')
-                .eq('cliente_telefone', telefone)
-                .maybeSingle();
-        }
-
-        if (!etapaAtual.data) {
-            console.error('❌ Cliente não encontrado em etapas_processo para:', {
+            console.error('❌ Cliente não encontrado em etapas_processo:', {
                 original: telefone,
-                limpo: telefoneLimpo,
-                formatado: telefoneFormatado
+                limpo: telefoneLimpo
             });
-            return res.status(404).json({ 
-                erro: 'Cliente não encontrado em etapas_processo',
-                telefone_buscado: telefone,
-                telefone_limpo: telefoneLimpo,
-                telefone_formatado: telefoneFormatado
-            });
+            
+            // Tenta criar a etapa se não existir
+            console.log('🆕 Tentando criar etapa automaticamente...');
+            var novaEtapa = await criarEtapaInicial(telefoneLimpo);
+            if (novaEtapa) {
+                console.log('✅ Etapa criada automaticamente!');
+                etapaAtual = { data: novaEtapa };
+            } else {
+                return res.status(404).json({ 
+                    erro: 'Cliente não encontrado em etapas_processo',
+                    telefone_buscado: telefone,
+                    telefone_limpo: telefoneLimpo
+                });
+            }
         }
 
         console.log('✅ Etapa encontrada:', etapaAtual.data);
 
-        return processarAvanco(res, etapaAtual.data, nota, observacao, telefoneFormatado);
+        return processarAvanco(res, etapaAtual.data, nota, observacao, telefoneLimpo);
         
     } catch (error) {
         console.error('❌ Erro ao avançar etapa:', error);
