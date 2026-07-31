@@ -387,13 +387,79 @@ function isSpamData(dados) {
     return false;
 }
 
+// ============================================================
+// FUNÇÃO DETECTAR INTENÇÃO - CORRIGIDA
+// ============================================================
+
 function detectIntent(message) {
-    const cleanMessage = message.toLowerCase();
-    for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    const cleanMessage = message.toLowerCase().trim();
+    
+    // Mapeamento de intenções com mais palavras-chave
+    const INTENT_MAP = {
+        'visto_americano': [
+            'visto americano', 'visto eua', 'visto estados unidos', 
+            'us visa', 'b1', 'b2', 'entrevista eua', 'visto eua',
+            'quero visto americano', 'fazer visto americano',
+            'visto para eua', 'visto usa'
+        ],
+        'visto_canadense': [
+            'visto canadense', 'visto canada', 'visto para canada',
+            'quero visto canadense', 'fazer visto canadense'
+        ],
+        'visto_australiano': [
+            'visto australiano', 'visto australia', 'visto para australia',
+            'quero visto australiano', 'fazer visto australiano'
+        ],
+        'eta_uk': [
+            'eta uk', 'reino unido', 'inglaterra', 'uk visa',
+            'visto reino unido', 'visto inglaterra'
+        ],
+        'passaporte': [
+            'passaporte', 'pf', 'policia federal', 'renovar passaporte',
+            'passaporte novo', 'fazer passaporte', 'quero passaporte'
+        ],
+        'preco': [
+            'preco', 'valor', 'quanto custa', 'taxa', 'investimento',
+            'custo', 'valores', 'preco'
+        ],
+        'prazo': [
+            'prazo', 'tempo', 'dias', 'semanas', 'demora',
+            'quanto tempo', 'agendamento', 'processamento'
+        ],
+        'documentos': [
+            'documentos', 'documentacao', 'requisitos', 'necessario',
+            'obrigatorio', 'papeis'
+        ],
+        'visto_negado': [
+            'negado', 'negativa', 'recusado', 'visto recusado',
+            'deportado', 'visto negado'
+        ],
+        'iniciar_processo': [
+            'quero fazer o visto', 'quero visto', 'iniciar processo',
+            'comecar', 'quero comecar', 'vou fazer', 'quero informação',
+            'quero saber', 'me ajuda', 'ajuda', 'help', 'informacoes'
+        ]
+    };
+    
+    // Primeiro, verifica se é uma saudação
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem', 'olá'];
+    if (saudacoes.some(s => cleanMessage.includes(s))) {
+        // Se for saudação, não é uma intenção específica, retorna null para o fluxo normal
+        return null;
+    }
+    
+    // Verifica cada intenção
+    for (const [intent, keywords] of Object.entries(INTENT_MAP)) {
         for (const keyword of keywords) {
-            if (cleanMessage.includes(keyword)) return intent;
+            if (cleanMessage.includes(keyword)) {
+                console.log(`🎯 Intenção detectada: ${intent} (palavra: "${keyword}")`);
+                return intent;
+            }
         }
     }
+    
+    // Se não encontrou nenhuma intenção, retorna null
+    console.log('⚠️ Nenhuma intenção detectada para:', cleanMessage);
     return null;
 }
 
@@ -777,11 +843,12 @@ async function processarMensagem(cleanPhone, messageText, body) {
 }
 
 // ============================================================
-// FUNÇÕES DE PROCESSAMENTO DE MENU
+// FUNÇÃO PROCESSAR MENU PRINCIPAL - CORRIGIDA
 // ============================================================
 
 async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     console.log('=== MENU PRINCIPAL ===');
+    console.log('Mensagem recebida: "' + messageText + '"');
     
     const servicoMap = {
         '1': 'visto_americano',
@@ -792,6 +859,7 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         '6': 'passaporte'
     };
     
+    // Verifica se é um número de serviço
     if (servicoMap[messageText]) {
         const serviceKey = servicoMap[messageText];
         console.log('Entrando no submenu de: ' + serviceKey);
@@ -805,6 +873,7 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
+    // Verifica se é o menu de ajuda
     if (messageText === '7') {
         const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
                         '👨‍💼 Moisés - Especialista em Vistos\n\n' +
@@ -817,14 +886,95 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
+    // 🔥 DETECTAR INTENÇÃO - MELHORADA
     const intent = detectIntent(messageText);
+    console.log('Intenção detectada:', intent);
+    
     if (intent) {
         const resposta = getRespostaIntencao(intent, state.service);
         await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
         return;
     }
     
-    const erroMsg = '❌ Opção não reconhecida!\n\n' +
+    // 🔥 VERIFICAR SE É UMA PERGUNTA SOBRE SERVIÇO ESPECÍFICO
+    const servicosKeywords = {
+        'visto americano': 'visto_americano',
+        'visto eua': 'visto_americano',
+        'eua': 'visto_americano',
+        'visto canadense': 'visto_canadense',
+        'canada': 'visto_canadense',
+        'visto australiano': 'visto_australiano',
+        'australia': 'visto_australiano',
+        'eta uk': 'eta_uk',
+        'reino unido': 'eta_uk',
+        'inglaterra': 'eta_uk',
+        'eta canadense': 'eta_canadense',
+        'passaporte': 'passaporte'
+    };
+    
+    const mensagemLower = messageText.toLowerCase();
+    for (const [keyword, serviceKey] of Object.entries(servicosKeywords)) {
+        if (mensagemLower.includes(keyword)) {
+            console.log('🔍 Detectado serviço específico:', serviceKey);
+            
+            state.nivel = 'submenu';
+            state.service = serviceKey;
+            userState.set(cleanPhone, state);
+            
+            // Envia o submenu diretamente
+            const submenuTexto = getSubmenu(serviceKey);
+            await sendReply(cleanPhone, submenuTexto);
+            return;
+        }
+    }
+    
+    // 🔥 VERIFICAR SE É UMA PERGUNTA SOBRE PREÇO, PRAZO, DOCUMENTOS
+    const perguntasEspecificas = {
+        'preco': 'preco',
+        'valor': 'preco',
+        'quanto custa': 'preco',
+        'custo': 'preco',
+        'investimento': 'preco',
+        'prazo': 'prazo',
+        'tempo': 'prazo',
+        'demora': 'prazo',
+        'documentos': 'documentos',
+        'documentacao': 'documentos',
+        'requisitos': 'documentos',
+        'processo': 'processo',
+        'passo a passo': 'processo',
+        'visto negado': 'visto_negado',
+        'recusado': 'visto_negado',
+        'negativa': 'visto_negado'
+    };
+    
+    for (const [keyword, tipo] of Object.entries(perguntasEspecificas)) {
+        if (mensagemLower.includes(keyword)) {
+            console.log('🔍 Detectada pergunta sobre:', tipo);
+            
+            // Se não tem serviço selecionado, pergunta qual serviço
+            if (!state.service) {
+                const msg = `📋 Para falar sobre *${tipo}*, preciso saber qual serviço você deseja:\n\n` +
+                           `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
+                           `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
+                           `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
+                           `4️⃣ - 🇬🇧 eTA UK\n` +
+                           `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
+                           `6️⃣ - 🛂 PASSAPORTE\n\n` +
+                           `Digite o número do serviço (1-6)`;
+                await sendReply(cleanPhone, msg);
+                return;
+            }
+            
+            // Se tem serviço, responde diretamente
+            const resposta = getRespostaSubmenu(state.service, tipo);
+            await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
+            return;
+        }
+    }
+    
+    // 🔥 Se chegou aqui, nenhuma intenção foi detectada
+    const erroMsg = '❌ Não entendi sua mensagem, ' + (state.nome ? state.nome.split(' ')[0] : '') + '!\n\n' +
                    'Por favor, escolha uma das opções:\n\n' +
                    await getMenuPrincipal();
     await sendReply(cleanPhone, erroMsg);
