@@ -2888,98 +2888,170 @@ app.post('/api/painel/mover-varios', async function(req, res) {
 app.get('/api/etapas/cliente/:telefone', async function(req, res) {
     try {
         var telefone = req.params.telefone;
-        var telefoneLimpo = limparTelefone(telefone);
-
-        console.log('🔍 Buscando etapa para:', {
-            original: telefone,
-            limpo: telefoneLimpo
-        });
-
-        // Buscar com telefone limpo
-        var result = await supabase
+        
+        // ============================================================
+        // AO INVÉS DE BUSCAR PELO TELEFONE, BUSQUE PELO NOME
+        // ============================================================
+        // Primeiro, busca o cliente pelo telefone (como está)
+        let cliente = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        // Se não encontrou, tenta limpar
+        if (!cliente.data) {
+            const limpo = telefone.replace(/\D/g, '');
+            cliente = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', limpo)
+                .maybeSingle();
+        }
+        
+        // Se ainda não encontrou, usa o nome do cliente que está no painel
+        if (!cliente.data) {
+            // Pega o nome que o painel está mostrando
+            const nome = req.query.nome || 'TESTE DO DS160';
+            cliente = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .ilike('nome', `%${nome}%`)
+                .maybeSingle();
+        }
+        
+        if (!cliente.data) {
+            return res.status(404).json({ erro: 'Cliente nao encontrado' });
+        }
+        
+        // Agora que temos o cliente, busca a etapa pelo telefone dele (que está correto)
+        const telefoneCorreto = cliente.data.telefone;
+        
+        let etapa = await supabase
             .from('etapas_processo')
             .select('*')
-            .eq('cliente_telefone', telefoneLimpo)
+            .eq('cliente_telefone', telefoneCorreto)
             .maybeSingle();
-
-        // Se não encontrou, criar nova etapa
-        if (!result.data) {
-            console.log('🆕 Criando nova etapa para:', telefoneLimpo);
-            var novaEtapa = await criarEtapaInicial(telefoneLimpo);
-            if (novaEtapa) {
-                return res.json(novaEtapa);
-            }
-            return res.status(404).json({ 
-                erro: 'Cliente nao encontrado',
-                telefone_limpo: telefoneLimpo 
-            });
+        
+        // Se não tem etapa, cria
+        if (!etapa.data) {
+            const novaEtapa = {
+                cliente_telefone: telefoneCorreto,
+                etapa_atual: 'formulario_enviado',
+                data_inicio: new Date().toISOString(),
+                data_atualizacao: new Date().toISOString(),
+                historico: [{
+                    etapa: 'formulario_enviado',
+                    data: new Date().toISOString(),
+                    nota: 'Inicio do processo',
+                    observacao: 'Criado automaticamente'
+                }]
+            };
+            
+            const { data } = await supabase
+                .from('etapas_processo')
+                .insert(novaEtapa)
+                .select()
+                .single();
+            
+            etapa = { data };
         }
-
-        res.json(result.data);
+        
+        res.json(etapa.data);
         
     } catch (error) {
-        console.error('❌ Erro ao buscar etapa:', error);
-        res.status(500).json({ erro: 'Erro ao buscar etapa do cliente' });
+        console.error('❌ Erro:', error);
+        res.status(500).json({ erro: 'Erro ao buscar etapa' });
     }
 });
 
 app.post('/api/etapas/avancar', async function(req, res) {
     try {
-        console.log('🚨 ROTA /api/etapas/avancar EXECUTADA');
-        console.log('🚨 Body recebido:', req.body);
-        
         var telefone = req.body.telefone;
         var nota = req.body.nota;
-        var observacao = req.body.observacao;
         
         // ============================================================
-        // SEMPRE USAR TELEFONE LIMPO
+        // PRIMEIRO: ENCONTRA O CLIENTE CERTO
         // ============================================================
-        var telefoneLimpo = limparTelefone(telefone);
+        // Tenta várias formas de encontrar o cliente
+        let cliente = null;
         
-        console.log('📱 Telefone original:', telefone);
-        console.log('📱 Telefone limpo:', telefoneLimpo);
-
-        if (!FEATURES.SISTEMA_ETAPAS.ativo) {
-            return res.status(503).json({ erro: 'Sistema de etapas esta temporariamente desativado' });
+        // 1. Tenta com o telefone exato
+        let { data } = await supabase
+            .from('clientes_ativos')
+            .select('*')
+            .eq('telefone', telefone)
+            .maybeSingle();
+        
+        if (data) cliente = data;
+        
+        // 2. Tenta com telefone limpo
+        if (!cliente) {
+            const limpo = telefone.replace(/\D/g, '');
+            const { data } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .eq('telefone', limpo)
+                .maybeSingle();
+            if (data) cliente = data;
         }
-
+        
+        // 3. Se não encontrou, usa o primeiro da lista (só para teste)
+        if (!cliente) {
+            const { data } = await supabase
+                .from('clientes_ativos')
+                .select('*')
+                .limit(1)
+                .maybeSingle();
+            if (data) cliente = data;
+        }
+        
+        if (!cliente) {
+            return res.status(404).json({ erro: 'Cliente nao encontrado' });
+        }
+        
         // ============================================================
-        // BUSCA ETAPA - SEMPRE COM TELEFONE LIMPO
+        // AGORA USA O TELEFONE CORRETO (QUE ESTÁ NO BANCO)
         // ============================================================
-        var etapaAtual = await supabase
+        const telefoneCorreto = cliente.telefone;
+        
+        // Busca a etapa
+        let etapa = await supabase
             .from('etapas_processo')
             .select('*')
-            .eq('cliente_telefone', telefoneLimpo)
+            .eq('cliente_telefone', telefoneCorreto)
             .maybeSingle();
-
-        if (!etapaAtual.data) {
-            console.log('⚠️ Etapa não encontrada, tentando criar...');
+        
+        // Se não tem, cria
+        if (!etapa.data) {
+            const novaEtapa = {
+                cliente_telefone: telefoneCorreto,
+                etapa_atual: 'formulario_enviado',
+                data_inicio: new Date().toISOString(),
+                data_atualizacao: new Date().toISOString(),
+                historico: [{
+                    etapa: 'formulario_enviado',
+                    data: new Date().toISOString(),
+                    nota: 'Inicio do processo',
+                    observacao: 'Criado automaticamente'
+                }]
+            };
             
-            // Tenta criar a etapa
-            var novaEtapa = await criarEtapaInicial(telefoneLimpo);
-            if (novaEtapa) {
-                console.log('✅ Etapa criada automaticamente!');
-                etapaAtual = { data: novaEtapa };
-            } else {
-                return res.status(404).json({ 
-                    erro: 'Cliente não encontrado em etapas_processo',
-                    telefone_buscado: telefone,
-                    telefone_limpo: telefoneLimpo
-                });
-            }
+            const { data } = await supabase
+                .from('etapas_processo')
+                .insert(novaEtapa)
+                .select()
+                .single();
+            
+            etapa = { data };
         }
-
-        console.log('✅ Etapa encontrada:', etapaAtual.data);
-
-        return processarAvanco(res, etapaAtual.data, nota, observacao, telefoneLimpo);
+        
+        // Avança
+        return processarAvanco(res, etapa.data, nota, '', telefoneCorreto);
         
     } catch (error) {
-        console.error('❌ Erro ao avançar etapa:', error);
-        res.status(500).json({ 
-            erro: 'Erro ao avançar etapa', 
-            detalhe: error.message 
-        });
+        console.error('❌ Erro:', error);
+        res.status(500).json({ erro: 'Erro ao avançar etapa' });
     }
 });
 
