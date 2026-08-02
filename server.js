@@ -591,6 +591,9 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     }
     
     switch (state.onboardingStep) {
+        // ============================================================
+        // PASSO 1: SAUDAÇÃO - APRESENTAR A GETVISA
+        // ============================================================
         case ONBOARDING_STEPS.SAUDACAO:
             console.log('📌 PASSO 1: SAUDAÇÃO');
             const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
@@ -604,6 +607,9 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('✅ Estado atualizado para: AGUARDANDO_NOME');
             break;
         
+        // ============================================================
+        // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
+        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
             console.log('📌 PASSO 2: AGUARDANDO NOME');
             console.log('📝 Nome recebido: "' + messageText + '"');
@@ -620,28 +626,50 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             const nomeFormatado = formatarNome(messageText);
             console.log('📝 Nome formatado: "' + nomeFormatado + '"');
             
-            // SALVAR NOME NO SUPABASE
+            // 🔥 SALVAR NOME NO SUPABASE - UPDATE + INSERT
             try {
-                const { data, error } = await supabase
+                // 1. Tentar atualizar primeiro
+                const { data: updateData, error: updateError } = await supabase
                     .from('clientes_novos')
-                    .upsert({
-                        telefone: cleanPhone,
+                    .update({
                         nome: nomeFormatado,
                         data_contato: new Date().toISOString(),
                         status: 'novo',
-                        onboarding_completo: false,
-                        email: null
-                    }, {
-                        onConflict: 'telefone'
-                    });
+                        onboarding_completo: false
+                    })
+                    .eq('telefone', cleanPhone)
+                    .select()
+                    .single();
                 
-                if (error) {
-                    console.error('❌ Erro ao salvar nome:', error);
+                // 2. Se não encontrou (PGRST116 = not found), inserir
+                if (updateError && updateError.code === 'PGRST116') {
+                    console.log('📝 Cliente não encontrado, inserindo novo...');
+                    const { data: insertData, error: insertError } = await supabase
+                        .from('clientes_novos')
+                        .insert({
+                            telefone: cleanPhone,
+                            nome: nomeFormatado,
+                            data_contato: new Date().toISOString(),
+                            status: 'novo',
+                            onboarding_completo: false
+                        })
+                        .select()
+                        .single();
+                    
+                    if (insertError) {
+                        console.error('❌ Erro ao inserir nome:', insertError);
+                    } else {
+                        console.log('✅ Nome INSERIDO no Supabase:', nomeFormatado);
+                        console.log('📊 Dados:', insertData);
+                    }
+                } else if (updateError) {
+                    console.error('❌ Erro ao atualizar nome:', updateError);
                 } else {
-                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+                    console.log('✅ Nome ATUALIZADO no Supabase:', nomeFormatado);
+                    console.log('📊 Dados:', updateData);
                 }
             } catch (err) {
-                console.error('❌ Erro ao atualizar cliente:', err);
+                console.error('❌ Erro ao salvar nome:', err);
             }
             
             // ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
@@ -661,10 +689,14 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Mensagem de email enviada');
             break;
         
+        // ============================================================
+        // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
+        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
             console.log('📌 PASSO 3: AGUARDANDO EMAIL');
             console.log('📧 Email recebido: "' + messageText + '"');
             
+            // Validar e-mail
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(messageText)) {
                 console.log('❌ Email inválido');
@@ -677,30 +709,56 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Email válido:', email);
             console.log('👤 Nome associado:', nome);
             
-            // SALVAR E-MAIL E COMPLETAR ONBOARDING
+            // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING - UPDATE + INSERT
             try {
-                const { data, error } = await supabase
+                // 1. Tentar atualizar primeiro
+                const { data: updateData, error: updateError } = await supabase
                     .from('clientes_novos')
-                    .upsert({
-                        telefone: cleanPhone,
+                    .update({
                         nome: nome,
                         email: email,
                         data_contato: new Date().toISOString(),
                         status: 'novo',
                         onboarding_completo: true,
                         data_onboarding: new Date().toISOString()
-                    }, {
-                        onConflict: 'telefone'
-                    });
+                    })
+                    .eq('telefone', cleanPhone)
+                    .select()
+                    .single();
                 
-                if (error) {
-                    console.error('❌ Erro ao salvar e-mail:', error);
+                // 2. Se não encontrou (PGRST116 = not found), inserir
+                if (updateError && updateError.code === 'PGRST116') {
+                    console.log('📝 Cliente não encontrado, inserindo novo...');
+                    const { data: insertData, error: insertError } = await supabase
+                        .from('clientes_novos')
+                        .insert({
+                            telefone: cleanPhone,
+                            nome: nome,
+                            email: email,
+                            data_contato: new Date().toISOString(),
+                            status: 'novo',
+                            onboarding_completo: true,
+                            data_onboarding: new Date().toISOString()
+                        })
+                        .select()
+                        .single();
+                    
+                    if (insertError) {
+                        console.error('❌ Erro ao inserir e-mail:', insertError);
+                    } else {
+                        console.log('✅ E-mail INSERIDO no Supabase:', email);
+                        console.log('✅ Onboarding completo para:', nome);
+                        console.log('📊 Dados:', insertData);
+                    }
+                } else if (updateError) {
+                    console.error('❌ Erro ao atualizar e-mail:', updateError);
                 } else {
-                    console.log('✅ E-mail salvo no Supabase:', email);
+                    console.log('✅ E-mail ATUALIZADO no Supabase:', email);
                     console.log('✅ Onboarding completo para:', nome);
+                    console.log('📊 Dados:', updateData);
                 }
             } catch (err) {
-                console.error('❌ Erro ao atualizar cliente:', err);
+                console.error('❌ Erro ao salvar e-mail:', err);
             }
             
             // ATUALIZAR ESTADO - ONBOARDING COMPLETO
@@ -711,6 +769,7 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             state.service = null;
             userState.set(cleanPhone, state);
             console.log('✅ Estado atualizado para: COMPLETO');
+            console.log('📌 Estado final:', JSON.stringify(state, null, 2));
             
             // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
             const primeiroNome = nome.split(' ')[0];
@@ -730,12 +789,18 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📨 Mensagem de confirmação enviada');
             break;
         
+        // ============================================================
+        // PASSO 4: COMPLETO (FALLBACK)
+        // ============================================================
         case ONBOARDING_STEPS.COMPLETO:
             console.log('⚠️ Onboarding já completo, enviando menu principal');
             const menuCompleto = await getMenuPrincipal();
             await sendReply(cleanPhone, menuCompleto);
             break;
         
+        // ============================================================
+        // DEFAULT: RESETAR ONBOARDING
+        // ============================================================
         default:
             console.log('⚠️ Estado de onboarding desconhecido, reiniciando');
             state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
