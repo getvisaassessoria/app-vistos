@@ -822,27 +822,29 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
 
-    // ============================================================
-    // 5. DETECTAR INTENÇÃO (SÓ DEPOIS QUE ONBOARDING ESTÁ OK)
-    // ============================================================
-    const intent = detectIntent(messageText);
-    console.log('Intenção detectada:', intent);
+   // ============================================================
+// 5. DETECTAR INTENÇÃO
+// ============================================================
+const intent = detectIntent(messageText);
+console.log('Intenção detectada:', intent);
 
-    // 5.1. INTENÇÃO: INICIAR PROCESSO
-    if (intent === 'iniciar_processo') {
-        console.log('🚀 Cliente quer iniciar o processo!');
-        const nomeCliente = state.nome || 'Cliente';
-        const mensagemFormulario = getMensagemFormulario(nomeCliente);
-        await sendReply(cleanPhone, mensagemFormulario);
-        return;
-    }
+// 5.1. INTENÇÃO: INICIAR PROCESSO - CORRIGIDO
+if (intent === 'iniciar_processo') {
+    console.log('🚀 Cliente quer iniciar o processo!');
+    
+    // 🔥 CORREÇÃO: Verificar se tem nome antes de usar
+    const nomeCliente = state.nome || 'Cliente';
+    const mensagemFormulario = getMensagemFormulario(nomeCliente);
+    await sendReply(cleanPhone, mensagemFormulario);
+    return;
+}
 
-    // 5.2. 🔥🔥🔥 IGNORAR INTENÇÃO 'visto_americano' - DEIXAR A DETECÇÃO DE SERVIÇO LIDAR
-    if (intent && intent !== 'visto_americano') {
-        const resposta = getRespostaIntencao(intent, state.service);
-        await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
-        return;
-    }
+// 5.2. OUTRAS INTENÇÕES
+if (intent) {
+    const resposta = getRespostaIntencao(intent, state.service);
+    await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
+    return;
+}
     
     // ============================================================
     // 6. DETECTAR SERVIÇO POR PALAVRA-CHAVE
