@@ -1028,49 +1028,44 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
-    // ============================================================
-    // 4. DETECTAR INTENÇÃO
-    // ============================================================
-    const intent = detectIntent(messageText);
-    console.log('Intenção detectada:', intent);
-    
-    // 4.1. INTENÇÃO: INICIAR PROCESSO
-    if (intent === 'iniciar_processo') {
-        console.log('🚀 Cliente quer iniciar o processo!');
-        
-        const nomeCliente = state.nome || 'Cliente';
-        const mensagemFormulario = `📋 Ótimo, ${nomeCliente}! Vamos iniciar seu processo!\n\n` +
-                                  `🔗 Clique no link abaixo para preencher o formulário:\n` +
-                                  `https://getvisa.com.br/ds160/\n\n` +
-                                  `📝 Após o preenchimento, nossa equipe entrará em contato em até 24h.\n\n` +
-                                  `Digite 0 para voltar ao MENU principal`;
-        
-        await sendReply(cleanPhone, mensagemFormulario);
-        
-        try {
-            await supabase
-                .from('clientes_novos')
-                .update({
-                    formulario_enviado: true,
-                    data_formulario_enviado: new Date().toISOString(),
-                    status: 'aguardando_formulario'
-                })
-                .eq('telefone', cleanPhone);
-            
-            console.log(`📝 Formulário enviado para ${cleanPhone}`);
-        } catch (err) {
-            console.error('❌ Erro ao atualizar status:', err);
-        }
-        
-        return;
-    }
-    
-    // 4.2. OUTRAS INTENÇÕES
-    if (intent) {
-        const resposta = getRespostaIntencao(intent, state.service);
-        await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
-        return;
-    }
+// ============================================================
+// 4. VERIFICAR ONBOARDING - PRIORIDADE MÁXIMA
+// ============================================================
+const clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+const precisaOnboarding = !clienteDB || !clienteDB.nome || clienteDB.onboarding_completo === false;
+
+if (precisaOnboarding) {
+    console.log('🆕 Cliente SEM onboarding - FORÇANDO ONBOARDING');
+    state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+    state.onboardingCompleto = false;
+    state.nome = null;
+    state.nivel = 'onboarding';
+    userState.set(cleanPhone, state);
+    await processarOnboarding(cleanPhone, messageText, state);
+    return;
+}
+
+// ============================================================
+// 5. DETECTAR INTENÇÃO (SÓ DEPOIS QUE ONBOARDING ESTÁ OK)
+// ============================================================
+const intent = detectIntent(messageText);
+console.log('Intenção detectada:', intent);
+
+// 5.1. INTENÇÃO: INICIAR PROCESSO
+if (intent === 'iniciar_processo') {
+    console.log('🚀 Cliente quer iniciar o processo!');
+    const nomeCliente = state.nome || 'Cliente';
+    const mensagemFormulario = getMensagemFormulario(nomeCliente);
+    await sendReply(cleanPhone, mensagemFormulario);
+    return;
+}
+
+// 5.2. OUTRAS INTENÇÕES
+if (intent) {
+    const resposta = getRespostaIntencao(intent, state.service);
+    await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
+    return;
+}
     
     // ============================================================
     // 5. DETECTAR SERVIÇO POR PALAVRA-CHAVE
