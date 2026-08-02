@@ -174,7 +174,10 @@ const DATE_FIELDS = [
     'text-5', 'text-21', 'text-35', 'text-66', 'text-67', 'text-69',
     'text-61', 'text-62', 'spouse-dob', 'data_casamento_div',
     'data_divorcio', 'data_falecimento', 'text-50', 'text-44',
-    'text-45', 'military_date_from', 'military_date_to', 'antecedentes_data'
+    'text-45', 'military_date_from', 'military_date_to', 'antecedentes_data',
+    // Novos campos de datas para empregos anteriores
+    'emprego_anterior_data_inicio',
+    'emprego_anterior_data_termino'
 ];
 
 const SPAM_DOMAINS = ['tempmail', 'mailinator', '10minutemail', 'guerrillamail', 'throwaway', 'fake', 'spam'];
@@ -902,7 +905,6 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     const intent = detectIntent(messageText);
     console.log('Intenção detectada:', intent);
     
-    // 🔥 DETECTAR INTENÇÃO DE INICIAR PROCESSO
     if (intent === 'iniciar_processo') {
         console.log('🚀 Cliente quer iniciar o processo!');
         
@@ -1235,7 +1237,6 @@ async function enviarPDFWhatsApp(telefone, pdfBuffer, nomeCliente, tipo = 'ds160
             return false;
         }
 
-        // Primeiro, enviar a mensagem com o link
         const mensagemLink = `📄 *Olá ${nomeCliente}!*\n\n` +
                             `Seu formulário DS-160 foi recebido com sucesso!\n\n` +
                             `📎 Segue em anexo o PDF com as informações que você preencheu.\n\n` +
@@ -1246,7 +1247,6 @@ async function enviarPDFWhatsApp(telefone, pdfBuffer, nomeCliente, tipo = 'ds160
                             `📱 Dúvidas? Fale conosco: https://wa.me/5521974601812\n\n` +
                             `🌟 *Bem-vindo(a) à GetVisa!*`;
 
-        // Enviar a mensagem
         const enviado = await enviarWhatsApp(cleanPhone, mensagemLink);
         
         if (!enviado) {
@@ -1254,10 +1254,8 @@ async function enviarPDFWhatsApp(telefone, pdfBuffer, nomeCliente, tipo = 'ds160
             return false;
         }
 
-        // Esperar um pouco e enviar o PDF
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Enviar o PDF via Z-API
         const url = `https://api.z-api.io/instances/${instance}/token/${token}/send-document`;
 
         const headers = {
@@ -1776,14 +1774,401 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
 }
 
 // ============================================================
-// FUNÇÃO GERAR PDF - DS160 COMPLETA
+// FUNÇÃO GERAR PDF - DS160 COMPLETA (COM OS NOVOS CAMPOS)
 // ============================================================
 
 async function gerarPDF_DS160(data) {
-    // ... [AQUI VAI TODA A FUNÇÃO COMPLETA QUE VOCÊ JÁ TEM - 
-    // A VERSÃO COM TODAS AS 28 SEÇÕES QUE EU TE PAIREI ANTES] ...
-    // Por questões de espaço, mantenha a função que já está no seu código
-    // Ela está correta e completa
+    return new Promise((resolve, reject) => {
+        try {
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            let buffers = [];
+            doc.on('data', (chunk) => buffers.push(chunk));
+            doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+            doc.fillColor('#003366').rect(0, 0, doc.page.width, 90).fill();
+            doc.fillColor('#FFFFFF').fontSize(20).font('Helvetica-Bold')
+                .text('FORMULARIO DS-160', 50, 30, { width: doc.page.width - 100, align: 'center' });
+            doc.fontSize(10).font('Helvetica')
+                .text('Assessoria GetVisa - Documentacao Consular', 50, 58, { width: doc.page.width - 100, align: 'center' });
+            doc.fillColor('#000000').font('Helvetica').fontSize(10);
+            doc.y = 110;
+
+            // ============================================================
+            // SEÇÃO 1: INFORMAÇÕES PESSOAIS
+            // ============================================================
+            drawSectionTitle(doc, '1. INFORMACOES PESSOAIS');
+            addField(doc, 'Nome completo', data.full_name);
+            addField(doc, 'Sexo', data.sexo);
+            addField(doc, 'Data de nascimento', formatDateToBrazilian(data['text-5'] || data.data_nascimento));
+            addField(doc, 'Pais de nascimento', data.pais_nascimento);
+            addField(doc, 'Cidade de nascimento', data.cidade_nascimento);
+            addField(doc, 'Provincia/Estado de nascimento', data.estado_nascimento);
+            addField(doc, 'Nacionalidade', data.nacionalidade);
+            addField(doc, 'Outra nacionalidade', data['radio-outra-nac'] || 'Nao');
+            if (data['radio-outra-nac'] === 'Sim') {
+                addField(doc, 'Qual outra nacionalidade', data['text-72']);
+            }
+            addField(doc, 'Numero de identificacao nacional', data['text-16']);
+            addField(doc, 'Estado civil', data.estado_civil);
+
+            if (data.estado_civil === 'Casado(a)') {
+                addField(doc, 'Nome do conjuge', data['text-spouse-name']);
+                addField(doc, 'Data de nascimento do conjuge', formatDateToBrazilian(data['spouse-dob']));
+                addField(doc, 'Endereco do conjuge', data['spouse-address']);
+                if (data['spouse-address-same'] === 'Diferente') {
+                    addField(doc, 'Endereco diferente', data['spouse-address-different']);
+                }
+                addField(doc, 'Data do casamento', formatDateToBrazilian(data['data_casamento_div']));
+            }
+
+            if (data.estado_civil === 'Divorciado(a)') {
+                addField(doc, 'Data do divorcio', formatDateToBrazilian(data['data_divorcio']));
+            }
+
+            if (data.estado_civil === 'Viuvo(a)') {
+                addField(doc, 'Nome do falecido', data['falecido_nome']);
+                addField(doc, 'Data do falecimento', formatDateToBrazilian(data['data_falecimento']));
+            }
+
+            if (data['radio-7'] === 'Sim') {
+                addField(doc, 'Possui outros nomes', 'Sim');
+                addField(doc, 'Outros nomes', data['text-other-names']);
+            }
+
+            if (data['radio-8'] === 'Sim') {
+                addField(doc, 'Possui nome social', 'Sim');
+                addField(doc, 'Nome social', data['text-social-name']);
+            }
+
+            addField(doc, 'Raca/Cor', data.raca_cor);
+            addField(doc, 'Telefone principal', data['text-77'] || data.phone);
+            addField(doc, 'E-mail', data['email-1']);
+            addField(doc, 'E-mail alternativo', data['email-2'] || data['email-2']);
+
+            // ============================================================
+            // SEÇÃO 2: ENDEREÇO
+            // ============================================================
+            drawSectionTitle(doc, '2. ENDERECO');
+            addField(doc, 'Rua', data.endereco_rua);
+            addField(doc, 'Numero', data.endereco_numero);
+            addField(doc, 'Complemento', data.endereco_complemento);
+            addField(doc, 'Bairro', data.endereco_bairro);
+            addField(doc, 'Cidade', data['text-74'] || data.cidade);
+            addField(doc, 'Estado', data.endereco_uf);
+            addField(doc, 'CEP', data.cep);
+            addField(doc, 'Endereco residencial', data.endereco_residencial);
+
+            // ============================================================
+            // SEÇÃO 3: CONTATO
+            // ============================================================
+            drawSectionTitle(doc, '3. CONTATO E REDES SOCIAIS');
+            addField(doc, 'Telefone residencial', data['phone-home'] || data['phone-home']);
+            addField(doc, 'Telefone celular', data['phone-cell'] || data['phone-cell']);
+            addField(doc, 'Telefone trabalho', data['phone-work'] || data['phone-work']);
+            addField(doc, 'E-mail principal', data['email-1']);
+            addField(doc, 'E-mail alternativo', data['email-2']);
+            addField(doc, 'Instagram', data['text-instagram'] || data['instagram']);
+            addField(doc, 'Facebook', data['text-facebook'] || data['facebook']);
+            addField(doc, 'LinkedIn', data['text-linkedin'] || data['linkedin']);
+            addField(doc, 'X (Twitter)', data['text-x'] || data['x']);
+            addField(doc, 'TikTok', data['text-tiktok'] || data['tiktok']);
+
+            // ============================================================
+            // SEÇÃO 4: FILIAÇÃO
+            // ============================================================
+            drawSectionTitle(doc, '4. FILIACAO');
+            addField(doc, 'Nome do pai', data.nome_pai);
+            addField(doc, 'Nome da mae', data.nome_mae);
+
+            // ============================================================
+            // SEÇÃO 5: DOCUMENTOS
+            // ============================================================
+            drawSectionTitle(doc, '5. DOCUMENTOS');
+            addField(doc, 'Tipo de documento', data.doc_tipo);
+            addField(doc, 'Numero do documento', data.doc_numero);
+            addField(doc, 'Data de emissao', formatDateToBrazilian(data.doc_data_emissao));
+            addField(doc, 'Orgao emissor', data.doc_orgao);
+            addField(doc, 'UF do orgao emissor', data.doc_uf);
+            addField(doc, 'CPF', data.cpf);
+            if (data['cpf-responsavel']) {
+                addField(doc, 'CPF do responsavel', data['cpf-responsavel']);
+            }
+            if (data.certidao_modelo) {
+                addField(doc, 'Modelo da certidao', data.certidao_modelo);
+                if (data.certidao_modelo === 'Nascimento') {
+                    addField(doc, 'Dados da certidao de nascimento', data.certidao_nascimento);
+                } else if (data.certidao_modelo === 'Casamento') {
+                    addField(doc, 'Dados da certidao de casamento', data.certidao_casamento);
+                } else if (data.certidao_modelo === 'Averbacao') {
+                    addField(doc, 'Dados da certidao de averbacao', data.certidao_averbacao);
+                }
+            }
+
+            // ============================================================
+            // SEÇÃO 6: PASSAPORTE ANTERIOR
+            // ============================================================
+            drawSectionTitle(doc, '6. PASSAPORTE ANTERIOR');
+            addField(doc, 'Possui passaporte anterior', data.possui_passaporte_anterior);
+            if (data.possui_passaporte_anterior === 'Sim') {
+                addField(doc, 'Situacao do passaporte', data.passaporte_situacao);
+                addField(doc, 'Numero/Serie', data.passaporte_anterior_numero);
+                addField(doc, 'Data de emissao', formatDateToBrazilian(data.passaporte_anterior_emissao));
+                addField(doc, 'Data de validade', formatDateToBrazilian(data.passaporte_anterior_validade));
+                if (data.passaporte_situacao === 'Extraviado' || data.passaporte_situacao === 'Roubado') {
+                    addField(doc, 'Numero do B.O.', data.bo_numero);
+                    addField(doc, 'Data do B.O.', formatDateToBrazilian(data.bo_data));
+                    addField(doc, 'Delegacia do B.O.', data.bo_delegacia);
+                }
+            }
+
+            // ============================================================
+            // SEÇÃO 7: SITUAÇÃO MILITAR
+            // ============================================================
+            if (data.sexo === 'Masculino') {
+                drawSectionTitle(doc, '7. SITUACAO MILITAR');
+                addField(doc, 'Tipo de documento militar', data.militar_tipo);
+                addField(doc, 'Numero do documento', data.militar_numero);
+                addField(doc, 'Orgao emissor', data.militar_orgao);
+                addField(doc, 'Data de inicio', formatDateToBrazilian(data.military_date_from));
+                addField(doc, 'Data de termino', formatDateToBrazilian(data.military_date_to));
+            }
+
+            // ============================================================
+            // SEÇÃO 8: TRABALHO/EDUCAÇÃO ATUAL
+            // ============================================================
+            drawSectionTitle(doc, '8. TRABALHO / EDUCACAO ATUAL');
+            addField(doc, 'Tipo de ocupacao', data['radio-27']);
+            addField(doc, 'Empresa/Instituicao', data['text-26']);
+            addField(doc, 'Endereco', data['text-23']);
+            addField(doc, 'Cargo/Funcao', data['text-29']);
+            addField(doc, 'Descricao das atividades', data['text-30']);
+            addField(doc, 'Data de inicio', formatDateToBrazilian(data['text-21']));
+            addField(doc, 'Salario mensal', data['text-31']);
+
+            // ============================================================
+            // SEÇÃO 9: OCUPAÇÃO ADICIONAL (NOVO CAMPO)
+            // ============================================================
+            const temOcupacaoAdicional = data['radio-ocupacao-adicional'] === 'Sim' || 
+                                         data['text-ocupacao-adicional-empresa'] || 
+                                         data['text-ocupacao-adicional-cargo'];
+            
+            if (temOcupacaoAdicional) {
+                drawSectionTitle(doc, '9. OCUPACAO ADICIONAL');
+                addField(doc, 'Possui ocupacao adicional', data['radio-ocupacao-adicional'] || 'Sim');
+                addField(doc, 'Empresa/Instituicao', data['text-ocupacao-adicional-empresa']);
+                addField(doc, 'Endereco', data['text-ocupacao-adicional-endereco']);
+                addField(doc, 'Cargo/Funcao', data['text-ocupacao-adicional-cargo']);
+                addField(doc, 'Descricao das atividades', data['text-ocupacao-adicional-descricao']);
+                addField(doc, 'Data de inicio', formatDateToBrazilian(data['text-ocupacao-adicional-inicio']));
+                addField(doc, 'Salario mensal', data['text-ocupacao-adicional-salario']);
+            }
+
+            // ============================================================
+            // SEÇÃO 10: EMPREGOS ANTERIORES (NOVO CAMPO)
+            // ============================================================
+            drawSectionTitle(doc, '10. EMPREGOS ANTERIORES');
+            
+            // Verificar se há empregos anteriores usando os campos de array
+            const temEmpregosAnteriores = data['emprego_anterior_empresa'] && 
+                                          Array.isArray(data['emprego_anterior_empresa']) && 
+                                          data['emprego_anterior_empresa'].length > 0;
+            
+            if (temEmpregosAnteriores) {
+                const empresas = data['emprego_anterior_empresa'] || [];
+                const cargos = data['emprego_anterior_cargo'] || [];
+                const descricoes = data['emprego_anterior_descricao'] || [];
+                const datasInicio = data['emprego_anterior_data_inicio'] || [];
+                const datasTermino = data['emprego_anterior_data_termino'] || [];
+                const supervisores = data['emprego_anterior_supervisor'] || [];
+                
+                const maxLen = Math.max(
+                    empresas.length,
+                    cargos.length,
+                    descricoes.length,
+                    datasInicio.length,
+                    datasTermino.length,
+                    supervisores.length
+                );
+                
+                let empregosCount = 0;
+                for (let i = 0; i < maxLen; i++) {
+                    const empresa = empresas[i] || '';
+                    const cargo = cargos[i] || '';
+                    const descricao = descricoes[i] || '';
+                    const dataInicio = datasInicio[i] || '';
+                    const dataTermino = datasTermino[i] || '';
+                    const supervisor = supervisores[i] || '';
+                    
+                    if (empresa || cargo) {
+                        empregosCount++;
+                        doc.fillColor('#1e293b').fontSize(10).font('Helvetica-Bold')
+                           .text('Emprego ' + empregosCount + ':');
+                        doc.moveDown(0.2);
+                        
+                        addField(doc, '  Empresa', empresa);
+                        addField(doc, '  Cargo', cargo);
+                        if (descricao) addField(doc, '  Descricao das atividades', descricao);
+                        if (dataInicio) addField(doc, '  Data de inicio', formatDateToBrazilian(dataInicio));
+                        if (dataTermino) addField(doc, '  Data de termino', formatDateToBrazilian(dataTermino));
+                        if (supervisor) addField(doc, '  Supervisor imediato', supervisor);
+                        doc.moveDown(0.5);
+                    }
+                }
+                
+                if (empregosCount === 0) {
+                    addField(doc, 'Nao informado', 'Nao informado');
+                }
+            } else {
+                addField(doc, 'Nao informado', 'Nao informado');
+            }
+
+            // ============================================================
+            // SEÇÃO 11: VIAGENS
+            // ============================================================
+            drawSectionTitle(doc, '11. VIAGENS INTERNACIONAIS');
+            addField(doc, 'Ja visitou outro pais', data['radio-29']);
+            if (data['radio-29'] === 'Sim') {
+                addField(doc, 'Paises visitados', data['text-51']);
+                const viagens = groupTravels(data);
+                if (viagens.length > 0) {
+                    doc.moveDown(0.3);
+                    doc.fillColor('#1e293b').fontSize(10).font('Helvetica-Bold')
+                       .text('Detalhes das viagens:');
+                    doc.moveDown(0.2);
+                    doc.font('Helvetica').fillColor('#333333');
+                    viagens.forEach(function(viagem) {
+                        doc.text('  • ' + viagem);
+                    });
+                    doc.moveDown(0.3);
+                }
+            }
+
+            addField(doc, 'Ja viajou para os EUA', data['radio-30']);
+            if (data['radio-30'] === 'Sim') {
+                addField(doc, 'Data da ultima viagem', formatDateToBrazilian(data['text-62']));
+            }
+
+            // ============================================================
+            // SEÇÃO 12: FAMÍLIA NOS EUA
+            // ============================================================
+            drawSectionTitle(doc, '12. FAMILIA NOS EUA');
+            addField(doc, 'Tem parente nos EUA', data['radio-33']);
+            if (data['radio-33'] === 'Sim') {
+                addField(doc, 'Parentesco', data['select-relative-relation']);
+                addField(doc, 'Nome do parente', data['text-relative-name']);
+                addField(doc, 'Situacao do parente', data['select-relative-status']);
+            }
+
+            // ============================================================
+            // SEÇÃO 13: PESSOA DE CONTATO NOS EUA
+            // ============================================================
+            drawSectionTitle(doc, '13. PESSOA DE CONTATO NOS EUA');
+            addField(doc, 'Nome', data['text-35']);
+            addField(doc, 'Parentesco', data['text-36']);
+            addField(doc, 'Endereco', data['text-37']);
+            addField(doc, 'Telefone', data['text-38']);
+            addField(doc, 'E-mail', data['text-39']);
+
+            // ============================================================
+            // SEÇÃO 14: PREVENÇÃO DE ANTECEDENTES
+            // ============================================================
+            drawSectionTitle(doc, '14. PREVENCAO DE ANTECEDENTES');
+            addField(doc, 'Ja teve visto negado', data['radio-visto-negado']);
+            if (data['radio-visto-negado'] === 'Sim') {
+                addField(doc, 'Ano da negativa', data['text-visto-negado-ano']);
+                addField(doc, 'Explicacao', data['text-visto-negado-explicacao']);
+            }
+            
+            addField(doc, 'Teve entrada negada nos EUA', data['radio-entrada-negada']);
+            if (data['radio-entrada-negada'] === 'Sim') {
+                addField(doc, 'Ano da negativa', data['text-entrada-negada-ano']);
+                addField(doc, 'Explicacao', data['text-entrada-negada-explicacao']);
+            }
+            
+            addField(doc, 'Ja foi deportado', data['radio-deportado']);
+            if (data['radio-deportado'] === 'Sim') {
+                addField(doc, 'Ano da deportacao', data['text-deportado-ano']);
+                addField(doc, 'Duracao da deportacao', data['select-deportado-duracao']);
+                addField(doc, 'Explicacao', data['text-deportado-explicacao']);
+            }
+
+            // ============================================================
+            // SEÇÃO 15: HISTÓRICO DE ANTECEDENTES
+            // ============================================================
+            drawSectionTitle(doc, '15. HISTORICO DE ANTECEDENTES');
+            addField(doc, 'Tem antecedentes criminais', data['radio-17']);
+            addField(doc, 'Ja foi preso', data['radio-18']);
+            addField(doc, 'Esteve envolvido em atividades ilegais', data['radio-19']);
+            addField(doc, 'Ja foi membro de partido comunista', data['radio-20']);
+            addField(doc, 'Foi traficante', data['radio-14']);
+            addField(doc, 'Foi espião', data['radio-15']);
+            addField(doc, 'Ja participou de genocídio', data['radio-16']);
+            addField(doc, 'Já praticou lavagem de dinheiro', data['radio-26']);
+            addField(doc, 'Planeja estudar nos EUA', data['radio-planos']);
+
+            if (data['radio-17'] === 'Sim' || data['radio-18'] === 'Sim' || 
+                data['radio-19'] === 'Sim' || data['radio-20'] === 'Sim' ||
+                data['radio-14'] === 'Sim' || data['radio-15'] === 'Sim' ||
+                data['radio-16'] === 'Sim' || data['radio-26'] === 'Sim') {
+                addField(doc, 'Explicacao dos antecedentes', data['antecedentes_explicacao']);
+            }
+
+            // ============================================================
+            // SEÇÃO 16: FORMAÇÃO ACADÊMICA
+            // ============================================================
+            drawSectionTitle(doc, '16. FORMACAO ACADEMICA');
+            addField(doc, 'Nivel de escolaridade', data['select-educacao']);
+            addField(doc, 'Instituicao', data['text-educacao-instituicao']);
+            addField(doc, 'Curso', data['text-educacao-curso']);
+            addField(doc, 'Ano de conclusao', data['text-educacao-ano']);
+
+            // ============================================================
+            // SEÇÃO 17: OCUPAÇÃO ANTERIOR (PRIMEIRO EMPREGO)
+            // ============================================================
+            drawSectionTitle(doc, '17. PRIMEIRO EMPREGO');
+            addField(doc, 'Empresa', data['text-50']);
+            addField(doc, 'Endereco', data['text-52']);
+            addField(doc, 'Cargo', data['text-53']);
+            addField(doc, 'Data de inicio', formatDateToBrazilian(data['text-44']));
+            addField(doc, 'Data de termino', formatDateToBrazilian(data['text-45']));
+            addField(doc, 'Supervisor', data['text-46']);
+
+            // ============================================================
+            // SEÇÃO 18: OCUPAÇÃO ANTERIOR (SEGUNDO EMPREGO)
+            // ============================================================
+            if (data['text-55'] || data['text-56']) {
+                drawSectionTitle(doc, '18. SEGUNDO EMPREGO');
+                addField(doc, 'Empresa', data['text-55']);
+                addField(doc, 'Endereco', data['text-57']);
+                addField(doc, 'Cargo', data['text-58']);
+                addField(doc, 'Data de inicio', formatDateToBrazilian(data['text-47']));
+                addField(doc, 'Data de termino', formatDateToBrazilian(data['text-48']));
+                addField(doc, 'Supervisor', data['text-49']);
+            }
+
+            // ============================================================
+            // SEÇÃO 19: IDIOMAS
+            // ============================================================
+            drawSectionTitle(doc, '19. IDIOMAS');
+            addField(doc, 'Idiomas', data['text-idiomas']);
+
+            // ============================================================
+            // SEÇÃO 20: CONSIDERACOES FINAIS
+            // ============================================================
+            drawSectionTitle(doc, '20. CONSIDERACOES FINAIS');
+            addField(doc, 'Consulado escolhido', data.consulado_cidade);
+            addField(doc, 'Data de preenchimento', new Date().toLocaleString('pt-BR'));
+            addField(doc, 'Observacoes', data.observacoes || 'Nao informado');
+
+            doc.moveDown(2);
+            doc.fontSize(8).fillColor('#999999')
+                .text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+
+            doc.end();
+        } catch (err) {
+            reject(err);
+        }
+    });
 }
 
 // ============================================================
@@ -1859,7 +2244,7 @@ function gerarPDF_Passaporte(data) {
                 addField(doc, 'Orgao emissor', data.militar_orgao);
             }
 
-            drawSectionTitle(doc, '4. DADOS COMPLEMENTARES');
+            drawSectionTitle(doc, 'DADOS COMPLEMENTARES');
             addField(doc, 'Profissao', data.profissao);
             addField(doc, 'E-mail de contato', data['email-1']);
             addField(doc, 'Telefone', data.phone);
@@ -1868,6 +2253,48 @@ function gerarPDF_Passaporte(data) {
                 data.endereco_complemento, data.endereco_bairro,
                 data['text-74'], data.endereco_uf, data.cep
             ].filter(Boolean).join(', '));
+
+            // OCUPAÇÃO ADICIONAL NO PASSAPORTE
+            const temOcupacaoAdicional = data['radio-ocupacao-adicional'] === 'Sim' || 
+                                         data['text-ocupacao-adicional-empresa'];
+            if (temOcupacaoAdicional) {
+                drawSectionTitle(doc, 'OCUPACAO ADICIONAL');
+                addField(doc, 'Empresa/Instituicao', data['text-ocupacao-adicional-empresa']);
+                addField(doc, 'Cargo/Funcao', data['text-ocupacao-adicional-cargo']);
+                addField(doc, 'Data de inicio', formatDateToBrazilian(data['text-ocupacao-adicional-inicio']));
+            }
+
+            // EMPREGOS ANTERIORES NO PASSAPORTE
+            const temEmpregosAnteriores = data['emprego_anterior_empresa'] && 
+                                          Array.isArray(data['emprego_anterior_empresa']) && 
+                                          data['emprego_anterior_empresa'].length > 0;
+            if (temEmpregosAnteriores) {
+                drawSectionTitle(doc, 'EMPREGOS ANTERIORES');
+                const empresas = data['emprego_anterior_empresa'] || [];
+                const cargos = data['emprego_anterior_cargo'] || [];
+                const datasInicio = data['emprego_anterior_data_inicio'] || [];
+                const datasTermino = data['emprego_anterior_data_termino'] || [];
+                const supervisores = data['emprego_anterior_supervisor'] || [];
+                
+                const maxLen = Math.max(empresas.length, cargos.length);
+                let count = 0;
+                for (let i = 0; i < maxLen; i++) {
+                    const empresa = empresas[i] || '';
+                    const cargo = cargos[i] || '';
+                    if (empresa || cargo) {
+                        count++;
+                        doc.fillColor('#1e293b').fontSize(10).font('Helvetica-Bold')
+                           .text('Emprego ' + count + ':');
+                        doc.moveDown(0.2);
+                        addField(doc, '  Empresa', empresa);
+                        addField(doc, '  Cargo', cargo);
+                        if (datasInicio[i]) addField(doc, '  Data de inicio', formatDateToBrazilian(datasInicio[i]));
+                        if (datasTermino[i]) addField(doc, '  Data de termino', formatDateToBrazilian(datasTermino[i]));
+                        if (supervisores[i]) addField(doc, '  Supervisor imediato', supervisores[i]);
+                        doc.moveDown(0.5);
+                    }
+                }
+            }
 
             doc.moveDown(2);
             doc.fontSize(8).fillColor('#999999')
@@ -1878,15 +2305,6 @@ function gerarPDF_Passaporte(data) {
             reject(err);
         }
     });
-}
-
-function addField(doc, label, value) {
-    const display = value && value.toString().trim() !== '' ? value.toString().trim() : 'Nao informado';
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#1e293b')
-       .text(label + ': ', { continued: true })
-       .font('Helvetica').fillColor('#333333')
-       .text(display);
-    doc.moveDown(0.3);
 }
 
 // ============================================================
@@ -3439,7 +3857,6 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
 
         const telefoneLimpo = limparTelefone(telefone);
         
-        // Buscar o cliente em clientes_ativos
         const { data: cliente, error } = await supabase
             .from('clientes_ativos')
             .select('*')
@@ -3455,7 +3872,6 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
             return res.status(404).json({ error: 'Cliente não encontrado em clientes_ativos' });
         }
 
-        // Buscar os dados do formulário na tabela formulario_ds160
         const { data: formulario, error: formError } = await supabase
             .from('formulario_ds160')
             .select('*')
@@ -3475,10 +3891,8 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
             });
         }
 
-        // Os dados completos estão em form_data
         const dadosCompletos = formulario.form_data || {};
 
-        // Garantir que nome e email estão no objeto
         if (formulario.nome && !dadosCompletos.full_name) {
             dadosCompletos.full_name = formulario.nome;
         }
@@ -3488,11 +3902,9 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
 
         console.log(`📊 Total de campos: ${Object.keys(dadosCompletos).length}`);
 
-        // Regenerar o PDF com os dados completos
         const pdfBuffer = await gerarPDF_DS160(dadosCompletos);
         console.log(`📄 PDF regenerado para ${cliente.nome}, tamanho: ${pdfBuffer.length} bytes`);
 
-        // Enviar por e-mail se solicitado
         if (email) {
             await resend.emails.send({
                 from: 'GetVisa <contato@getvisa.com.br>',
@@ -3507,7 +3919,6 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
             console.log('📧 PDF enviado por e-mail para:', email);
         }
 
-        // Enviar por WhatsApp se solicitado
         if (enviar_whatsapp) {
             try {
                 const nomeCliente = cliente.nome.split(' ')[0];
@@ -3518,7 +3929,6 @@ app.post('/api/admin/regenerar-pdf', async function(req, res) {
             }
         }
 
-        // Salvar o PDF em algum lugar (opcional)
         const fs = require('fs');
         const path = require('path');
         const pastaPDFs = path.join(__dirname, 'pdfs_regenerados');
@@ -3570,7 +3980,6 @@ app.get('/api/admin/buscar-formulario/:telefone', async function(req, res) {
         const telefone = req.params.telefone;
         const telefoneLimpo = limparTelefone(telefone);
 
-        // Buscar em várias tabelas possíveis
         const tabelas = ['formulario_ds160', 'clientes_ativos', 'clientes_novos'];
         let dados = null;
         let encontradoEm = null;
@@ -3737,10 +4146,6 @@ app.post('/api/clientes/finalizar', async function(req, res) {
         });
     }
 });
-
-// ============================================================
-// ROTA DE FINALIZAÇÃO - CORRESPONDE AO QUE O PAINEL ENVIA
-// ============================================================
 
 app.post('/api/etapas/finalizar', async function(req, res) {
     console.log('📌 ===== ROTA /api/etapas/finalizar CHAMADA =====');
@@ -3956,10 +4361,6 @@ app.post('/api/etapas/finalizar', async function(req, res) {
         });
     }
 });
-
-// ============================================================
-// ROTA PARA LISTAR CLIENTES FINALIZADOS
-// ============================================================
 
 app.get('/api/clientes/finalizados', async function(req, res) {
     try {
