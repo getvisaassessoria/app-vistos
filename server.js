@@ -2453,35 +2453,49 @@ app.post('/api/webhook/zapi', function(req, res) {
     console.log('📨 WEBHOOK Z-API RECEBIDO');
     console.log('📨 Body:', JSON.stringify(req.body, null, 2));
 
+    // Responder imediatamente para o Z-API
     res.status(200).json({
         status: 'ok',
         received: true,
         timestamp: new Date().toISOString()
     });
 
+    // Processar em background
     (async function() {
         try {
             var body = req.body;
 
+            // ============================================================
+            // 1. VALIDAÇÕES INICIAIS
+            // ============================================================
+            
+            // Ignorar mensagens de grupo
             if (body.isGroup === true || body.isGroupMsg === true || 
                 (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
                 console.log('👥 Mensagem de grupo ignorada');
                 return;
             }
             
+            // Ignorar mensagens do próprio bot
             if (body.fromMe === true) {
                 console.log('🤖 Mensagem do próprio bot ignorada');
                 return;
             }
             
+            // Ignorar mensagens de status
             if (body.isStatusReply === true || body.waitingMessage === true) {
                 console.log('📊 Mensagem de status/waiting ignorada');
                 return;
             }
 
+            // ============================================================
+            // 2. EXTRAIR MENSAGEM E TELEFONE
+            // ============================================================
+            
             var messageText = '';
             var senderPhone = '';
 
+            // Extrair mensagem
             if (body.text) {
                 if (typeof body.text === 'string') messageText = body.text;
                 else if (body.text.message) messageText = body.text.message;
@@ -2499,6 +2513,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             if (!messageText && body.body) messageText = body.body;
             if (!messageText && body.conversation) messageText = body.conversation;
 
+            // Extrair telefone
             if (body.phone) senderPhone = body.phone;
             else if (body.from) senderPhone = body.from;
             else if (body.sender) senderPhone = body.sender;
@@ -2509,6 +2524,7 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('📝 Mensagem bruta: "' + messageText + '"');
             console.log('📱 Telefone bruto: "' + senderPhone + '"');
 
+            // Validar dados
             if (!senderPhone || !messageText || messageText.trim().length === 0) {
                 console.log('❌ Dados inválidos - ignorando');
                 return;
@@ -2516,6 +2532,10 @@ app.post('/api/webhook/zapi', function(req, res) {
 
             messageText = messageText.trim();
 
+            // ============================================================
+            // 3. LIMPAR TELEFONE
+            // ============================================================
+            
             var cleanPhone = senderPhone.toString().replace(/\D/g, '');
             if (cleanPhone.startsWith('55')) cleanPhone = cleanPhone.substring(2);
             
@@ -2528,9 +2548,14 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('✅ Telefone limpo: ' + cleanPhone);
             console.log('💬 Mensagem: "' + messageText + '"');
             
+            // ============================================================
+            // 4. 🔥🔥🔥 VERIFICAR TIPO DE CLIENTE - PRIORIDADE MÁXIMA
+            // ============================================================
+            
             console.log('🔍 ===== INICIANDO VERIFICAÇÃO =====');
             console.log('📱 Telefone:', cleanPhone);
 
+            // 4.1. VERIFICAR SE É AMIGO
             console.log('🔍 Verificando AMIGO...');
             var { data: amigo, error: amigoError } = await supabase
                 .from('contatos_amigos')
@@ -2546,6 +2571,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // 4.2. VERIFICAR SE É FINALIZADO
             console.log('🔍 Verificando FINALIZADO...');
             const finalizado = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_finalizados');
             
@@ -2555,6 +2581,7 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // 4.3. VERIFICAR SE É ATIVO
             console.log('🔍 Verificando ATIVO...');
             const ativo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_ativos');
             
@@ -2564,16 +2591,66 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
+            // 4.4. 🔥🔥🔥 VERIFICAR SE É NOVO (OU SE PRECISA DE ONBOARDING)
             console.log('🔍 Verificando NOVO...');
-            const novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+            let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
             
+            // Se não encontrou em clientes_novos, verificar se precisa criar
+            if (!novo) {
+                console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
+                var resultado = await cadastrarCliente(cleanPhone, null);
+                if (!resultado) {
+                    console.error('❌ Falha ao cadastrar cliente');
+                    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                    return;
+                }
+                // Buscar o cliente recém-criado
+                novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+                console.log('✅ Cliente criado com sucesso:', novo ? novo.nome : 'Sem nome');
+            }
+            
+            // Se encontrou um cliente NOVO, processar
             if (novo) {
                 console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
+                console.log('📌 Onboarding completo:', novo.onboarding_completo || false);
+                
+                // 🔥🔥🔥 SE O CLIENTE NÃO TEM ONBOARDING COMPLETO, FORÇAR
+                if (!novo.onboarding_completo || !novo.nome) {
+                    console.log('🆕 Cliente precisa de onboarding - FORÇANDO');
+                    
+                    // Criar estado para onboarding
+                    let state = userState.get(cleanPhone);
+                    if (!state) {
+                        state = {
+                            nivel: 'onboarding',
+                            service: null,
+                            nome: null,
+                            onboardingStep: ONBOARDING_STEPS.SAUDACAO,
+                            onboardingCompleto: false,
+                            lastActivity: Date.now()
+                        };
+                    } else {
+                        state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+                        state.onboardingCompleto = false;
+                        state.nome = null;
+                        state.nivel = 'onboarding';
+                    }
+                    userState.set(cleanPhone, state);
+                    
+                    await processarOnboarding(cleanPhone, messageText, state);
+                    return;
+                }
+                
+                // Se tem onboarding completo, processar mensagem normal
                 await processarMensagem(cleanPhone, messageText, body);
                 return;
             }
 
-            console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
+            // ============================================================
+            // 5. FALLBACK - NENHUM CLIENTE ENCONTRADO
+            // ============================================================
+            
+            console.log('⚠️ Nenhum cliente encontrado em nenhuma tabela. Criando novo...');
             var resultado = await cadastrarCliente(cleanPhone, null);
             if (!resultado) {
                 console.error('❌ Falha ao cadastrar cliente');
@@ -2582,13 +2659,33 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
             
             console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
-            await processarMensagem(cleanPhone, messageText, body);
+            // Criar estado para onboarding
+            let state = userState.get(cleanPhone);
+            if (!state) {
+                state = {
+                    nivel: 'onboarding',
+                    service: null,
+                    nome: null,
+                    onboardingStep: ONBOARDING_STEPS.SAUDACAO,
+                    onboardingCompleto: false,
+                    lastActivity: Date.now()
+                };
+            } else {
+                state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+                state.onboardingCompleto = false;
+                state.nome = null;
+                state.nivel = 'onboarding';
+            }
+            userState.set(cleanPhone, state);
+            
+            await processarOnboarding(cleanPhone, messageText, state);
 
         } catch (error) {
             console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
             console.error('Mensagem:', error.message);
             console.error('Stack:', error.stack);
             
+            // Tentar enviar mensagem de erro para o usuário
             try {
                 var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
                 if (phone) {
@@ -2603,7 +2700,6 @@ app.post('/api/webhook/zapi', function(req, res) {
         }
     })();
 });
-
 // ============================================================
 // ROTAS DE FORMULÁRIO
 // ============================================================
