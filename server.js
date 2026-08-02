@@ -755,10 +755,10 @@ case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
     }
 }
 
-// ============================================================
-// FUNÇÃO PRINCIPAL DE PROCESSAMENTO
-// ============================================================
 
+// ============================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
+// ============================================================
 // ============================================================
 // FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
 // ============================================================
@@ -806,17 +806,32 @@ async function processarMensagem(cleanPhone, messageText, body) {
         // ============================================================
         let state = userState.get(cleanPhone);
         
-        if (!state || (state.nome && !isNomeValido(state.nome))) {
+        // 🔥 CORREÇÃO: Verificar se o cliente existe no banco e tem onboarding completo
+        const clienteTemOnboardingCompleto = clienteDB && 
+                                             clienteDB.onboarding_completo === true && 
+                                             isNomeValido(clienteDB.nome) &&
+                                             clienteDB.email && 
+                                             clienteDB.email.trim() !== '';
+
+        if (!state || (state.nome && !isNomeValido(state.nome)) || 
+            (state.onboardingCompleto && !clienteTemOnboardingCompleto)) {
             console.log('🔄 Criando/recriando estado para:', cleanPhone);
             
             let nomeExistente = null;
             let onboardingCompleto = false;
+            let emailExistente = null;
             
             if (clienteDB) {
                 if (isNomeValido(clienteDB.nome)) {
                     nomeExistente = clienteDB.nome;
-                    onboardingCompleto = !!(clienteDB.onboarding_completo === true);
+                    // 🔥 CORREÇÃO: Verificar se tem email também
+                    onboardingCompleto = !!(clienteDB.onboarding_completo === true && 
+                                           clienteDB.email && 
+                                           clienteDB.email.trim() !== '');
+                    emailExistente = clienteDB.email || null;
                     console.log('✅ Nome válido do banco:', nomeExistente);
+                    console.log('✅ Onboarding completo:', onboardingCompleto);
+                    console.log('✅ Email:', emailExistente);
                 } else if (clienteDB.nome) {
                     console.log('⚠️ Nome inválido no banco, removendo:', clienteDB.nome);
                     try {
@@ -824,7 +839,8 @@ async function processarMensagem(cleanPhone, messageText, body) {
                             .from('clientes_novos')
                             .update({ 
                                 nome: null, 
-                                onboarding_completo: false 
+                                onboarding_completo: false,
+                                email: null
                             })
                             .eq('telefone', cleanPhone);
                     } catch (err) {
@@ -832,13 +848,15 @@ async function processarMensagem(cleanPhone, messageText, body) {
                     }
                     nomeExistente = null;
                     onboardingCompleto = false;
+                    emailExistente = null;
                 }
             }
             
             state = {
-                nivel: 'principal',
+                nivel: onboardingCompleto ? 'principal' : 'onboarding',
                 service: null,
                 nome: nomeExistente,
+                email: emailExistente,
                 onboardingStep: onboardingCompleto ? ONBOARDING_STEPS.COMPLETO : ONBOARDING_STEPS.SAUDACAO,
                 onboardingCompleto: onboardingCompleto,
                 lastActivity: Date.now()
@@ -856,6 +874,7 @@ async function processarMensagem(cleanPhone, messageText, body) {
             nivel: state.nivel,
             service: state.service,
             nome: state.nome || '(vazio)',
+            email: state.email || '(vazio)',
             onboardingStep: state.onboardingStep,
             onboardingCompleto: state.onboardingCompleto
         });
@@ -863,9 +882,22 @@ async function processarMensagem(cleanPhone, messageText, body) {
         // ============================================================
         // 5. VERIFICAR SE PRECISA DE ONBOARDING
         // ============================================================
+        // 🔥 CORREÇÃO: Verificar se o estado do usuário é consistente com o banco
         const precisaOnboarding = !state.onboardingCompleto || 
                                   !isNomeValido(state.nome) || 
+                                  !state.email ||
                                   state.onboardingStep !== ONBOARDING_STEPS.COMPLETO;
+
+        // 🔥 CORREÇÃO: Se o estado diz que tem onboarding mas o banco não, corrigir
+        if (state.onboardingCompleto && clienteDB && !clienteTemOnboardingCompleto) {
+            console.log('⚠️ Estado inconsistente: onboardingCompleto=true mas banco não confirma');
+            state.onboardingCompleto = false;
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            state.nivel = 'onboarding';
+            state.email = null;
+            userState.set(cleanPhone, state);
+            // Continuar para o onboarding
+        }
 
         if (precisaOnboarding) {
             console.log('🔄 INICIANDO ONBOARDING');
@@ -875,32 +907,22 @@ async function processarMensagem(cleanPhone, messageText, body) {
                 state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
                 state.onboardingCompleto = false;
                 state.nome = null;
+                state.email = null;
                 state.nivel = 'onboarding';
                 userState.set(cleanPhone, state);
             }
             
-            // Se tem nome válido mas onboarding incompleto, corrigir
+            // Se tem nome válido mas onboarding incompleto, ir para pedir email
             if (isNomeValido(state.nome) && !state.onboardingCompleto) {
-                console.log('✅ Nome válido encontrado, corrigindo onboarding');
-                state.onboardingCompleto = true;
-                state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+                console.log('✅ Nome válido encontrado, indo para pedir email');
+                state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
                 userState.set(cleanPhone, state);
                 
-                try {
-                    await supabase
-                        .from('clientes_novos')
-                        .update({ onboarding_completo: true })
-                        .eq('telefone', cleanPhone);
-                } catch (err) {
-                    console.error('Erro ao atualizar onboarding:', err);
-                }
+                const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
+                const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
+                const mensagemEmail = parte1 + state.nome.split(' ')[0] + parte2;
                 
-                const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
-                                  state.nome.split(' ')[0] +
-                                  getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
-                                  await getMenuPrincipal();
-                
-                await sendReply(cleanPhone, confirmacao);
+                await sendReply(cleanPhone, mensagemEmail);
                 return;
             }
             
