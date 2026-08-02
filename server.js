@@ -581,6 +581,7 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     console.log('=== PROCESSANDO ONBOARDING ===');
     console.log('Passo atual: ' + state.onboardingStep);
     console.log('Mensagem: "' + messageText + '"');
+    console.log('Estado atual:', JSON.stringify(state, null, 2));
     
     // Comandos de escape
     const escapeCommands = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
@@ -595,21 +596,28 @@ async function processarOnboarding(cleanPhone, messageText, state) {
         // PASSO 1: SAUDAÇÃO - APRESENTAR A GETVISA
         // ============================================================
         case ONBOARDING_STEPS.SAUDACAO:
+            console.log('📌 PASSO 1: SAUDAÇÃO');
             const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
             const pedirNome = getRandomMessage(BOAS_VINDAS_MESSAGES.solicitar_nome);
             
             await sendReply(cleanPhone, saudacao + '\n\n' + pedirNome);
             
+            // 🔥 ATUALIZAR ESTADO PARA AGUARDAR NOME
             state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_NOME;
             state.lastActivity = Date.now();
             userState.set(cleanPhone, state);
+            console.log('✅ Estado atualizado para: AGUARDANDO_NOME');
             break;
         
         // ============================================================
         // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
         // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
+            console.log('📌 PASSO 2: AGUARDANDO NOME');
+            console.log('📝 Nome recebido: "' + messageText + '"');
+            
             const nomeValidado = validarNome(messageText);
+            console.log('✅ Nome válido?', nomeValidado);
             
             if (!nomeValidado) {
                 const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
@@ -618,8 +626,9 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             }
             
             const nomeFormatado = formatarNome(messageText);
+            console.log('📝 Nome formatado: "' + nomeFormatado + '"');
             
-            // SALVAR NOME NO SUPABASE
+            // 🔥 SALVAR NOME NO SUPABASE
             try {
                 const { data, error } = await supabase
                     .from('clientes_novos')
@@ -643,37 +652,44 @@ async function processarOnboarding(cleanPhone, messageText, state) {
                 console.error('❌ Erro ao atualizar cliente:', err);
             }
             
-            // Atualizar estado
+            // 🔥 ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
             state.nome = nomeFormatado;
             state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
+            state.lastActivity = Date.now();
             userState.set(cleanPhone, state);
+            console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
+            console.log('📌 Nome salvo no estado:', state.nome);
             
-            // ENVIAR MENSAGEM PEDINDO E-MAIL
+            // 🔥 ENVIAR MENSAGEM PEDINDO E-MAIL
             const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
             const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
             const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
             
             await sendReply(cleanPhone, mensagemEmail);
+            console.log('📧 Mensagem de email enviada');
             break;
         
         // ============================================================
         // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
         // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
-            console.log('📧 PROCESSANDO E-MAIL');
-            console.log('Email recebido: "' + messageText + '"');
+            console.log('📌 PASSO 3: AGUARDANDO EMAIL');
+            console.log('📧 Email recebido: "' + messageText + '"');
             
             // Validar e-mail
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(messageText)) {
+                console.log('❌ Email inválido');
                 await sendReply(cleanPhone, '❌ E-mail inválido! Por favor, digite um e-mail válido.\n\n📧 Ex: maria@email.com');
                 return;
             }
             
             const email = messageText.trim().toLowerCase();
             const nome = state.nome;
+            console.log('📧 Email válido:', email);
+            console.log('👤 Nome associado:', nome);
             
-            // SALVAR E-MAIL E COMPLETAR ONBOARDING
+            // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING
             try {
                 const { data, error } = await supabase
                     .from('clientes_novos')
@@ -699,13 +715,15 @@ async function processarOnboarding(cleanPhone, messageText, state) {
                 console.error('❌ Erro ao atualizar cliente:', err);
             }
             
-            // 🔥 ATUALIZAR ESTADO - CORREÇÃO PRINCIPAL
+            // 🔥 ATUALIZAR ESTADO - ONBOARDING COMPLETO
             state.email = email;
             state.onboardingCompleto = true;
             state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
-            state.nivel = 'principal';  // 🔥 IMPORTANTE: definir como principal
+            state.nivel = 'principal';
             state.service = null;
             userState.set(cleanPhone, state);
+            console.log('✅ Estado atualizado para: COMPLETO');
+            console.log('📌 Estado final:', JSON.stringify(state, null, 2));
             
             // 🔥 ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
             const primeiroNome = nome.split(' ')[0];
@@ -722,14 +740,7 @@ async function processarOnboarding(cleanPhone, messageText, state) {
                                  `Digite o número da opção (1-7)`;
             
             await sendReply(cleanPhone, mensagemFinal);
-            
-            console.log('📌 Estado após onboarding:', {
-                onboardingCompleto: state.onboardingCompleto,
-                onboardingStep: state.onboardingStep,
-                nivel: state.nivel,
-                nome: state.nome,
-                email: state.email
-            });
+            console.log('📨 Mensagem de confirmação enviada');
             break;
         
         // ============================================================
@@ -750,6 +761,7 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             state.onboardingCompleto = false;
             state.nome = null;
             state.email = null;
+            state.nivel = 'onboarding';
             userState.set(cleanPhone, state);
             await processarOnboarding(cleanPhone, messageText, state);
     }
