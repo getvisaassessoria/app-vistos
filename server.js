@@ -613,61 +613,61 @@ async function processarOnboarding(cleanPhone, messageText, state) {
         // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
         // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
-            console.log('📌 PASSO 2: AGUARDANDO NOME');
-            console.log('📝 Nome recebido: "' + messageText + '"');
-            
-            const nomeValidado = validarNome(messageText);
-            console.log('✅ Nome válido?', nomeValidado);
-            
-            if (!nomeValidado) {
-                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
-                await sendReply(cleanPhone, msgInvalido);
-                return;
-            }
-            
-            const nomeFormatado = formatarNome(messageText);
-            console.log('📝 Nome formatado: "' + nomeFormatado + '"');
-            
-            // 🔥 SALVAR NOME NO SUPABASE
-            try {
-                const { data, error } = await supabase
-                    .from('clientes_novos')
-                    .upsert({
-                        telefone: cleanPhone,
-                        nome: nomeFormatado,
-                        data_contato: new Date().toISOString(),
-                        status: 'novo',
-                        onboarding_completo: false,
-                        email: null
-                    }, {
-                        onConflict: 'telefone'
-                    });
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar nome:', error);
-                } else {
-                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
-                }
-            } catch (err) {
-                console.error('❌ Erro ao atualizar cliente:', err);
-            }
-            
-            // 🔥 ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
-            state.nome = nomeFormatado;
-            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
-            state.lastActivity = Date.now();
-            userState.set(cleanPhone, state);
-            console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
-            console.log('📌 Nome salvo no estado:', state.nome);
-            
-            // 🔥 ENVIAR MENSAGEM PEDINDO E-MAIL
-            const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
-            const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
-            const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
-            
-            await sendReply(cleanPhone, mensagemEmail);
-            console.log('📧 Mensagem de email enviada');
-            break;
+    console.log('📌 PASSO 2: AGUARDANDO NOME');
+    console.log('📝 Nome recebido: "' + messageText + '"');
+    
+    const nomeValidado = validarNome(messageText);
+    console.log('✅ Nome válido?', nomeValidado);
+    
+    if (!nomeValidado) {
+        const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+        await sendReply(cleanPhone, msgInvalido);
+        return;
+    }
+    
+    const nomeFormatado = formatarNome(messageText);
+    console.log('📝 Nome formatado: "' + nomeFormatado + '"');
+    
+    // 🔥 SALVAR NOME NO SUPABASE
+    try {
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .upsert({
+                telefone: cleanPhone,
+                nome: nomeFormatado,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: false,
+                email: null
+            }, {
+                onConflict: 'telefone'
+            });
+        
+        if (error) {
+            console.error('❌ Erro ao salvar nome:', error);
+        } else {
+            console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+        }
+    } catch (err) {
+        console.error('❌ Erro ao atualizar cliente:', err);
+    }
+    
+    // 🔥 ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
+    state.nome = nomeFormatado;
+    state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+    console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
+    console.log('📌 Nome salvo no estado:', state.nome);
+    
+    // 🔥 ENVIAR MENSAGEM PEDINDO E-MAIL
+    const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
+    const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
+    const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
+    
+    await sendReply(cleanPhone, mensagemEmail);
+    console.log('📧 Mensagem de email enviada');
+    break;
         
         // ============================================================
         // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
@@ -2604,59 +2604,68 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
 
             // 4.4. 🔥🔥🔥 VERIFICAR SE É NOVO (OU SE PRECISA DE ONBOARDING)
-            console.log('🔍 Verificando NOVO...');
-            let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-            
-            // Se não encontrou em clientes_novos, verificar se precisa criar
-            if (!novo) {
-                console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
-                var resultado = await cadastrarCliente(cleanPhone, null);
-                if (!resultado) {
-                    console.error('❌ Falha ao cadastrar cliente');
-                    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                    return;
-                }
-                // Buscar o cliente recém-criado
-                novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-                console.log('✅ Cliente criado com sucesso:', novo ? novo.nome : 'Sem nome');
-            }
-            
-            // Se encontrou um cliente NOVO, processar
-            if (novo) {
-                console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
-                console.log('📌 Onboarding completo:', novo.onboarding_completo || false);
-                
-                // 🔥🔥🔥 SE O CLIENTE NÃO TEM ONBOARDING COMPLETO, FORÇAR
-                if (!novo.onboarding_completo || !novo.nome) {
-                    console.log('🆕 Cliente precisa de onboarding - FORÇANDO');
-                    
-                    // Criar estado para onboarding
-                    let state = userState.get(cleanPhone);
-                    if (!state) {
-                        state = {
-                            nivel: 'onboarding',
-                            service: null,
-                            nome: null,
-                            onboardingStep: ONBOARDING_STEPS.SAUDACAO,
-                            onboardingCompleto: false,
-                            lastActivity: Date.now()
-                        };
-                    } else {
-                        state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
-                        state.onboardingCompleto = false;
-                        state.nome = null;
-                        state.nivel = 'onboarding';
-                    }
-                    userState.set(cleanPhone, state);
-                    
-                    await processarOnboarding(cleanPhone, messageText, state);
-                    return;
-                }
-                
-                // Se tem onboarding completo, processar mensagem normal
-                await processarMensagem(cleanPhone, messageText, body);
-                return;
-            }
+console.log('🔍 Verificando NOVO...');
+let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+
+// Se não encontrou em clientes_novos, verificar se precisa criar
+if (!novo) {
+    console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
+    var resultado = await cadastrarCliente(cleanPhone, null);
+    if (!resultado) {
+        console.error('❌ Falha ao cadastrar cliente');
+        await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+        return;
+    }
+    // Buscar o cliente recém-criado
+    novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+    console.log('✅ Cliente criado com sucesso:', novo ? novo.nome : 'Sem nome');
+}
+
+// Se encontrou um cliente NOVO, processar
+if (novo) {
+    console.log('👤 Cliente NOVO encontrado:', novo.nome || 'Sem nome');
+    console.log('📌 Onboarding completo:', novo.onboarding_completo || false);
+    
+    // 🔥🔥🔥 SE O CLIENTE NÃO TEM ONBOARDING COMPLETO, FORÇAR
+    if (!novo.onboarding_completo || !novo.nome) {
+        console.log('🆕 Cliente precisa de onboarding - FORÇANDO');
+        
+        // Criar estado para onboarding
+        let state = userState.get(cleanPhone);
+        if (!state) {
+            state = {
+                nivel: 'onboarding',
+                service: null,
+                nome: null,
+                onboardingStep: ONBOARDING_STEPS.SAUDACAO,
+                onboardingCompleto: false,
+                lastActivity: Date.now()
+            };
+        } else {
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            state.onboardingCompleto = false;
+            state.nome = null;
+            state.nivel = 'onboarding';
+        }
+        userState.set(cleanPhone, state);
+        
+        await processarOnboarding(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // 🔥🔥🔥 NOVA CORREÇÃO: Verificar se o cliente está no estado de onboarding
+    let state = userState.get(cleanPhone);
+    if (state && state.onboardingStep === ONBOARDING_STEPS.AGUARDANDO_NOME) {
+        console.log('📌 Cliente está em AGUARDANDO_NOME - processando resposta');
+        // O cliente enviou o nome - processar diretamente
+        await processarOnboarding(cleanPhone, messageText, state);
+        return;
+    }
+    
+    // Se tem onboarding completo, processar mensagem normal
+    await processarMensagem(cleanPhone, messageText, body);
+    return;
+}
 
             // ============================================================
             // 5. FALLBACK - NENHUM CLIENTE ENCONTRADO
