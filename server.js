@@ -577,6 +577,7 @@ function getMensagemFormulario(nomeCliente) {
 // FUNÇÕES DE ONBOARDING
 // ============================================================
 
+
 async function processarOnboarding(cleanPhone, messageText, state) {
     console.log('=== PROCESSANDO ONBOARDING ===');
     console.log('Passo atual: ' + state.onboardingStep);
@@ -749,30 +750,34 @@ async function processarOnboarding(cleanPhone, messageText, state) {
 // FUNÇÃO PRINCIPAL DE PROCESSAMENTO
 // ============================================================
 
+// ============================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
+// ============================================================
 async function processarMensagem(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENSAGEM ===');
     console.log('Phone: ' + cleanPhone);
     console.log('Message: "' + messageText + '"');
 
     try {
+        // ============================================================
+        // 1. BUSCAR CLIENTE NO BANCO
+        // ============================================================
         let clienteDB = null;
-
         try {
-            clienteDB = await buscarClienteEmQualquerTabela(
-                cleanPhone,
-                'clientes_novos'
-            );
+            clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
         } catch (err) {
             console.error('Erro ao buscar cliente:', err);
         }
 
         console.log('Cliente DB:', clienteDB ? 'Encontrado' : 'Nao encontrado');
-
         if (clienteDB) {
             console.log('  - Nome:', clienteDB.nome || '(vazio)');
             console.log('  - Onboarding completo:', clienteDB.onboarding_completo || false);
         }
-        
+
+        // ============================================================
+        // 2. FUNÇÃO PARA VALIDAR NOME
+        // ============================================================
         function isNomeValido(nome) {
             if (!nome) return false;
             if (typeof nome !== 'string') return false;
@@ -782,12 +787,14 @@ async function processarMensagem(cleanPhone, messageText, body) {
             
             const regexNome = /^[a-zA-ZÀ-ÿ\s'-]+$/;
             if (!regexNome.test(nome.trim())) return false;
-            
             if (/^\d+$/.test(nome.replace(/\s/g, ''))) return false;
             
             return true;
         }
-        
+
+        // ============================================================
+        // 3. RECUPERAR OU CRIAR ESTADO DO USUÁRIO
+        // ============================================================
         let state = userState.get(cleanPhone);
         
         if (!state || (state.nome && !isNomeValido(state.nome))) {
@@ -829,10 +836,13 @@ async function processarMensagem(cleanPhone, messageText, body) {
             };
             userState.set(cleanPhone, state);
         }
-        
+
+        // ============================================================
+        // 4. ATUALIZAR ÚLTIMA ATIVIDADE
+        // ============================================================
         state.lastActivity = Date.now();
         userState.set(cleanPhone, state);
-        
+
         console.log('Estado atual:', {
             nivel: state.nivel,
             service: state.service,
@@ -840,53 +850,62 @@ async function processarMensagem(cleanPhone, messageText, body) {
             onboardingStep: state.onboardingStep,
             onboardingCompleto: state.onboardingCompleto
         });
-        
-        const precisaOnboarding = !state.onboardingCompleto || 
-                          !isNomeValido(state.nome) || 
-                          state.onboardingStep !== ONBOARDING_STEPS.COMPLETO;
 
-if (precisaOnboarding) {
-    console.log('🔄 INICIANDO ONBOARDING');
-    
-    // 🔥 SE NÃO TIVER ESTADO DE ONBOARDING, INICIAR DO ZERO
-    if (!state.onboardingStep || state.onboardingStep === ONBOARDING_STEPS.COMPLETO) {
-        state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
-        state.onboardingCompleto = false;
-        state.nome = null;
-        state.nivel = 'onboarding';
-        userState.set(cleanPhone, state);
-    }
-    
-    if (isNomeValido(state.nome) && !state.onboardingCompleto) {
-        console.log('✅ Nome válido encontrado, corrigindo onboarding');
-        state.onboardingCompleto = true;
-        state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
-        userState.set(cleanPhone, state);
-        
-        try {
-            await supabase
-                .from('clientes_novos')
-                .update({ onboarding_completo: true })
-                .eq('telefone', cleanPhone);
-        } catch (err) {
-            console.error('Erro ao atualizar onboarding:', err);
+        // ============================================================
+        // 5. VERIFICAR SE PRECISA DE ONBOARDING
+        // ============================================================
+        const precisaOnboarding = !state.onboardingCompleto || 
+                                  !isNomeValido(state.nome) || 
+                                  state.onboardingStep !== ONBOARDING_STEPS.COMPLETO;
+
+        if (precisaOnboarding) {
+            console.log('🔄 INICIANDO ONBOARDING');
+            
+            // Inicializar onboarding do zero se necessário
+            if (!state.onboardingStep || state.onboardingStep === ONBOARDING_STEPS.COMPLETO) {
+                state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+                state.onboardingCompleto = false;
+                state.nome = null;
+                state.nivel = 'onboarding';
+                userState.set(cleanPhone, state);
+            }
+            
+            // Se tem nome válido mas onboarding incompleto, corrigir
+            if (isNomeValido(state.nome) && !state.onboardingCompleto) {
+                console.log('✅ Nome válido encontrado, corrigindo onboarding');
+                state.onboardingCompleto = true;
+                state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+                userState.set(cleanPhone, state);
+                
+                try {
+                    await supabase
+                        .from('clientes_novos')
+                        .update({ onboarding_completo: true })
+                        .eq('telefone', cleanPhone);
+                } catch (err) {
+                    console.error('Erro ao atualizar onboarding:', err);
+                }
+                
+                const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
+                                  state.nome.split(' ')[0] +
+                                  getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
+                                  await getMenuPrincipal();
+                
+                await sendReply(cleanPhone, confirmacao);
+                return;
+            }
+            
+            await processarOnboarding(cleanPhone, messageText, state);
+            return;
         }
-        
-        const confirmacao = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1) + 
-                          state.nome.split(' ')[0] +
-                          getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2) +
-                          await getMenuPrincipal();
-        
-        await sendReply(cleanPhone, confirmacao);
-        return;
-    }
-    
-    await processarOnboarding(cleanPhone, messageText, state);
-    return;
-}
-        
+
         console.log('✅ Onboarding completo, processando menu');
+
+        // ============================================================
+        // 6. COMANDOS GERAIS
+        // ============================================================
         
+        // 6.1. COMANDO 0 - VOLTAR AO MENU PRINCIPAL
         if (messageText === '0') {
             state.nivel = 'principal';
             state.service = null;
@@ -894,7 +913,8 @@ if (precisaOnboarding) {
             await sendReply(cleanPhone, await getMenuPrincipal());
             return;
         }
-        
+
+        // 6.2. COMANDOS DE RESET
         const resetCommands = ['menu', 'menu principal', 'inicio', 'comecar', 'voltar', 'principal'];
         if (resetCommands.includes(messageText.toLowerCase())) {
             state.nivel = 'principal';
@@ -903,7 +923,8 @@ if (precisaOnboarding) {
             await sendReply(cleanPhone, await getMenuPrincipal());
             return;
         }
-        
+
+        // 6.3. SAUDAÇÕES
         const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem'];
         if (saudacoes.includes(messageText.toLowerCase())) {
             const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
@@ -926,21 +947,33 @@ if (precisaOnboarding) {
             }
             return;
         }
-        
+
+        // ============================================================
+        // 7. PROCESSAR NÍVEL ATUAL
+        // ============================================================
         if (state.nivel === 'submenu' && state.service) {
             await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
         } else if (state.nivel === 'principal') {
             await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
         } else {
+            // Fallback: voltar ao menu principal
             state.nivel = 'principal';
             state.service = null;
             userState.set(cleanPhone, state);
             await sendReply(cleanPhone, await getMenuPrincipal());
         }
-        
+
     } catch (error) {
         console.error('❌ ERRO NO processarMensagem:', error);
         console.error('Stack:', error.stack);
+        
+        // Mensagem de erro amigável para o usuário
+        try {
+            await sendReply(cleanPhone, '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Nossa equipe foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
+        } catch (e) {
+            console.error('❌ Erro ao enviar mensagem de erro:', e);
+        }
+        
         throw error;
     }
 }
@@ -948,11 +981,13 @@ if (precisaOnboarding) {
 // ============================================================
 // FUNÇÃO PROCESSAR MENU PRINCIPAL
 // ============================================================
-
 async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     console.log('=== MENU PRINCIPAL ===');
     console.log('Mensagem recebida: "' + messageText + '"');
     
+    // ============================================================
+    // 1. MAPEAMENTO DE SERVIÇOS
+    // ============================================================
     const servicoMap = {
         '1': 'visto_americano',
         '2': 'visto_canadense',
@@ -962,6 +997,9 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         '6': 'passaporte'
     };
     
+    // ============================================================
+    // 2. PROCESSAR ESCOLHA DE SERVIÇO (NÚMEROS)
+    // ============================================================
     if (servicoMap[messageText]) {
         const serviceKey = servicoMap[messageText];
         console.log('Entrando no submenu de: ' + serviceKey);
@@ -975,6 +1013,9 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
+    // ============================================================
+    // 3. OPÇÃO 7 - AJUDA / CONTATO
+    // ============================================================
     if (messageText === '7') {
         const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
                         '👨‍💼 Moisés - Especialista em Vistos\n\n' +
@@ -987,15 +1028,23 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
+    // ============================================================
+    // 4. DETECTAR INTENÇÃO
+    // ============================================================
     const intent = detectIntent(messageText);
     console.log('Intenção detectada:', intent);
     
-    // 🔥 DETECTAR INTENÇÃO DE INICIAR PROCESSO
+    // 4.1. INTENÇÃO: INICIAR PROCESSO
     if (intent === 'iniciar_processo') {
         console.log('🚀 Cliente quer iniciar o processo!');
         
         const nomeCliente = state.nome || 'Cliente';
-        const mensagemFormulario = getMensagemFormulario(nomeCliente);
+        const mensagemFormulario = `📋 Ótimo, ${nomeCliente}! Vamos iniciar seu processo!\n\n` +
+                                  `🔗 Clique no link abaixo para preencher o formulário:\n` +
+                                  `https://getvisa.com.br/ds160/\n\n` +
+                                  `📝 Após o preenchimento, nossa equipe entrará em contato em até 24h.\n\n` +
+                                  `Digite 0 para voltar ao MENU principal`;
+        
         await sendReply(cleanPhone, mensagemFormulario);
         
         try {
@@ -1016,12 +1065,16 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         return;
     }
     
+    // 4.2. OUTRAS INTENÇÕES
     if (intent) {
         const resposta = getRespostaIntencao(intent, state.service);
         await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
         return;
     }
     
+    // ============================================================
+    // 5. DETECTAR SERVIÇO POR PALAVRA-CHAVE
+    // ============================================================
     const servicosKeywords = {
         'visto americano': 'visto_americano',
         'visto eua': 'visto_americano',
@@ -1039,33 +1092,36 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     
     const mensagemLower = messageText.toLowerCase();
     for (const [keyword, serviceKey] of Object.entries(servicosKeywords)) {
-    if (mensagemLower.includes(keyword)) {
-        console.log('🔍 Detectado serviço específico:', serviceKey);
-        
-        // ✅ VERIFICAR SE É CLIENTE NOVO
-        const clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-        const isNovo = clienteDB && clienteDB.onboarding_completo === false;
-        
-        if (isNovo || !clienteDB) {
-            // É cliente novo - iniciar onboarding
-            console.log('🆕 Cliente NOVO detectado - iniciando onboarding');
-            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
-            state.onboardingCompleto = false;
+        if (mensagemLower.includes(keyword)) {
+            console.log('🔍 Detectado serviço específico:', serviceKey);
+            
+            // ✅ VERIFICAR SE É CLIENTE NOVO
+            const clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+            const isNovo = clienteDB && clienteDB.onboarding_completo === false;
+            
+            if (isNovo || !clienteDB) {
+                // É cliente novo - iniciar onboarding
+                console.log('🆕 Cliente NOVO detectado - iniciando onboarding');
+                state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+                state.onboardingCompleto = false;
+                userState.set(cleanPhone, state);
+                await processarOnboarding(cleanPhone, messageText, state);
+                return;
+            }
+            
+            // Cliente existente - mostrar submenu
+            state.nivel = 'submenu';
+            state.service = serviceKey;
             userState.set(cleanPhone, state);
-            await processarOnboarding(cleanPhone, messageText, state);
+            const submenuTexto = getSubmenu(serviceKey);
+            await sendReply(cleanPhone, submenuTexto);
             return;
         }
-        
-        // Cliente existente - mostrar submenu
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        const submenuTexto = getSubmenu(serviceKey);
-        await sendReply(cleanPhone, submenuTexto);
-        return;
     }
-}
     
+    // ============================================================
+    // 6. DETECTAR PERGUNTAS ESPECÍFICAS
+    // ============================================================
     const perguntasEspecificas = {
         'preco': 'preco',
         'valor': 'preco',
@@ -1089,6 +1145,7 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         if (mensagemLower.includes(keyword)) {
             console.log('🔍 Detectada pergunta sobre:', tipo);
             
+            // Se não tiver serviço selecionado, pede para escolher
             if (!state.service) {
                 const msg = `📋 Para falar sobre *${tipo}*, preciso saber qual serviço você deseja:\n\n` +
                            `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
@@ -1108,8 +1165,12 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
         }
     }
     
-    const erroMsg = '❌ Não entendi sua mensagem, ' + (state.nome ? state.nome.split(' ')[0] : '') + '!\n\n' +
-                   'Por favor, escolha uma das opções:\n\n' +
+    // ============================================================
+    // 7. MENSAGEM DE ERRO (NÃO ENTENDI)
+    // ============================================================
+    const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
+    const erroMsg = '❌ Não entendi sua mensagem' + (nomeCliente ? ', ' + nomeCliente : '') + '!\n\n' +
+                   'Por favor, escolha uma das opções abaixo:\n\n' +
                    await getMenuPrincipal();
     await sendReply(cleanPhone, erroMsg);
 }
