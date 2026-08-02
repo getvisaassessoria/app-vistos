@@ -945,18 +945,32 @@ async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     
     const mensagemLower = messageText.toLowerCase();
     for (const [keyword, serviceKey] of Object.entries(servicosKeywords)) {
-        if (mensagemLower.includes(keyword)) {
-            console.log('🔍 Detectado serviço específico:', serviceKey);
-            
-            state.nivel = 'submenu';
-            state.service = serviceKey;
+    if (mensagemLower.includes(keyword)) {
+        console.log('🔍 Detectado serviço específico:', serviceKey);
+        
+        // ✅ VERIFICAR SE É CLIENTE NOVO
+        const clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+        const isNovo = clienteDB && clienteDB.onboarding_completo === false;
+        
+        if (isNovo || !clienteDB) {
+            // É cliente novo - iniciar onboarding
+            console.log('🆕 Cliente NOVO detectado - iniciando onboarding');
+            state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
+            state.onboardingCompleto = false;
             userState.set(cleanPhone, state);
-            
-            const submenuTexto = getSubmenu(serviceKey);
-            await sendReply(cleanPhone, submenuTexto);
+            await processarOnboarding(cleanPhone, messageText, state);
             return;
         }
+        
+        // Cliente existente - mostrar submenu
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        userState.set(cleanPhone, state);
+        const submenuTexto = getSubmenu(serviceKey);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
     }
+}
     
     const perguntasEspecificas = {
         'preco': 'preco',
