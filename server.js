@@ -627,140 +627,150 @@ async function processarOnboarding(cleanPhone, messageText, state) {
         // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
         // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
-            console.log('📌 PASSO 2: AGUARDANDO NOME');
-            console.log('📝 Nome recebido: "' + messageText + '"');
-            
-            const nomeValidado = validarNome(messageText);
-            console.log('✅ Nome válido?', nomeValidado);
-            
-            if (!nomeValidado) {
-                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
-                await sendReply(cleanPhone, msgInvalido);
-                return;
-            }
-            
-            const nomeFormatado = formatarNome(messageText);
-            console.log('📝 Nome formatado: "' + nomeFormatado + '"');
-            
-            // 🔥 SALVAR NOME - USANDO UPSERT COM TELEFONE LIMPO
-            try {
-                const { data, error } = await supabase
-                    .from('clientes_novos')
-                    .upsert({
-                        telefone: telefoneLimpo,
-                        nome: nomeFormatado,
-                        data_contato: new Date().toISOString(),
-                        status: 'novo',
-                        onboarding_completo: false
-                    }, {
-                        onConflict: 'telefone'
-                    })
-                    .select()
-                    .single();
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar nome:', error);
-                } else {
-                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
-                    console.log('📊 Dados:', data);
-                }
-            } catch (err) {
-                console.error('❌ Erro ao salvar nome:', err);
-            }
-            
-            // ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
-            state.nome = nomeFormatado;
-            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
-            state.lastActivity = Date.now();
-            userState.set(cleanPhone, state);
-            console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
-            console.log('📌 Nome salvo no estado:', state.nome);
-            
-            // ENVIAR MENSAGEM PEDINDO E-MAIL
-            const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
-            const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
-            const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
-            
-            await sendReply(cleanPhone, mensagemEmail);
-            console.log('📧 Mensagem de email enviada');
-            break;
+    console.log('📌 PASSO 2: AGUARDANDO NOME');
+    console.log('📝 Nome recebido: "' + messageText + '"');
+    
+    const nomeValidado = validarNome(messageText);
+    console.log('✅ Nome válido?', nomeValidado);
+    
+    if (!nomeValidado) {
+        const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+        await sendReply(cleanPhone, msgInvalido);
+        return;
+    }
+    
+    const nomeFormatado = formatarNome(messageText);
+    console.log('📝 Nome formatado: "' + nomeFormatado + '"');
+    
+    // 🔥 SALVAR NOME - DELETAR E INSERIR
+    try {
+        // 1. Deletar qualquer registro com este telefone
+        const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefoneLimpo);
+        
+        // 2. Inserir novo registro
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .insert({
+                telefone: telefoneLimpo,
+                nome: nomeFormatado,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: false
+            })
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erro ao salvar nome:', error);
+        } else {
+            console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+            console.log('📊 Dados:', data);
+        }
+    } catch (err) {
+        console.error('❌ Erro ao salvar nome:', err);
+    }
+    
+    // ATUALIZAR ESTADO
+    state.nome = nomeFormatado;
+    state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+    console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
+    
+    // ENVIAR MENSAGEM PEDINDO E-MAIL
+    const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
+    const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
+    const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
+    
+    await sendReply(cleanPhone, mensagemEmail);
+    console.log('📧 Mensagem de email enviada');
+    break;
         
         // ============================================================
         // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
         // ============================================================
-        case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
-            console.log('📌 PASSO 3: AGUARDANDO EMAIL');
-            console.log('📧 Email recebido: "' + messageText + '"');
-            
-            // Validar e-mail
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(messageText)) {
-                console.log('❌ Email inválido');
-                await sendReply(cleanPhone, '❌ E-mail inválido! Por favor, digite um e-mail válido.\n\n📧 Ex: maria@email.com');
-                return;
-            }
-            
-            const email = messageText.trim().toLowerCase();
-            const nome = state.nome;
-            console.log('📧 Email válido:', email);
-            console.log('👤 Nome associado:', nome);
-            
-            // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING - UPSERT COM TELEFONE LIMPO
-            try {
-                const { data, error } = await supabase
-                    .from('clientes_novos')
-                    .upsert({
-                        telefone: telefoneLimpo,
-                        nome: nome,
-                        email: email,
-                        data_contato: new Date().toISOString(),
-                        status: 'novo',
-                        onboarding_completo: true,
-                        data_onboarding: new Date().toISOString()
-                    }, {
-                        onConflict: 'telefone'
-                    })
-                    .select()
-                    .single();
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar e-mail:', error);
-                } else {
-                    console.log('✅ E-mail salvo no Supabase:', email);
-                    console.log('✅ Onboarding completo para:', nome);
-                    console.log('📊 Dados:', data);
-                }
-            } catch (err) {
-                console.error('❌ Erro ao salvar e-mail:', err);
-            }
-            
-            // ATUALIZAR ESTADO - ONBOARDING COMPLETO
-            state.email = email;
-            state.onboardingCompleto = true;
-            state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
-            state.nivel = 'principal';
-            state.service = null;
-            userState.set(cleanPhone, state);
-            console.log('✅ Estado atualizado para: COMPLETO');
-            console.log('📌 Estado final:', JSON.stringify(state, null, 2));
-            
-            // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
-            const primeiroNome = nome.split(' ')[0];
-            const mensagemFinal = `✅ Perfeito, ${primeiroNome}! Seus dados foram salvos com sucesso!\n\n` +
-                                 `Agora escolha o serviço desejado:\n\n` +
-                                 `🌟 **GETVISA - ASSESSORIA EM VISTOS**\n\n` +
-                                 `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
-                                 `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
-                                 `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
-                                 `4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n` +
-                                 `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
-                                 `6️⃣ - 🛂 PASSAPORTE\n` +
-                                 `7️⃣ - 📞 AJUDA / CONTATO\n\n` +
-                                 `Digite o número da opção (1-7)`;
-            
-            await sendReply(cleanPhone, mensagemFinal);
-            console.log('📨 Mensagem de confirmação enviada');
-            break;
+       case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
+    console.log('📌 PASSO 3: AGUARDANDO EMAIL');
+    console.log('📧 Email recebido: "' + messageText + '"');
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(messageText)) {
+        console.log('❌ Email inválido');
+        await sendReply(cleanPhone, '❌ E-mail inválido! Por favor, digite um e-mail válido.\n\n📧 Ex: maria@email.com');
+        return;
+    }
+    
+    const email = messageText.trim().toLowerCase();
+    const nome = state.nome;
+    console.log('📧 Email válido:', email);
+    console.log('👤 Nome associado:', nome);
+    
+    // 🔥 SALVAR E-MAIL - DELETAR E INSERIR
+    try {
+        const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
+        
+        // 1. Deletar qualquer registro com este telefone
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefoneLimpo);
+        
+        // 2. Inserir com dados completos
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .insert({
+                telefone: telefoneLimpo,
+                nome: nome,
+                email: email,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: true,
+                data_onboarding: new Date().toISOString()
+            })
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erro ao salvar e-mail:', error);
+        } else {
+            console.log('✅ E-mail salvo no Supabase:', email);
+            console.log('✅ Onboarding completo para:', nome);
+            console.log('📊 Dados:', data);
+        }
+    } catch (err) {
+        console.error('❌ Erro ao salvar e-mail:', err);
+    }
+    
+    // ATUALIZAR ESTADO - ONBOARDING COMPLETO
+    state.email = email;
+    state.onboardingCompleto = true;
+    state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+    state.nivel = 'principal';
+    state.service = null;
+    userState.set(cleanPhone, state);
+    console.log('✅ Estado atualizado para: COMPLETO');
+    
+    // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
+    const primeiroNome = nome.split(' ')[0];
+    const mensagemFinal = `✅ Perfeito, ${primeiroNome}! Seus dados foram salvos com sucesso!\n\n` +
+                         `Agora escolha o serviço desejado:\n\n` +
+                         `🌟 **GETVISA - ASSESSORIA EM VISTOS**\n\n` +
+                         `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
+                         `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
+                         `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
+                         `4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n` +
+                         `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
+                         `6️⃣ - 🛂 PASSAPORTE\n` +
+                         `7️⃣ - 📞 AJUDA / CONTATO\n\n` +
+                         `Digite o número da opção (1-7)`;
+    
+    await sendReply(cleanPhone, mensagemFinal);
+    console.log('📨 Mensagem de confirmação enviada');
+    break;
         
         // ============================================================
         // PASSO 4: COMPLETO (FALLBACK)
@@ -916,6 +926,10 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
 // FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
 // ============================================================
 
+// ============================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS - VERSÃO CORRIGIDA
+// ============================================================
+
 async function processarMensagem(cleanPhone, messageText, body) {
     console.log('=== PROCESSANDO MENSAGEM ===');
     console.log('Phone: ' + cleanPhone);
@@ -996,18 +1010,30 @@ async function processarMensagem(cleanPhone, messageText, body) {
         // SE ONBOARDING COMPLETO, PROCESSAR MENU
         console.log('✅ Onboarding completo, processando menu');
         
-        if (state.nivel === 'submenu' && state.service) {
-            await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
-        } else {
-            await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
+        try {
+            if (state.nivel === 'submenu' && state.service) {
+                await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
+            } else {
+                await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
+            }
+        } catch (err) {
+            console.error('❌ Erro ao processar opção:', err);
+            // Fallback: mostrar menu principal
+            try {
+                const menu = await getMenuPrincipal();
+                await sendReply(cleanPhone, menu);
+            } catch (e) {
+                console.error('❌ Erro no fallback do menu:', e);
+                await sendReply(cleanPhone, 'Digite 0 para o menu principal.');
+            }
         }
 
     } catch (error) {
         console.error('❌ ERRO NO processarMensagem:', error);
-        console.error('Stack:', error.stack);
+        console.error('❌ Stack:', error.stack);
         
         try {
-            await sendReply(cleanPhone, '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Nossa equipe foi notificada.\n\nDigite 0 para tentar novamente.');
+            await sendReply(cleanPhone, '❌ Desculpe, ocorreu um erro. Digite 0 para tentar novamente.');
         } catch (e) {
             console.error('❌ Erro ao enviar mensagem de erro:', e);
         }
@@ -1018,90 +1044,145 @@ async function processarMensagem(cleanPhone, messageText, body) {
 // FUNÇÃO PROCESSAR MENU PRINCIPAL
 // ============================================================
 
+// ============================================================
+// FUNÇÃO PROCESSAR MENU PRINCIPAL - VERSÃO CORRIGIDA
+// ============================================================
+
 async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
     console.log('=== MENU PRINCIPAL ===');
     console.log('Mensagem recebida: "' + messageText + '"');
+    console.log('Estado recebido:', JSON.stringify(state, null, 2));
     
-    // MAPEAMENTO DE SERVIÇOS
-    const servicoMap = {
-        '1': 'visto_americano',
-        '2': 'visto_canadense',
-        '3': 'visto_australiano',
-        '4': 'eta_uk',
-        '5': 'eta_canadense',
-        '6': 'passaporte'
-    };
-    
-    // PROCESSAR ESCOLHA DE SERVIÇO (NÚMEROS)
-    if (servicoMap[messageText]) {
-        const serviceKey = servicoMap[messageText];
-        console.log('Entrando no submenu de: ' + serviceKey);
+    try {
+        // MAPEAMENTO DE SERVIÇOS
+        const servicoMap = {
+            '1': 'visto_americano',
+            '2': 'visto_canadense',
+            '3': 'visto_australiano',
+            '4': 'eta_uk',
+            '5': 'eta_canadense',
+            '6': 'passaporte'
+        };
         
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        
-        const submenuTexto = getSubmenu(serviceKey);
-        await sendReply(cleanPhone, submenuTexto);
-        return;
-    }
-    
-    // OPÇÃO 7 - AJUDA / CONTATO
-    if (messageText === '7') {
-        const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
-                        '👨‍💼 Moisés - Especialista em Vistos\n\n' +
-                        '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
-                        '📧 E-mail: contato@getvisa.com.br\n\n' +
-                        '🌐 Site: https://getvisa.com.br\n\n' +
-                        '⏰ Horário: Seg-Sex, 9h às 18h\n\n' +
-                        'Digite 0 para voltar ao MENU principal';
-        await sendReply(cleanPhone, ajudaMsg);
-        return;
-    }
-    
-    // DETECTAR INTENÇÃO
-    const intent = detectIntent(messageText);
-    console.log('Intenção detectada:', intent);
-    
-    // INTENÇÃO: INICIAR PROCESSO
-    if (intent === 'iniciar_processo') {
-        console.log('🚀 Cliente quer iniciar o processo!');
-        
-        let nomeCliente = 'Cliente';
-        if (state && state.nome && typeof state.nome === 'string' && state.nome.trim().length > 0) {
-            nomeCliente = state.nome;
+        // PROCESSAR ESCOLHA DE SERVIÇO (NÚMEROS)
+        if (servicoMap[messageText]) {
+            const serviceKey = servicoMap[messageText];
+            console.log('Entrando no submenu de: ' + serviceKey);
+            
+            state.nivel = 'submenu';
+            state.service = serviceKey;
+            userState.set(cleanPhone, state);
+            
+            try {
+                const submenuTexto = getSubmenu(serviceKey);
+                await sendReply(cleanPhone, submenuTexto);
+            } catch (err) {
+                console.error('❌ Erro ao gerar submenu:', err);
+                await sendReply(cleanPhone, '📋 Serviço selecionado! Digite 0 para voltar ao menu principal.');
+            }
+            return;
         }
         
-        const mensagemFormulario = getMensagemFormulario(nomeCliente);
-        await sendReply(cleanPhone, mensagemFormulario);
-        return;
+        // OPÇÃO 7 - AJUDA / CONTATO
+        if (messageText === '7') {
+            const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
+                            '👨‍💼 Moisés - Especialista em Vistos\n\n' +
+                            '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                            '📧 E-mail: contato@getvisa.com.br\n\n' +
+                            '🌐 Site: https://getvisa.com.br\n\n' +
+                            '⏰ Horário: Seg-Sex, 9h às 18h\n\n' +
+                            'Digite 0 para voltar ao MENU principal';
+            await sendReply(cleanPhone, ajudaMsg);
+            return;
+        }
+        
+        // DETECTAR INTENÇÃO
+        let intent = null;
+        try {
+            intent = detectIntent(messageText);
+            console.log('Intenção detectada:', intent);
+        } catch (err) {
+            console.error('❌ Erro ao detectar intenção:', err);
+            intent = null;
+        }
+        
+        // INTENÇÃO: INICIAR PROCESSO
+        if (intent === 'iniciar_processo') {
+            console.log('🚀 Cliente quer iniciar o processo!');
+            
+            let nomeCliente = 'Cliente';
+            try {
+                if (state && state.nome && typeof state.nome === 'string' && state.nome.trim().length > 0) {
+                    nomeCliente = state.nome;
+                }
+            } catch (err) {
+                console.error('❌ Erro ao pegar nome:', err);
+                nomeCliente = 'Cliente';
+            }
+            
+            try {
+                const mensagemFormulario = getMensagemFormulario(nomeCliente);
+                await sendReply(cleanPhone, mensagemFormulario);
+            } catch (err) {
+                console.error('❌ Erro ao gerar mensagem do formulário:', err);
+                // Fallback
+                await sendReply(cleanPhone, '🌟 Vamos iniciar seu processo!\n\n📋 Preencha nosso formulário:\n🔗 https://getvisa.com.br/formulario-ds160\n\n📱 Dúvidas? https://wa.me/5521974601812');
+            }
+            return;
+        }
+        
+        // INTENÇÃO: VISTO AMERICANO
+        if (intent === 'visto_americano') {
+            state.nivel = 'submenu';
+            state.service = 'visto_americano';
+            userState.set(cleanPhone, state);
+            try {
+                const submenuTexto = getSubmenu('visto_americano');
+                await sendReply(cleanPhone, submenuTexto);
+            } catch (err) {
+                console.error('❌ Erro ao gerar submenu americano:', err);
+                await sendReply(cleanPhone, '🇺🇸 VISTO AMERICANO\n\nDigite 0 para voltar ao menu principal.');
+            }
+            return;
+        }
+        
+        // OUTRAS INTENÇÕES
+        if (intent) {
+            try {
+                const resposta = getRespostaIntencao(intent, state ? state.service : null);
+                await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
+            } catch (err) {
+                console.error('❌ Erro ao processar intenção:', err);
+                await sendReply(cleanPhone, '📋 Entendi sua pergunta! Digite 0 para o menu principal.');
+            }
+            return;
+        }
+        
+        // FALLBACK - MENSAGEM NÃO RECONHECIDA
+        console.log('⚠️ Nenhuma intenção detectada para:', messageText);
+        
+        try {
+            const nomeCliente = state && state.nome ? state.nome.split(' ')[0] : '';
+            const menuPrincipal = await getMenuPrincipal();
+            const erroMsg = `❌ Não entendi sua mensagem${nomeCliente ? ', ' + nomeCliente : ''}!\n\n` +
+                           `Por favor, escolha uma das opções abaixo:\n\n` +
+                           menuPrincipal;
+            await sendReply(cleanPhone, erroMsg);
+        } catch (err) {
+            console.error('❌ Erro no fallback:', err);
+            await sendReply(cleanPhone, '❌ Não entendi sua mensagem. Digite 0 para o menu principal.');
+        }
+        
+    } catch (error) {
+        console.error('❌ ERRO GRAVE EM processarOpcaoNoMenuPrincipal:', error);
+        console.error('❌ Stack:', error.stack);
+        
+        try {
+            await sendReply(cleanPhone, '❌ Desculpe, ocorreu um erro. Digite 0 para o menu principal.');
+        } catch (e) {
+            console.error('❌ Falha ao enviar mensagem de erro:', e);
+        }
     }
-    
-    // INTENÇÃO: VISTO AMERICANO
-    if (intent === 'visto_americano') {
-        state.nivel = 'submenu';
-        state.service = 'visto_americano';
-        userState.set(cleanPhone, state);
-        const submenuTexto = getSubmenu('visto_americano');
-        await sendReply(cleanPhone, submenuTexto);
-        return;
-    }
-    
-    // OUTRAS INTENÇÕES
-    if (intent) {
-        const resposta = getRespostaIntencao(intent, state ? state.service : null);
-        await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
-        return;
-    }
-    
-    // FALLBACK - MENSAGEM NÃO RECONHECIDA
-    console.log('⚠️ Nenhuma intenção detectada para:', messageText);
-    
-    const nomeCliente = state && state.nome ? state.nome.split(' ')[0] : '';
-    const erroMsg = `❌ Não entendi sua mensagem${nomeCliente ? ', ' + nomeCliente : ''}!\n\n` +
-                   `Por favor, escolha uma das opções abaixo:\n\n` +
-                   await getMenuPrincipal();
-    await sendReply(cleanPhone, erroMsg);
 }
 
 // ============================================================
@@ -1273,6 +1354,25 @@ async function cadastrarCliente(telefone, nome) {
     
     const telefoneLimpo = telefone.toString().replace(/\D/g, '');
     console.log('📱 Telefone limpo:', telefoneLimpo);
+    
+    // 🔥 PRIMEIRO: DELETAR QUALQUER REGISTRO COM ESTE TELEFONE (COM OU SEM MÁSCARA)
+    try {
+        await supabase
+            .from('clientes_novos')
+            .delete()
+            .eq('telefone', telefoneLimpo);
+        
+        // Também tentar deletar com máscara
+        const telefoneFormatado = formatarTelefone(telefoneLimpo);
+        if (telefoneFormatado) {
+            await supabase
+                .from('clientes_novos')
+                .delete()
+                .eq('telefone', telefoneFormatado);
+        }
+    } catch (err) {
+        console.log('⚠️ Erro ao deletar registros antigos:', err.message);
+    }
     
     const dadosCliente = {
         telefone: telefoneLimpo,  // 🔥 SEMPRE SALVAR SEM MÁSCARA
