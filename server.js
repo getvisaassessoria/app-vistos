@@ -5044,6 +5044,316 @@ app.post('/api/test-receive', function(req, res) {
     });
 });
 
+
+// ============================================================
+// ENDPOINT DE DIAGNÓSTICO - DESCUBRA O ERRO EXATO
+// ============================================================
+
+app.post('/api/debug/criar-cliente', async (req, res) => {
+    console.log('🔍 ===== DEBUG: CRIAR CLIENTE =====');
+    
+    try {
+        const { telefone, nome } = req.body;
+        
+        if (!telefone) {
+            return res.status(400).json({ 
+                sucesso: false, 
+                erro: 'Telefone é obrigatório' 
+            });
+        }
+        
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        console.log('📱 Telefone:', telefoneLimpo);
+        console.log('👤 Nome:', nome || '(vazio)');
+        
+        // 1. VERIFICAR SE A TABELA EXISTE
+        console.log('🔍 Verificando tabela clientes_novos...');
+        const { error: tableCheck } = await supabase
+            .from('clientes_novos')
+            .select('id')
+            .limit(1);
+        
+        if (tableCheck) {
+            console.error('❌ Erro na tabela:', tableCheck);
+            return res.json({
+                sucesso: false,
+                etapa: 'verificacao_tabela',
+                erro: tableCheck,
+                mensagem: 'Tabela clientes_novos não existe ou está inacessível'
+            });
+        }
+        
+        // 2. TENTAR UPSERT
+        console.log('🔄 Tentando UPSERT...');
+        const dados = {
+            telefone: telefoneLimpo,
+            data_contato: new Date().toISOString(),
+            status: 'novo',
+            onboarding_completo: false,
+            updated_at: new Date().toISOString()
+        };
+        
+        if (nome && nome !== 'Cliente' && !nome.startsWith('Cliente_')) {
+            dados.nome = nome;
+        }
+        
+        const { data: upsertData, error: upsertError } = await supabase
+            .from('clientes_novos')
+            .upsert(dados, { onConflict: 'telefone' })
+            .select()
+            .single();
+        
+        if (upsertError) {
+            console.error('❌ UPSERT falhou:', upsertError);
+            
+            // 3. TENTAR INSERT DIRETO
+            console.log('🔄 Tentando INSERT direto...');
+            const { data: insertData, error: insertError } = await supabase
+                .from('clientes_novos')
+                .insert(dados)
+                .select()
+                .single();
+            
+            if (insertError) {
+                console.error('❌ INSERT falhou:', insertError);
+                
+                return res.json({
+                    sucesso: false,
+                    etapa: 'insert',
+                    erro: insertError,
+                    mensagem: 'Não foi possível criar o cliente',
+                    detalhes: {
+                        codigo: insertError.code,
+                        mensagem: insertError.message,
+                        detalhe: insertError.details
+                    }
+                });
+            }
+            
+            return res.json({
+                sucesso: true,
+                etapa: 'insert',
+                dados: insertData,
+                mensagem: 'Cliente criado com INSERT'
+            });
+        }
+        
+        return res.json({
+            sucesso: true,
+            etapa: 'upsert',
+            dados: upsertData,
+            mensagem: 'Cliente criado com UPSERT'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro crítico:', error);
+        return res.status(500).json({
+            sucesso: false,
+            erro: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// ============================================================
+// ENDPOINT PARA VERIFICAR ESTRUTURA DA TABELA
+// ============================================================
+
+app.get('/api/debug/verificar-tabela', async (req, res) => {
+    console.log('🔍 ===== VERIFICANDO TABELA =====');
+    
+    try {
+        // Verificar se a tabela existe
+        const { error: tableError } = await supabase
+            .from('clientes_novos')
+            .select('id')
+            .limit(1);
+        
+        if (tableError) {
+            return res.json({
+                existe: false,
+                erro: tableError,
+                mensagem: 'Tabela clientes_novos não existe'
+            });
+        }
+        
+        // Verificar estrutura
+        const { data: sample, error: sampleError } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .limit(1);
+        
+        if (sampleError) {
+            return res.json({
+                existe: true,
+                erro: sampleError,
+                mensagem: 'Erro ao ler estrutura'
+            });
+        }
+        
+        // Verificar colunas
+        const colunas = sample && sample.length > 0 ? Object.keys(sample[0]) : [];
+        
+        // Verificar constraint UNIQUE
+        const { data: constraints } = await supabase
+            .rpc('get_constraints', { table_name: 'clientes_novos' })
+            .catch(() => ({ data: null }));
+        
+        return res.json({
+            existe: true,
+            colunas: colunas,
+            tem_dados: sample && sample.length > 0,
+            amostra: sample && sample.length > 0 ? sample[0] : null,
+            mensagem: 'Tabela existe e está acessível'
+        });
+        
+    } catch (error) {
+        return res.status(500).json({
+            erro: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// ============================================================
+// ENDPOINT PARA CRIAR TABELA (SE NECESSÁRIO)
+// ============================================================
+
+app.post('/api/debug/criar-tabela', async (req, res) => {
+    console.log('🔍 ===== CRIANDO TABELA =====');
+    
+    try {
+        // SQL para criar a tabela
+        const sql = `
+            CREATE TABLE IF NOT EXISTS clientes_novos (
+                id SERIAL PRIMARY KEY,
+                telefone VARCHAR(20) UNIQUE NOT NULL,
+                nome VARCHAR(100),
+                email VARCHAR(100),
+                data_contato TIMESTAMP DEFAULT NOW(),
+                status VARCHAR(20) DEFAULT 'novo',
+                onboarding_completo BOOLEAN DEFAULT FALSE,
+                data_onboarding TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_clientes_novos_telefone ON clientes_novos(telefone);
+            CREATE INDEX IF NOT EXISTS idx_clientes_novos_status ON clientes_novos(status);
+        `;
+        
+        // Tentar executar via RPC
+        const { error: rpcError } = await supabase.rpc('exec_sql', { query: sql });
+        
+        if (rpcError) {
+            console.error('❌ RPC falhou:', rpcError);
+            
+            // Tentar criar via REST (método alternativo)
+            const { error: createError } = await supabase
+                .from('clientes_novos')
+                .insert({ telefone: '99999999999', status: 'teste' })
+                .select()
+                .single()
+                .catch(() => ({ error: null }));
+            
+            if (createError && createError.code !== '23505') { // Ignorar duplicata
+                return res.json({
+                    sucesso: false,
+                    erro: createError,
+                    mensagem: 'Não foi possível criar a tabela automaticamente',
+                    solucao: 'Execute o SQL manualmente no Supabase SQL Editor'
+                });
+            }
+        }
+        
+        return res.json({
+            sucesso: true,
+            mensagem: 'Tabela criada/verificada com sucesso',
+            sql_executado: sql
+        });
+        
+    } catch (error) {
+        return res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// ============================================================
+// ENDPOINT PARA TESTAR WEBHOOK MANUALMENTE
+// ============================================================
+
+app.post('/api/debug/testar-webhook', async (req, res) => {
+    console.log('🔍 ===== TESTE MANUAL DO WEBHOOK =====');
+    
+    try {
+        const { telefone, mensagem } = req.body;
+        
+        if (!telefone) {
+            return res.status(400).json({ erro: 'Telefone é obrigatório' });
+        }
+        
+        const cleanPhone = telefone.toString().replace(/\D/g, '').replace(/^55/, '');
+        const msg = mensagem || 'oi, quero meu visto';
+        
+        console.log('📱 Telefone:', cleanPhone);
+        console.log('💬 Mensagem:', msg);
+        
+        // 1. TENTAR CRIAR CLIENTE
+        console.log('🔄 Tentando criar cliente...');
+        const telefoneLimpo = cleanPhone;
+        
+        const { data: cliente, error } = await supabase
+            .from('clientes_novos')
+            .upsert({
+                telefone: telefoneLimpo,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: false,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'telefone' })
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erro ao criar:', error);
+            return res.json({
+                sucesso: false,
+                etapa: 'criar_cliente',
+                erro: error,
+                mensagem: 'Falha ao criar cliente'
+            });
+        }
+        
+        console.log('✅ Cliente criado:', cliente);
+        
+        // 2. SIMULAR PROCESSAMENTO
+        console.log('🔄 Simulando processamento...');
+        
+        const saudacao = '👋 Olá! Seja muito bem-vindo(a) à **GetVisa Assessoria**! 🇺🇸\n\nSomos especialistas em vistos americanos e estamos aqui para realizar seu sonho de viajar para os EUA! ✈️\n\nPara começarmos seu atendimento de forma personalizada, preciso saber:\n\n📝 **Qual é o seu nome completo?**\n\nEx: Maria Silva';
+        
+        // 3. ENVIAR WHATSAPP DE TESTE
+        console.log('📨 Enviando WhatsApp de teste...');
+        const enviado = await enviarWhatsApp(cleanPhone, saudacao);
+        
+        return res.json({
+            sucesso: true,
+            cliente_criado: cliente,
+            mensagem_enviada: enviado,
+            mensagem: saudacao,
+            observacao: 'Verifique se recebeu a mensagem no WhatsApp'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        return res.status(500).json({
+            sucesso: false,
+            erro: error.message,
+            stack: error.stack
+        });
+    }
+});
+
 // ============================================================
 // HEALTH CHECKS
 // ============================================================
