@@ -582,6 +582,10 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     console.log('Passo atual: ' + state.onboardingStep);
     console.log('Mensagem: "' + messageText + '"');
     
+    // 🔥 GARANTIR QUE O TELEFONE ESTÁ LIMPO
+    const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
+    console.log('📱 Telefone limpo para uso:', telefoneLimpo);
+    
     // Comandos de escape
     const escapeCommands = ['0', 'menu', 'menu principal', 'inicio', 'voltar', 'principal'];
     if (escapeCommands.includes(messageText.toLowerCase().trim())) {
@@ -591,6 +595,9 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     }
     
     switch (state.onboardingStep) {
+        // ============================================================
+        // PASSO 1: SAUDAÇÃO - APRESENTAR A GETVISA
+        // ============================================================
         case ONBOARDING_STEPS.SAUDACAO:
             console.log('📌 PASSO 1: SAUDAÇÃO');
             const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
@@ -604,6 +611,9 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('✅ Estado atualizado para: AGUARDANDO_NOME');
             break;
         
+        // ============================================================
+        // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
+        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
             console.log('📌 PASSO 2: AGUARDANDO NOME');
             console.log('📝 Nome recebido: "' + messageText + '"');
@@ -620,52 +630,39 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             const nomeFormatado = formatarNome(messageText);
             console.log('📝 Nome formatado: "' + nomeFormatado + '"');
             
-            // 🔥 SALVAR NOME - USANDO APENAS INSERT COM ON CONFLICT
+            // 🔥 SALVAR NOME - USANDO UPSERT COM TELEFONE LIMPO
             try {
-                // Primeiro, DELETAR qualquer registro com este telefone (com ou sem máscara)
-                await supabase
+                const { data, error } = await supabase
                     .from('clientes_novos')
-                    .delete()
-                    .eq('telefone', cleanPhone);
-                
-                // Deletar também com máscara
-                const telefoneFormatado = formatarTelefone(cleanPhone);
-                if (telefoneFormatado) {
-                    await supabase
-                        .from('clientes_novos')
-                        .delete()
-                        .eq('telefone', telefoneFormatado);
-                }
-                
-                // Agora inserir com o telefone limpo
-                const { data: insertData, error: insertError } = await supabase
-                    .from('clientes_novos')
-                    .insert({
-                        telefone: cleanPhone,
+                    .upsert({
+                        telefone: telefoneLimpo,
                         nome: nomeFormatado,
                         data_contato: new Date().toISOString(),
                         status: 'novo',
                         onboarding_completo: false
+                    }, {
+                        onConflict: 'telefone'
                     })
                     .select()
                     .single();
                 
-                if (insertError) {
-                    console.error('❌ Erro ao inserir nome:', insertError);
+                if (error) {
+                    console.error('❌ Erro ao salvar nome:', error);
                 } else {
-                    console.log('✅ Nome INSERIDO no Supabase:', nomeFormatado);
-                    console.log('📊 Dados:', insertData);
+                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+                    console.log('📊 Dados:', data);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar nome:', err);
             }
             
-            // ATUALIZAR ESTADO
+            // ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
             state.nome = nomeFormatado;
             state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
             state.lastActivity = Date.now();
             userState.set(cleanPhone, state);
             console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
+            console.log('📌 Nome salvo no estado:', state.nome);
             
             // ENVIAR MENSAGEM PEDINDO E-MAIL
             const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
@@ -676,10 +673,14 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Mensagem de email enviada');
             break;
         
+        // ============================================================
+        // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
+        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
             console.log('📌 PASSO 3: AGUARDANDO EMAIL');
             console.log('📧 Email recebido: "' + messageText + '"');
             
+            // Validar e-mail
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(messageText)) {
                 console.log('❌ Email inválido');
@@ -692,43 +693,30 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Email válido:', email);
             console.log('👤 Nome associado:', nome);
             
-            // 🔥 SALVAR E-MAIL - DELETAR E INSERIR NOVO
+            // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING - UPSERT COM TELEFONE LIMPO
             try {
-                // Deletar registros com este telefone
-                await supabase
+                const { data, error } = await supabase
                     .from('clientes_novos')
-                    .delete()
-                    .eq('telefone', cleanPhone);
-                
-                const telefoneFormatado = formatarTelefone(cleanPhone);
-                if (telefoneFormatado) {
-                    await supabase
-                        .from('clientes_novos')
-                        .delete()
-                        .eq('telefone', telefoneFormatado);
-                }
-                
-                // Inserir com dados completos
-                const { data: insertData, error: insertError } = await supabase
-                    .from('clientes_novos')
-                    .insert({
-                        telefone: cleanPhone,
+                    .upsert({
+                        telefone: telefoneLimpo,
                         nome: nome,
                         email: email,
                         data_contato: new Date().toISOString(),
                         status: 'novo',
                         onboarding_completo: true,
                         data_onboarding: new Date().toISOString()
+                    }, {
+                        onConflict: 'telefone'
                     })
                     .select()
                     .single();
                 
-                if (insertError) {
-                    console.error('❌ Erro ao inserir e-mail:', insertError);
+                if (error) {
+                    console.error('❌ Erro ao salvar e-mail:', error);
                 } else {
-                    console.log('✅ E-mail INSERIDO no Supabase:', email);
+                    console.log('✅ E-mail salvo no Supabase:', email);
                     console.log('✅ Onboarding completo para:', nome);
-                    console.log('📊 Dados:', insertData);
+                    console.log('📊 Dados:', data);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar e-mail:', err);
@@ -742,6 +730,7 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             state.service = null;
             userState.set(cleanPhone, state);
             console.log('✅ Estado atualizado para: COMPLETO');
+            console.log('📌 Estado final:', JSON.stringify(state, null, 2));
             
             // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
             const primeiroNome = nome.split(' ')[0];
@@ -761,12 +750,18 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📨 Mensagem de confirmação enviada');
             break;
         
+        // ============================================================
+        // PASSO 4: COMPLETO (FALLBACK)
+        // ============================================================
         case ONBOARDING_STEPS.COMPLETO:
             console.log('⚠️ Onboarding já completo, enviando menu principal');
             const menuCompleto = await getMenuPrincipal();
             await sendReply(cleanPhone, menuCompleto);
             break;
         
+        // ============================================================
+        // DEFAULT: RESETAR ONBOARDING
+        // ============================================================
         default:
             console.log('⚠️ Estado de onboarding desconhecido, reiniciando');
             state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
@@ -1072,8 +1067,11 @@ async function enviarPDFWhatsApp(telefone, pdfBuffer, nomeCliente, tipo = 'ds160
 async function cadastrarCliente(telefone, nome) {
     console.log('📝 Cadastrando cliente:', telefone);
     
+    const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+    console.log('📱 Telefone limpo:', telefoneLimpo);
+    
     const dadosCliente = {
-        telefone: telefone,
+        telefone: telefoneLimpo,  // 🔥 SEMPRE SALVAR SEM MÁSCARA
         data_contato: new Date().toISOString(),
         status: 'novo',
         onboarding_completo: false
@@ -1088,10 +1086,7 @@ async function cadastrarCliente(telefone, nome) {
 
     const { data, error } = await supabase
         .from('clientes_novos')
-        .upsert(dadosCliente, {
-            onConflict: 'telefone',
-            ignoreDuplicates: false
-        })
+        .insert(dadosCliente)
         .select()
         .single();
 
@@ -1112,50 +1107,29 @@ async function buscarClienteEmQualquerTabela(telefone, tabelaEspecifica = null) 
     console.log(`🔍 Buscando cliente: ${telefone} ${tabelaEspecifica ? 'em ' + tabelaEspecifica : 'em todas as tabelas'}`);
     
     const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-    const telefoneFormatado = formatarTelefone(telefoneLimpo);
+    console.log(`📱 Telefone limpo para busca: ${telefoneLimpo}`);
     
     const tables = tabelaEspecifica ? [tabelaEspecifica] : ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
     
     for (const table of tables) {
         try {
-            const { data: dataLimpo, error: errorLimpo } = await supabase
+            // BUSCAR COM O TELEFONE LIMPO
+            const { data, error } = await supabase
                 .from(table)
                 .select('*')
                 .eq('telefone', telefoneLimpo)
                 .maybeSingle();
             
-            if (!errorLimpo && dataLimpo) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone limpo):`, dataLimpo.nome || dataLimpo.telefone);
-                return dataLimpo;
-            }
-            
-            const { data: dataFormatado, error: errorFormatado } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefoneFormatado)
-                .maybeSingle();
-            
-            if (!errorFormatado && dataFormatado) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone formatado):`, dataFormatado.nome || dataFormatado.telefone);
-                return dataFormatado;
-            }
-            
-            const { data: dataOriginal, error: errorOriginal } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefone)
-                .maybeSingle();
-            
-            if (!errorOriginal && dataOriginal) {
-                console.log(`✅ Cliente encontrado em ${table} (telefone original):`, dataOriginal.nome || dataOriginal.telefone);
-                return dataOriginal;
+            if (!error && data) {
+                console.log(`✅ Cliente encontrado em ${table}:`, data.nome || data.telefone);
+                return data;
             }
         } catch (err) {
             console.error(`Erro ao buscar em ${table}:`, err);
         }
     }
     
-    console.log(`❌ Cliente ${telefone} não encontrado em ${tabelaEspecifica || 'nenhuma tabela'}`);
+    console.log(`❌ Cliente ${telefoneLimpo} não encontrado`);
     return null;
 }
 
