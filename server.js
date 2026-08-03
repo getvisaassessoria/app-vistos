@@ -1347,21 +1347,40 @@ async function cadastrarCliente(telefone, nome) {
         console.log('  - Sem nome (aguardando onboarding)');
     }
 
-    const { data, error } = await supabase
-        .from('clientes_novos')
-        .upsert(dadosCliente, {
-            onConflict: 'telefone'
-        })
-        .select()
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .upsert(dadosCliente, {
+                onConflict: 'telefone'
+            })
+            .select()
+            .single();
 
-    if (error) {
-        console.error('❌ Erro ao cadastrar cliente:', error);
+        if (error) {
+            console.error('❌ Erro ao cadastrar cliente:', error);
+            // 🔥 TENTAR INSERIR DIRETAMENTE SE UPSERT FALHAR
+            const { data: insertData, error: insertError } = await supabase
+                .from('clientes_novos')
+                .insert(dadosCliente)
+                .select()
+                .single();
+            
+            if (insertError) {
+                console.error('❌ Erro ao inserir cliente:', insertError);
+                return null;
+            }
+            
+            console.log('✅ Cliente inserido com sucesso:', insertData);
+            return { dados: insertData, tipo: 'novo', tabela: 'clientes_novos' };
+        }
+        
+        console.log('✅ Cliente cadastrado com sucesso:', data);
+        return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
+        
+    } catch (err) {
+        console.error('❌ Erro exceção ao cadastrar cliente:', err);
         return null;
     }
-    
-    console.log('✅ Cliente cadastrado com sucesso:', data);
-    return { dados: data, tipo: 'novo', tabela: 'clientes_novos' };
 }
 
 // ============================================================
@@ -2549,20 +2568,17 @@ app.post('/api/webhook/zapi', function(req, res) {
             // 1. VALIDAÇÕES INICIAIS
             // ============================================================
             
-            // Ignorar mensagens de grupo
             if (body.isGroup === true || body.isGroupMsg === true || 
                 (body.chatId && body.chatId.indexOf('@g.us') !== -1)) {
                 console.log('👥 Mensagem de grupo ignorada');
                 return;
             }
             
-            // Ignorar mensagens do próprio bot
             if (body.fromMe === true) {
                 console.log('🤖 Mensagem do próprio bot ignorada');
                 return;
             }
             
-            // Ignorar mensagens de status
             if (body.isStatusReply === true || body.waitingMessage === true) {
                 console.log('📊 Mensagem de status/waiting ignorada');
                 return;
@@ -2575,7 +2591,6 @@ app.post('/api/webhook/zapi', function(req, res) {
             var messageText = '';
             var senderPhone = '';
 
-            // Extrair mensagem
             if (body.text) {
                 if (typeof body.text === 'string') messageText = body.text;
                 else if (body.text.message) messageText = body.text.message;
@@ -2593,7 +2608,6 @@ app.post('/api/webhook/zapi', function(req, res) {
             if (!messageText && body.body) messageText = body.body;
             if (!messageText && body.conversation) messageText = body.conversation;
 
-            // Extrair telefone
             if (body.phone) senderPhone = body.phone;
             else if (body.from) senderPhone = body.from;
             else if (body.sender) senderPhone = body.sender;
@@ -2604,7 +2618,6 @@ app.post('/api/webhook/zapi', function(req, res) {
             console.log('📝 Mensagem bruta: "' + messageText + '"');
             console.log('📱 Telefone bruto: "' + senderPhone + '"');
 
-            // Validar dados
             if (!senderPhone || !messageText || messageText.trim().length === 0) {
                 console.log('❌ Dados inválidos - ignorando');
                 return;
@@ -2671,24 +2684,80 @@ app.post('/api/webhook/zapi', function(req, res) {
                 return;
             }
 
-            // 4.4. 🔥🔥🔥 VERIFICAR SE É NOVO (OU SE PRECISA DE ONBOARDING)
-            console.log('🔍 Verificando NOVO...');
+            // ============================================================
+            // 4.4. 🔥🔥🔥 CRIAR/OBTER CLIENTE NOVO
+            // ============================================================
+            console.log('🔍 Verificando/Criando NOVO...');
+            
             let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
 
-            // Se não encontrou em clientes_novos, verificar se precisa criar
             if (!novo) {
-                console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
-                var resultado = await cadastrarCliente(cleanPhone, null);
-                if (!resultado) {
-                    console.error('❌ Falha ao cadastrar cliente');
-                    await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                console.log('🆕 Criando novo cliente...');
+                
+                try {
+                    const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
+                    
+                    // 🔥 VERIFICAR SE JÁ EXISTE (DUPLA VERIFICAÇÃO)
+                    const { data: existente } = await supabase
+                        .from('clientes_novos')
+                        .select('*')
+                        .eq('telefone', telefoneLimpo)
+                        .maybeSingle();
+                    
+                    if (existente) {
+                        console.log('✅ Cliente já existe:', existente);
+                        novo = existente;
+                    } else {
+                        // 🔥 INSERIR DIRETAMENTE
+                        const { data: novoCliente, error: insertError } = await supabase
+                            .from('clientes_novos')
+                            .insert({
+                                telefone: telefoneLimpo,
+                                data_contato: new Date().toISOString(),
+                                status: 'novo',
+                                onboarding_completo: false,
+                                updated_at: new Date().toISOString()
+                            })
+                            .select()
+                            .single();
+                        
+                        if (insertError) {
+                            console.error('❌ Erro ao inserir:', insertError);
+                            
+                            // 🔥 TENTAR UPSERT COMO FALLBACK
+                            const { data: upsertData, error: upsertError } = await supabase
+                                .from('clientes_novos')
+                                .upsert({
+                                    telefone: telefoneLimpo,
+                                    data_contato: new Date().toISOString(),
+                                    status: 'novo',
+                                    onboarding_completo: false,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'telefone' })
+                                .select()
+                                .single();
+                            
+                            if (upsertError) {
+                                console.error('❌ Erro no UPSERT:', upsertError);
+                                await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                                return;
+                            }
+                            
+                            novo = upsertData;
+                            console.log('✅ Cliente criado via UPSERT');
+                        } else {
+                            novo = novoCliente;
+                            console.log('✅ Cliente criado com sucesso');
+                        }
+                    }
+                } catch (err) {
+                    console.error('❌ Erro crítico:', err);
+                    await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
                     return;
                 }
-                novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-                console.log('✅ Cliente criado com sucesso');
             }
 
-            // Se encontrou um cliente NOVO
+            // Se encontrou/ criou um cliente NOVO
             if (novo) {
                 console.log('👤 Cliente:', novo.nome || 'Sem nome');
                 console.log('📌 Onboarding completo:', novo.onboarding_completo || false);
@@ -2699,7 +2768,6 @@ app.post('/api/webhook/zapi', function(req, res) {
                 if (precisaOnboarding) {
                     console.log('🆕 Cliente precisa de onboarding');
                     
-                    // 🔥 CRIAR OU RESETAR ESTADO
                     let state = userState.get(cleanPhone);
                     if (!state) {
                         state = {
@@ -2711,7 +2779,6 @@ app.post('/api/webhook/zapi', function(req, res) {
                             lastActivity: Date.now()
                         };
                     } else {
-                        // 🔥 NÃO RESETAR O ESTADO SE JÁ ESTIVER EM ONBOARDING
                         if (state.onboardingStep !== ONBOARDING_STEPS.AGUARDANDO_NOME && 
                             state.onboardingStep !== ONBOARDING_STEPS.AGUARDANDO_EMAIL) {
                             state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
@@ -2735,48 +2802,20 @@ app.post('/api/webhook/zapi', function(req, res) {
             // 5. FALLBACK - NENHUM CLIENTE ENCONTRADO
             // ============================================================
             
-            console.log('⚠️ Nenhum cliente encontrado em nenhuma tabela. Criando novo...');
-            var resultado = await cadastrarCliente(cleanPhone, null);
-            if (!resultado) {
-                console.error('❌ Falha ao cadastrar cliente');
-                await sendReply(cleanPhone, 'Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                return;
-            }
-            
-            console.log('✅ Cliente cadastrado com sucesso, iniciando onboarding...');
-            // Criar estado para onboarding
-            let state = userState.get(cleanPhone);
-            if (!state) {
-                state = {
-                    nivel: 'onboarding',
-                    service: null,
-                    nome: null,
-                    onboardingStep: ONBOARDING_STEPS.SAUDACAO,
-                    onboardingCompleto: false,
-                    lastActivity: Date.now()
-                };
-            } else {
-                state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
-                state.onboardingCompleto = false;
-                state.nome = null;
-                state.nivel = 'onboarding';
-            }
-            userState.set(cleanPhone, state);
-            
-            await processarOnboarding(cleanPhone, messageText, state);
+            console.log('⚠️ Nenhum cliente encontrado em nenhuma tabela');
+            await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
 
         } catch (error) {
             console.error('❌ ERRO NO PROCESSAMENTO DO WEBHOOK:');
             console.error('Mensagem:', error.message);
             console.error('Stack:', error.stack);
             
-            // Tentar enviar mensagem de erro para o usuário
             try {
                 var phone = req.body && (req.body.phone || req.body.from || req.body.chatId) || null;
                 if (phone) {
                     var cleanPhone = phone.toString().replace(/\D/g, '');
                     if (cleanPhone.length >= 10) {
-                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada e entrará em contato em breve.\n\nDigite 0 para tentar novamente.');
+                        await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Nossa equipe já foi notificada.\n\nDigite 0 para tentar novamente.');
                     }
                 }
             } catch (e) {
