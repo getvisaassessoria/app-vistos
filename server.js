@@ -591,9 +591,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
     }
     
     switch (state.onboardingStep) {
-        // ============================================================
-        // PASSO 1: SAUDAÇÃO - APRESENTAR A GETVISA
-        // ============================================================
         case ONBOARDING_STEPS.SAUDACAO:
             console.log('📌 PASSO 1: SAUDAÇÃO');
             const saudacao = getRandomMessage(BOAS_VINDAS_MESSAGES.primeira_saudacao);
@@ -607,9 +604,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('✅ Estado atualizado para: AGUARDANDO_NOME');
             break;
         
-        // ============================================================
-        // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
-        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
             console.log('📌 PASSO 2: AGUARDANDO NOME');
             console.log('📝 Nome recebido: "' + messageText + '"');
@@ -626,59 +620,52 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             const nomeFormatado = formatarNome(messageText);
             console.log('📝 Nome formatado: "' + nomeFormatado + '"');
             
-            // 🔥 SALVAR NOME NO SUPABASE - UPDATE + INSERT
+            // 🔥 SALVAR NOME - USANDO APENAS INSERT COM ON CONFLICT
             try {
-                // 1. Tentar atualizar primeiro
-                const { data: updateData, error: updateError } = await supabase
+                // Primeiro, DELETAR qualquer registro com este telefone (com ou sem máscara)
+                await supabase
                     .from('clientes_novos')
-                    .update({
+                    .delete()
+                    .eq('telefone', cleanPhone);
+                
+                // Deletar também com máscara
+                const telefoneFormatado = formatarTelefone(cleanPhone);
+                if (telefoneFormatado) {
+                    await supabase
+                        .from('clientes_novos')
+                        .delete()
+                        .eq('telefone', telefoneFormatado);
+                }
+                
+                // Agora inserir com o telefone limpo
+                const { data: insertData, error: insertError } = await supabase
+                    .from('clientes_novos')
+                    .insert({
+                        telefone: cleanPhone,
                         nome: nomeFormatado,
                         data_contato: new Date().toISOString(),
                         status: 'novo',
                         onboarding_completo: false
                     })
-                    .eq('telefone', cleanPhone)
                     .select()
                     .single();
                 
-                // 2. Se não encontrou (PGRST116 = not found), inserir
-                if (updateError && updateError.code === 'PGRST116') {
-                    console.log('📝 Cliente não encontrado, inserindo novo...');
-                    const { data: insertData, error: insertError } = await supabase
-                        .from('clientes_novos')
-                        .insert({
-                            telefone: cleanPhone,
-                            nome: nomeFormatado,
-                            data_contato: new Date().toISOString(),
-                            status: 'novo',
-                            onboarding_completo: false
-                        })
-                        .select()
-                        .single();
-                    
-                    if (insertError) {
-                        console.error('❌ Erro ao inserir nome:', insertError);
-                    } else {
-                        console.log('✅ Nome INSERIDO no Supabase:', nomeFormatado);
-                        console.log('📊 Dados:', insertData);
-                    }
-                } else if (updateError) {
-                    console.error('❌ Erro ao atualizar nome:', updateError);
+                if (insertError) {
+                    console.error('❌ Erro ao inserir nome:', insertError);
                 } else {
-                    console.log('✅ Nome ATUALIZADO no Supabase:', nomeFormatado);
-                    console.log('📊 Dados:', updateData);
+                    console.log('✅ Nome INSERIDO no Supabase:', nomeFormatado);
+                    console.log('📊 Dados:', insertData);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar nome:', err);
             }
             
-            // ATUALIZAR ESTADO - NOME SALVO, AGORA PEDIR EMAIL
+            // ATUALIZAR ESTADO
             state.nome = nomeFormatado;
             state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
             state.lastActivity = Date.now();
             userState.set(cleanPhone, state);
             console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
-            console.log('📌 Nome salvo no estado:', state.nome);
             
             // ENVIAR MENSAGEM PEDINDO E-MAIL
             const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
@@ -689,14 +676,10 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Mensagem de email enviada');
             break;
         
-        // ============================================================
-        // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
-        // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
             console.log('📌 PASSO 3: AGUARDANDO EMAIL');
             console.log('📧 Email recebido: "' + messageText + '"');
             
-            // Validar e-mail
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(messageText)) {
                 console.log('❌ Email inválido');
@@ -709,12 +692,27 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📧 Email válido:', email);
             console.log('👤 Nome associado:', nome);
             
-            // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING - UPDATE + INSERT
+            // 🔥 SALVAR E-MAIL - DELETAR E INSERIR NOVO
             try {
-                // 1. Tentar atualizar primeiro
-                const { data: updateData, error: updateError } = await supabase
+                // Deletar registros com este telefone
+                await supabase
                     .from('clientes_novos')
-                    .update({
+                    .delete()
+                    .eq('telefone', cleanPhone);
+                
+                const telefoneFormatado = formatarTelefone(cleanPhone);
+                if (telefoneFormatado) {
+                    await supabase
+                        .from('clientes_novos')
+                        .delete()
+                        .eq('telefone', telefoneFormatado);
+                }
+                
+                // Inserir com dados completos
+                const { data: insertData, error: insertError } = await supabase
+                    .from('clientes_novos')
+                    .insert({
+                        telefone: cleanPhone,
                         nome: nome,
                         email: email,
                         data_contato: new Date().toISOString(),
@@ -722,40 +720,15 @@ async function processarOnboarding(cleanPhone, messageText, state) {
                         onboarding_completo: true,
                         data_onboarding: new Date().toISOString()
                     })
-                    .eq('telefone', cleanPhone)
                     .select()
                     .single();
                 
-                // 2. Se não encontrou (PGRST116 = not found), inserir
-                if (updateError && updateError.code === 'PGRST116') {
-                    console.log('📝 Cliente não encontrado, inserindo novo...');
-                    const { data: insertData, error: insertError } = await supabase
-                        .from('clientes_novos')
-                        .insert({
-                            telefone: cleanPhone,
-                            nome: nome,
-                            email: email,
-                            data_contato: new Date().toISOString(),
-                            status: 'novo',
-                            onboarding_completo: true,
-                            data_onboarding: new Date().toISOString()
-                        })
-                        .select()
-                        .single();
-                    
-                    if (insertError) {
-                        console.error('❌ Erro ao inserir e-mail:', insertError);
-                    } else {
-                        console.log('✅ E-mail INSERIDO no Supabase:', email);
-                        console.log('✅ Onboarding completo para:', nome);
-                        console.log('📊 Dados:', insertData);
-                    }
-                } else if (updateError) {
-                    console.error('❌ Erro ao atualizar e-mail:', updateError);
+                if (insertError) {
+                    console.error('❌ Erro ao inserir e-mail:', insertError);
                 } else {
-                    console.log('✅ E-mail ATUALIZADO no Supabase:', email);
+                    console.log('✅ E-mail INSERIDO no Supabase:', email);
                     console.log('✅ Onboarding completo para:', nome);
-                    console.log('📊 Dados:', updateData);
+                    console.log('📊 Dados:', insertData);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar e-mail:', err);
@@ -769,7 +742,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             state.service = null;
             userState.set(cleanPhone, state);
             console.log('✅ Estado atualizado para: COMPLETO');
-            console.log('📌 Estado final:', JSON.stringify(state, null, 2));
             
             // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
             const primeiroNome = nome.split(' ')[0];
@@ -789,18 +761,12 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             console.log('📨 Mensagem de confirmação enviada');
             break;
         
-        // ============================================================
-        // PASSO 4: COMPLETO (FALLBACK)
-        // ============================================================
         case ONBOARDING_STEPS.COMPLETO:
             console.log('⚠️ Onboarding já completo, enviando menu principal');
             const menuCompleto = await getMenuPrincipal();
             await sendReply(cleanPhone, menuCompleto);
             break;
         
-        // ============================================================
-        // DEFAULT: RESETAR ONBOARDING
-        // ============================================================
         default:
             console.log('⚠️ Estado de onboarding desconhecido, reiniciando');
             state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
@@ -811,185 +777,6 @@ async function processarOnboarding(cleanPhone, messageText, state) {
             userState.set(cleanPhone, state);
             await processarOnboarding(cleanPhone, messageText, state);
     }
-}
-
-// ============================================================
-// FUNÇÃO PROCESSAR MENU PRINCIPAL
-// ============================================================
-async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
-    console.log('=== MENU PRINCIPAL ===');
-    console.log('Mensagem recebida: "' + messageText + '"');
-    
-    // ============================================================
-    // 1. MAPEAMENTO DE SERVIÇOS
-    // ============================================================
-    const servicoMap = {
-        '1': 'visto_americano',
-        '2': 'visto_canadense',
-        '3': 'visto_australiano',
-        '4': 'eta_uk',
-        '5': 'eta_canadense',
-        '6': 'passaporte'
-    };
-    
-    // ============================================================
-    // 2. PROCESSAR ESCOLHA DE SERVIÇO (NÚMEROS)
-    // ============================================================
-    if (servicoMap[messageText]) {
-        const serviceKey = servicoMap[messageText];
-        console.log('Entrando no submenu de: ' + serviceKey);
-        
-        state.nivel = 'submenu';
-        state.service = serviceKey;
-        userState.set(cleanPhone, state);
-        
-        const submenuTexto = getSubmenu(serviceKey);
-        await sendReply(cleanPhone, submenuTexto);
-        return;
-    }
-    
-    // ============================================================
-    // 3. OPÇÃO 7 - AJUDA / CONTATO
-    // ============================================================
-    if (messageText === '7') {
-        const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
-                        '👨‍💼 Moisés - Especialista em Vistos\n\n' +
-                        '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
-                        '📧 E-mail: contato@getvisa.com.br\n\n' +
-                        '🌐 Site: https://getvisa.com.br\n\n' +
-                        '⏰ Horário: Seg-Sex, 9h às 18h\n\n' +
-                        'Digite 0 para voltar ao MENU principal';
-        await sendReply(cleanPhone, ajudaMsg);
-        return;
-    }
-    
-    // ============================================================
-    // 4. 🔥🔥🔥 VERIFICAR ONBOARDING - PRIORIDADE MÁXIMA
-    // ============================================================
-    const clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
-    const precisaOnboarding = !clienteDB || !clienteDB.nome || clienteDB.onboarding_completo === false;
-
-    if (precisaOnboarding) {
-        console.log('🆕 Cliente SEM onboarding - FORÇANDO ONBOARDING');
-        state.onboardingStep = ONBOARDING_STEPS.SAUDACAO;
-        state.onboardingCompleto = false;
-        state.nome = null;
-        state.nivel = 'onboarding';
-        userState.set(cleanPhone, state);
-        await processarOnboarding(cleanPhone, messageText, state);
-        return;
-    }
-
-   // ============================================================
-// 5. DETECTAR INTENÇÃO
-// ============================================================
-const intent = detectIntent(messageText);
-console.log('Intenção detectada:', intent);
-
-// 5.1. INTENÇÃO: INICIAR PROCESSO - CORRIGIDO
-if (intent === 'iniciar_processo') {
-    console.log('🚀 Cliente quer iniciar o processo!');
-    
-    // 🔥 CORREÇÃO: Verificar se tem nome antes de usar
-    const nomeCliente = state.nome || 'Cliente';
-    const mensagemFormulario = getMensagemFormulario(nomeCliente);
-    await sendReply(cleanPhone, mensagemFormulario);
-    return;
-}
-
-// 5.2. OUTRAS INTENÇÕES
-if (intent) {
-    const resposta = getRespostaIntencao(intent, state.service);
-    await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
-    return;
-}
-    
-    // ============================================================
-    // 6. DETECTAR SERVIÇO POR PALAVRA-CHAVE
-    // ============================================================
-    const servicosKeywords = {
-        'visto americano': 'visto_americano',
-        'visto eua': 'visto_americano',
-        'eua': 'visto_americano',
-        'visto canadense': 'visto_canadense',
-        'canada': 'visto_canadense',
-        'visto australiano': 'visto_australiano',
-        'australia': 'visto_australiano',
-        'eta uk': 'eta_uk',
-        'reino unido': 'eta_uk',
-        'inglaterra': 'eta_uk',
-        'eta canadense': 'eta_canadense',
-        'passaporte': 'passaporte'
-    };
-    
-    const mensagemLower = messageText.toLowerCase();
-    for (const [keyword, serviceKey] of Object.entries(servicosKeywords)) {
-        if (mensagemLower.includes(keyword)) {
-            console.log('🔍 Detectado serviço específico:', serviceKey);
-            
-            // Cliente já tem onboarding (verificado acima) - mostrar submenu
-            state.nivel = 'submenu';
-            state.service = serviceKey;
-            userState.set(cleanPhone, state);
-            const submenuTexto = getSubmenu(serviceKey);
-            await sendReply(cleanPhone, submenuTexto);
-            return;
-        }
-    }
-    
-    // ============================================================
-    // 7. DETECTAR PERGUNTAS ESPECÍFICAS
-    // ============================================================
-    const perguntasEspecificas = {
-        'preco': 'preco',
-        'valor': 'preco',
-        'quanto custa': 'preco',
-        'custo': 'preco',
-        'investimento': 'preco',
-        'prazo': 'prazo',
-        'tempo': 'prazo',
-        'demora': 'prazo',
-        'documentos': 'documentos',
-        'documentacao': 'documentos',
-        'requisitos': 'documentos',
-        'processo': 'processo',
-        'passo a passo': 'processo',
-        'visto negado': 'visto_negado',
-        'recusado': 'visto_negado',
-        'negativa': 'visto_negado'
-    };
-    
-    for (const [keyword, tipo] of Object.entries(perguntasEspecificas)) {
-        if (mensagemLower.includes(keyword)) {
-            console.log('🔍 Detectada pergunta sobre:', tipo);
-            
-            if (!state.service) {
-                const msg = `📋 Para falar sobre *${tipo}*, preciso saber qual serviço você deseja:\n\n` +
-                           `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
-                           `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
-                           `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
-                           `4️⃣ - 🇬🇧 eTA UK\n` +
-                           `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
-                           `6️⃣ - 🛂 PASSAPORTE\n\n` +
-                           `Digite o número do serviço (1-6)`;
-                await sendReply(cleanPhone, msg);
-                return;
-            }
-            
-            const resposta = getRespostaSubmenu(state.service, tipo);
-            await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
-            return;
-        }
-    }
-    
-    // ============================================================
-    // 8. MENSAGEM DE ERRO (NÃO ENTENDI)
-    // ============================================================
-    const nomeCliente = state.nome ? state.nome.split(' ')[0] : '';
-    const erroMsg = '❌ Não entendi sua mensagem' + (nomeCliente ? ', ' + nomeCliente : '') + '!\n\n' +
-                   'Por favor, escolha uma das opções abaixo:\n\n' +
-                   await getMenuPrincipal();
-    await sendReply(cleanPhone, erroMsg);
 }
 
 async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
