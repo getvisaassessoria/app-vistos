@@ -419,6 +419,7 @@ function detectIntent(message) {
             'negado', 'negativa', 'recusado', 'visto recusado',
             'deportado', 'visto negado'
         ],
+        // 🔥 ADICIONAR ESTA PARTE - É O QUE ESTAVA FALTANDO!
         'iniciar_processo': [
             'quero fazer o visto', 'quero visto', 'iniciar processo',
             'comecar', 'quero comecar', 'vou fazer', 'quero informação',
@@ -430,11 +431,14 @@ function detectIntent(message) {
         ]
     };
     
+    // 🔥 Ignorar saudações para não conflitar
     const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'opa', 'e ai', 'hey', 'hi', 'hello', 'tudo bem', 'olá'];
     if (saudacoes.some(s => cleanMessage.includes(s))) {
+        console.log('👋 Saudação detectada, ignorando intenção');
         return null;
     }
     
+    // Verificar cada intenção
     for (const [intent, keywords] of Object.entries(INTENT_MAP)) {
         for (const keyword of keywords) {
             if (cleanMessage.includes(keyword)) {
@@ -554,9 +558,17 @@ function getSubmenu(service) {
 // ============================================================
 
 function getMensagemFormulario(nomeCliente) {
-    const primeiroNome = nomeCliente && typeof nomeCliente === 'string'
-        ? nomeCliente.trim().split(' ')[0]
-        : 'Cliente';
+    // 🔥 TRATAMENTO DE SEGURANÇA
+    let primeiroNome = 'Cliente';
+    
+    try {
+        if (nomeCliente && typeof nomeCliente === 'string' && nomeCliente.trim().length > 0) {
+            primeiroNome = nomeCliente.trim().split(' ')[0];
+        }
+    } catch (err) {
+        console.error('Erro ao processar nome:', err);
+        primeiroNome = 'Cliente';
+    }
     
     return `🌟 *ÓTIMO, ${primeiroNome.toUpperCase()}!* 🌟\n\n` +
            `Para iniciarmos seu processo, preciso que você preencha nosso formulário com os dados do visto americano.\n\n` +
@@ -897,6 +909,198 @@ async function processarOpcaoNoSubmenu(cleanPhone, messageText, state) {
                    'Opções disponíveis:\n' +
                    getSubmenu(service) + '\n\n' +
                    '💡 Para escolher outro serviço, digite 0 primeiro.';
+    await sendReply(cleanPhone, erroMsg);
+}
+
+// ============================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
+// ============================================================
+
+async function processarMensagem(cleanPhone, messageText, body) {
+    console.log('=== PROCESSANDO MENSAGEM ===');
+    console.log('Phone: ' + cleanPhone);
+    console.log('Message: "' + messageText + '"');
+
+    try {
+        // BUSCAR CLIENTE NO BANCO
+        let clienteDB = null;
+        try {
+            clienteDB = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+        } catch (err) {
+            console.error('Erro ao buscar cliente:', err);
+        }
+
+        console.log('Cliente DB:', clienteDB ? 'Encontrado' : 'Nao encontrado');
+        if (clienteDB) {
+            console.log('  - Nome:', clienteDB.nome || '(vazio)');
+            console.log('  - Email:', clienteDB.email || '(vazio)');
+            console.log('  - Onboarding completo:', clienteDB.onboarding_completo || false);
+        }
+
+        // FUNÇÃO PARA VALIDAR NOME
+        function isNomeValido(nome) {
+            if (!nome) return false;
+            if (typeof nome !== 'string') return false;
+            if (nome === 'Cliente') return false;
+            if (nome.startsWith('Cliente_')) return false;
+            if (nome.trim().length < 2) return false;
+            const regexNome = /^[a-zA-ZÀ-ÿ\s'-]+$/;
+            if (!regexNome.test(nome.trim())) return false;
+            if (/^\d+$/.test(nome.replace(/\s/g, ''))) return false;
+            return true;
+        }
+
+        // RECUPERAR OU CRIAR ESTADO DO USUÁRIO
+        let state = userState.get(cleanPhone);
+        
+        const onboardingCompletoNoBanco = clienteDB && 
+                                          clienteDB.onboarding_completo === true && 
+                                          isNomeValido(clienteDB.nome) &&
+                                          clienteDB.email && 
+                                          clienteDB.email.trim() !== '';
+
+        if (!state) {
+            console.log('🔄 Criando novo estado para:', cleanPhone);
+            state = {
+                nivel: onboardingCompletoNoBanco ? 'principal' : 'onboarding',
+                service: null,
+                nome: clienteDB ? clienteDB.nome : null,
+                email: clienteDB ? clienteDB.email : null,
+                onboardingStep: onboardingCompletoNoBanco ? ONBOARDING_STEPS.COMPLETO : ONBOARDING_STEPS.SAUDACAO,
+                onboardingCompleto: onboardingCompletoNoBanco,
+                lastActivity: Date.now()
+            };
+            userState.set(cleanPhone, state);
+        }
+
+        // ATUALIZAR ÚLTIMA ATIVIDADE
+        state.lastActivity = Date.now();
+        userState.set(cleanPhone, state);
+
+        console.log('Estado atual:', {
+            nivel: state.nivel,
+            nome: state.nome || '(vazio)',
+            email: state.email || '(vazio)',
+            onboardingCompleto: state.onboardingCompleto
+        });
+
+        // VERIFICAR SE PRECISA DE ONBOARDING
+        const precisaOnboarding = !onboardingCompletoNoBanco || !state.onboardingCompleto;
+
+        if (precisaOnboarding) {
+            console.log('🔄 INICIANDO ONBOARDING');
+            await processarOnboarding(cleanPhone, messageText, state);
+            return;
+        }
+
+        // SE ONBOARDING COMPLETO, PROCESSAR MENU
+        console.log('✅ Onboarding completo, processando menu');
+        
+        if (state.nivel === 'submenu' && state.service) {
+            await processarOpcaoNoSubmenu(cleanPhone, messageText, state);
+        } else {
+            await processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state);
+        }
+
+    } catch (error) {
+        console.error('❌ ERRO NO processarMensagem:', error);
+        console.error('Stack:', error.stack);
+        
+        try {
+            await sendReply(cleanPhone, '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Nossa equipe foi notificada.\n\nDigite 0 para tentar novamente.');
+        } catch (e) {
+            console.error('❌ Erro ao enviar mensagem de erro:', e);
+        }
+    }
+}
+
+// ============================================================
+// FUNÇÃO PROCESSAR MENU PRINCIPAL
+// ============================================================
+
+async function processarOpcaoNoMenuPrincipal(cleanPhone, messageText, state) {
+    console.log('=== MENU PRINCIPAL ===');
+    console.log('Mensagem recebida: "' + messageText + '"');
+    
+    // MAPEAMENTO DE SERVIÇOS
+    const servicoMap = {
+        '1': 'visto_americano',
+        '2': 'visto_canadense',
+        '3': 'visto_australiano',
+        '4': 'eta_uk',
+        '5': 'eta_canadense',
+        '6': 'passaporte'
+    };
+    
+    // PROCESSAR ESCOLHA DE SERVIÇO (NÚMEROS)
+    if (servicoMap[messageText]) {
+        const serviceKey = servicoMap[messageText];
+        console.log('Entrando no submenu de: ' + serviceKey);
+        
+        state.nivel = 'submenu';
+        state.service = serviceKey;
+        userState.set(cleanPhone, state);
+        
+        const submenuTexto = getSubmenu(serviceKey);
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // OPÇÃO 7 - AJUDA / CONTATO
+    if (messageText === '7') {
+        const ajudaMsg = '📞 AJUDA / CONTATO GETVISA\n\n' +
+                        '👨‍💼 Moisés - Especialista em Vistos\n\n' +
+                        '📱 WhatsApp: https://wa.me/5521974601812\n\n' +
+                        '📧 E-mail: contato@getvisa.com.br\n\n' +
+                        '🌐 Site: https://getvisa.com.br\n\n' +
+                        '⏰ Horário: Seg-Sex, 9h às 18h\n\n' +
+                        'Digite 0 para voltar ao MENU principal';
+        await sendReply(cleanPhone, ajudaMsg);
+        return;
+    }
+    
+    // DETECTAR INTENÇÃO
+    const intent = detectIntent(messageText);
+    console.log('Intenção detectada:', intent);
+    
+    // INTENÇÃO: INICIAR PROCESSO
+    if (intent === 'iniciar_processo') {
+        console.log('🚀 Cliente quer iniciar o processo!');
+        
+        let nomeCliente = 'Cliente';
+        if (state && state.nome && typeof state.nome === 'string' && state.nome.trim().length > 0) {
+            nomeCliente = state.nome;
+        }
+        
+        const mensagemFormulario = getMensagemFormulario(nomeCliente);
+        await sendReply(cleanPhone, mensagemFormulario);
+        return;
+    }
+    
+    // INTENÇÃO: VISTO AMERICANO
+    if (intent === 'visto_americano') {
+        state.nivel = 'submenu';
+        state.service = 'visto_americano';
+        userState.set(cleanPhone, state);
+        const submenuTexto = getSubmenu('visto_americano');
+        await sendReply(cleanPhone, submenuTexto);
+        return;
+    }
+    
+    // OUTRAS INTENÇÕES
+    if (intent) {
+        const resposta = getRespostaIntencao(intent, state ? state.service : null);
+        await sendReply(cleanPhone, resposta + '\n\nDigite 0 para o menu principal');
+        return;
+    }
+    
+    // FALLBACK - MENSAGEM NÃO RECONHECIDA
+    console.log('⚠️ Nenhuma intenção detectada para:', messageText);
+    
+    const nomeCliente = state && state.nome ? state.nome.split(' ')[0] : '';
+    const erroMsg = `❌ Não entendi sua mensagem${nomeCliente ? ', ' + nomeCliente : ''}!\n\n` +
+                   `Por favor, escolha uma das opções abaixo:\n\n` +
+                   await getMenuPrincipal();
     await sendReply(cleanPhone, erroMsg);
 }
 
