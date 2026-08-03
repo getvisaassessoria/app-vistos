@@ -622,139 +622,143 @@ async function processarOnboarding(cleanPhone, messageText, state) {
         // PASSO 2: AGUARDANDO NOME - VALIDAR E SALVAR
         // ============================================================
         case ONBOARDING_STEPS.AGUARDANDO_NOME:
-            console.log('📌 PASSO 2: AGUARDANDO NOME');
-            console.log('📝 Nome recebido: "' + messageText + '"');
-            
-            const nomeValidado = validarNome(messageText);
-            console.log('✅ Nome válido?', nomeValidado);
-            
-            if (!nomeValidado) {
-                const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
-                await sendReply(cleanPhone, msgInvalido);
-                return;
-            }
-            
-            const nomeFormatado = formatarNome(messageText);
-            console.log('📝 Nome formatado: "' + nomeFormatado + '"');
-            
-            // ✅ SALVAR NOME - USAR UPSERT PARA EVITAR CONFLITOS
-            try {
-                const { data, error } = await supabase
-                    .from('clientes_novos')
-                    .upsert({
-                        telefone: telefoneLimpo,
-                        nome: nomeFormatado,
-                        data_contato: new Date().toISOString(),
-                        status: 'novo',
-                        onboarding_completo: false,
-                        updated_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'telefone'
-                    })
-                    .select()
-                    .single();
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar nome:', error);
-                } else {
-                    console.log('✅ Nome salvo no Supabase:', nomeFormatado);
-                    console.log('📊 Dados:', data);
-                }
-            } catch (err) {
-                console.error('❌ Erro ao salvar nome:', err);
-            }
-            
-            // ATUALIZAR ESTADO
-            state.nome = nomeFormatado;
-            state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
-            state.lastActivity = Date.now();
-            userState.set(cleanPhone, state);
-            console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
-            
-            // ENVIAR MENSAGEM PEDINDO E-MAIL
-            const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
-            const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
-            const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
-            
-            await sendReply(cleanPhone, mensagemEmail);
-            console.log('📧 Mensagem de email enviada');
-            break;
+    console.log('📌 PASSO 2: AGUARDANDO NOME');
+    console.log('📝 Nome recebido: "' + messageText + '"');
+    
+    const nomeValidado = validarNome(messageText);
+    console.log('✅ Nome válido?', nomeValidado);
+    
+    if (!nomeValidado) {
+        const msgInvalido = getRandomMessage(BOAS_VINDAS_MESSAGES.nome_invalido);
+        await sendReply(cleanPhone, msgInvalido);
+        return;
+    }
+    
+    const nomeFormatado = formatarNome(messageText);
+    console.log('📝 Nome formatado: "' + nomeFormatado + '"');
+    
+    // 🔥 SALVAR NOME COM UPSERT
+    try {
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .upsert({
+                telefone: telefoneLimpo,
+                nome: nomeFormatado,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: false,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'telefone'
+            })
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erro ao salvar nome:', error);
+            await sendReply(cleanPhone, '❌ Erro ao salvar seu nome. Tente novamente.');
+            return;
+        }
+        console.log('✅ Nome salvo no Supabase:', nomeFormatado);
+    } catch (err) {
+        console.error('❌ Erro ao salvar nome:', err);
+        await sendReply(cleanPhone, '❌ Erro ao salvar. Tente novamente.');
+        return;
+    }
+    
+    // ATUALIZAR ESTADO
+    state.nome = nomeFormatado;
+    state.onboardingStep = ONBOARDING_STEPS.AGUARDANDO_EMAIL;
+    state.lastActivity = Date.now();
+    userState.set(cleanPhone, state);
+    console.log('✅ Estado atualizado para: AGUARDANDO_EMAIL');
+    
+    // ENVIAR MENSAGEM PEDINDO E-MAIL
+    const parte1 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte1);
+    const parte2 = getRandomMessage(BOAS_VINDAS_MESSAGES.confirmacao_nome.parte2);
+    const mensagemEmail = parte1 + nomeFormatado.split(' ')[0] + parte2;
+    
+    await sendReply(cleanPhone, mensagemEmail);
+    console.log('📧 Mensagem de email enviada');
+    break;
         
         // ============================================================
         // PASSO 3: AGUARDANDO E-MAIL - VALIDAR E FINALIZAR
         // ============================================================
-        case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
-            console.log('📌 PASSO 3: AGUARDANDO EMAIL');
-            console.log('📧 Email recebido: "' + messageText + '"');
-            
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(messageText)) {
-                console.log('❌ Email inválido');
-                await sendReply(cleanPhone, '❌ E-mail inválido! Por favor, digite um e-mail válido.\n\n📧 Ex: maria@email.com');
-                return;
-            }
-            
-            const email = messageText.trim().toLowerCase();
-            const nome = state.nome;
-            console.log('📧 Email válido:', email);
-            console.log('👤 Nome associado:', nome);
-            
-            // ✅ SALVAR E-MAIL E COMPLETAR ONBOARDING - USAR UPSERT
-            try {
-                const { data, error } = await supabase
-                    .from('clientes_novos')
-                    .upsert({
-                        telefone: telefoneLimpo,
-                        nome: nome,
-                        email: email,
-                        data_contato: new Date().toISOString(),
-                        status: 'novo',
-                        onboarding_completo: true,
-                        data_onboarding: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'telefone'
-                    })
-                    .select()
-                    .single();
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar e-mail:', error);
-                } else {
-                    console.log('✅ E-mail salvo no Supabase:', email);
-                    console.log('✅ Onboarding completo para:', nome);
-                    console.log('📊 Dados:', data);
-                }
-            } catch (err) {
-                console.error('❌ Erro ao salvar e-mail:', err);
-            }
-            
-            // ATUALIZAR ESTADO - ONBOARDING COMPLETO
-            state.email = email;
-            state.onboardingCompleto = true;
-            state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
-            state.nivel = 'principal';
-            state.service = null;
-            userState.set(cleanPhone, state);
-            console.log('✅ Estado atualizado para: COMPLETO');
-            
-            // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
-            const primeiroNome = nome.split(' ')[0];
-            const mensagemFinal = `✅ Perfeito, ${primeiroNome}! Seus dados foram salvos com sucesso!\n\n` +
-                                 `Agora escolha o serviço desejado:\n\n` +
-                                 `🌟 **GETVISA - ASSESSORIA EM VISTOS**\n\n` +
-                                 `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
-                                 `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
-                                 `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
-                                 `4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n` +
-                                 `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
-                                 `6️⃣ - 🛂 PASSAPORTE\n` +
-                                 `7️⃣ - 📞 AJUDA / CONTATO\n\n` +
-                                 `Digite o número da opção (1-7)`;
-            
-            await sendReply(cleanPhone, mensagemFinal);
-            console.log('📨 Mensagem de confirmação enviada');
-            break;
+       case ONBOARDING_STEPS.AGUARDANDO_EMAIL:
+    console.log('📌 PASSO 3: AGUARDANDO EMAIL');
+    console.log('📧 Email recebido: "' + messageText + '"');
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(messageText)) {
+        console.log('❌ Email inválido');
+        await sendReply(cleanPhone, '❌ E-mail inválido! Por favor, digite um e-mail válido.\n\n📧 Ex: maria@email.com');
+        return;
+    }
+    
+    const email = messageText.trim().toLowerCase();
+    const nome = state.nome;
+    console.log('📧 Email válido:', email);
+    console.log('👤 Nome associado:', nome);
+    
+    // 🔥 SALVAR E-MAIL E COMPLETAR ONBOARDING - USAR UPSERT
+    try {
+        const { data, error } = await supabase
+            .from('clientes_novos')
+            .upsert({
+                telefone: telefoneLimpo,
+                nome: nome,
+                email: email,
+                data_contato: new Date().toISOString(),
+                status: 'novo',
+                onboarding_completo: true,
+                data_onboarding: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'telefone'
+            })
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Erro ao salvar e-mail:', error);
+            await sendReply(cleanPhone, '❌ Erro ao salvar seu e-mail. Tente novamente.');
+            return;
+        }
+        console.log('✅ E-mail salvo no Supabase:', email);
+        console.log('✅ Onboarding completo para:', nome);
+    } catch (err) {
+        console.error('❌ Erro ao salvar e-mail:', err);
+        await sendReply(cleanPhone, '❌ Erro ao salvar. Tente novamente.');
+        return;
+    }
+    
+    // ATUALIZAR ESTADO - ONBOARDING COMPLETO
+    state.email = email;
+    state.onboardingCompleto = true;
+    state.onboardingStep = ONBOARDING_STEPS.COMPLETO;
+    state.nivel = 'principal';
+    state.service = null;
+    userState.set(cleanPhone, state);
+    console.log('✅ Estado atualizado para: COMPLETO');
+    
+    // ENVIAR MENSAGEM DE CONFIRMAÇÃO COM MENU PRINCIPAL
+    const primeiroNome = nome.split(' ')[0];
+    const mensagemFinal = `✅ Perfeito, ${primeiroNome}! Seus dados foram salvos com sucesso!\n\n` +
+                         `Agora escolha o serviço desejado:\n\n` +
+                         `🌟 **GETVISA - ASSESSORIA EM VISTOS**\n\n` +
+                         `1️⃣ - 🇺🇸 VISTO AMERICANO\n` +
+                         `2️⃣ - 🇨🇦 VISTO CANADENSE\n` +
+                         `3️⃣ - 🇦🇺 VISTO AUSTRALIANO\n` +
+                         `4️⃣ - 🇬🇧 eTA UK (REINO UNIDO)\n` +
+                         `5️⃣ - 🇨🇦 eTA CANADENSE\n` +
+                         `6️⃣ - 🛂 PASSAPORTE\n` +
+                         `7️⃣ - 📞 AJUDA / CONTATO\n\n` +
+                         `Digite o número da opção (1-7)`;
+    
+    await sendReply(cleanPhone, mensagemFinal);
+    console.log('📨 Mensagem de confirmação enviada');
+    break;
         
         // ============================================================
         // PASSO 4: COMPLETO (FALLBACK)
@@ -1331,7 +1335,7 @@ async function cadastrarCliente(telefone, nome) {
     const telefoneLimpo = telefone.toString().replace(/\D/g, '');
     console.log('📱 Telefone limpo:', telefoneLimpo);
     
-    // ✅ USAR UPSERT EM VEZ DE DELETE + INSERT
+    // 🔥 USAR UPSERT EM VEZ DE DELETE + INSERT
     const dadosCliente = {
         telefone: telefoneLimpo,
         data_contato: new Date().toISOString(),
@@ -1357,8 +1361,8 @@ async function cadastrarCliente(telefone, nome) {
             .single();
 
         if (error) {
-            console.error('❌ Erro ao cadastrar cliente:', error);
-            // 🔥 TENTAR INSERIR DIRETAMENTE SE UPSERT FALHAR
+            console.error('❌ Erro ao salvar cliente:', error);
+            // 🔥 TENTAR INSERT DIRETO COMO FALLBACK
             const { data: insertData, error: insertError } = await supabase
                 .from('clientes_novos')
                 .insert(dadosCliente)
@@ -1391,22 +1395,34 @@ async function buscarClienteEmQualquerTabela(telefone, tabelaEspecifica = null) 
     const telefoneLimpo = telefone.toString().replace(/\D/g, '');
     console.log(`🔍 Buscando: ${telefoneLimpo}`);
     
+    // 🔥 ADICIONAR MAIS VARIAÇÕES DE TELEFONE
+    const variacoes = [
+        telefoneLimpo,
+        telefoneLimpo.padStart(11, '55'),
+        telefoneLimpo.replace(/^55/, ''),
+        telefoneLimpo.replace(/^0+/, '')
+    ];
+    
     const tables = tabelaEspecifica ? [tabelaEspecifica] : ['clientes_novos', 'clientes_ativos', 'clientes_finalizados', 'contatos_amigos'];
     
     for (const table of tables) {
-        try {
-            const { data, error } = await supabase
-                .from(table)
-                .select('*')
-                .eq('telefone', telefoneLimpo)
-                .maybeSingle();
+        for (const telefoneVariacao of variacoes) {
+            if (!telefoneVariacao || telefoneVariacao.length < 10) continue;
             
-            if (!error && data) {
-                console.log(`✅ Encontrado em ${table}:`, data.nome || data.telefone);
-                return data;
+            try {
+                const { data, error } = await supabase
+                    .from(table)
+                    .select('*')
+                    .eq('telefone', telefoneVariacao)
+                    .maybeSingle();
+                
+                if (!error && data) {
+                    console.log(`✅ Encontrado em ${table}:`, data.nome || data.telefone);
+                    return data;
+                }
+            } catch (err) {
+                console.error(`Erro em ${table}:`, err);
             }
-        } catch (err) {
-            console.error(`Erro em ${table}:`, err);
         }
     }
     
@@ -2685,78 +2701,86 @@ app.post('/api/webhook/zapi', function(req, res) {
             }
 
             // ============================================================
-            // 4.4. 🔥🔥🔥 CRIAR/OBTER CLIENTE NOVO
-            // ============================================================
-            console.log('🔍 Verificando/Criando NOVO...');
-            
-            let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
+            // 4.4. 🔥🔥🔥 VERIFICAR SE É NOVO (OU SE PRECISA DE ONBOARDING)
+console.log('🔍 Verificando NOVO...');
+let novo = await buscarClienteEmQualquerTabela(cleanPhone, 'clientes_novos');
 
-            if (!novo) {
-                console.log('🆕 Criando novo cliente...');
+// Se não encontrou em clientes_novos, verificar se precisa criar
+if (!novo) {
+    console.log('🆕 Nenhum cliente encontrado. Criando novo cliente...');
+    
+    // 🔥 TENTAR CADASTRAR DIRETAMENTE COM TRATAMENTO DE ERRO
+    try {
+        const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
+        
+        // Verificar se já existe (busca dupla por segurança)
+        const { data: existente } = await supabase
+            .from('clientes_novos')
+            .select('*')
+            .eq('telefone', telefoneLimpo)
+            .maybeSingle();
+        
+        if (existente) {
+            console.log('✅ Cliente já existe:', existente);
+            novo = existente;
+        } else {
+            // Inserir diretamente
+            const { data: novoCliente, error: insertError } = await supabase
+                .from('clientes_novos')
+                .insert({
+                    telefone: telefoneLimpo,
+                    data_contato: new Date().toISOString(),
+                    status: 'novo',
+                    onboarding_completo: false,
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+            
+            if (insertError) {
+                console.error('❌ Erro ao inserir cliente:', insertError);
+                // 🔥 TENTAR UPSERT COMO FALLBACK
+                const { data: upsertData, error: upsertError } = await supabase
+                    .from('clientes_novos')
+                    .upsert({
+                        telefone: telefoneLimpo,
+                        data_contato: new Date().toISOString(),
+                        status: 'novo',
+                        onboarding_completo: false,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'telefone' })
+                    .select()
+                    .single();
                 
-                try {
-                    const telefoneLimpo = cleanPhone.toString().replace(/\D/g, '');
-                    
-                    // 🔥 VERIFICAR SE JÁ EXISTE (DUPLA VERIFICAÇÃO)
-                    const { data: existente } = await supabase
-                        .from('clientes_novos')
-                        .select('*')
-                        .eq('telefone', telefoneLimpo)
-                        .maybeSingle();
-                    
-                    if (existente) {
-                        console.log('✅ Cliente já existe:', existente);
-                        novo = existente;
-                    } else {
-                        // 🔥 INSERIR DIRETAMENTE
-                        const { data: novoCliente, error: insertError } = await supabase
-                            .from('clientes_novos')
-                            .insert({
-                                telefone: telefoneLimpo,
-                                data_contato: new Date().toISOString(),
-                                status: 'novo',
-                                onboarding_completo: false,
-                                updated_at: new Date().toISOString()
-                            })
-                            .select()
-                            .single();
-                        
-                        if (insertError) {
-                            console.error('❌ Erro ao inserir:', insertError);
-                            
-                            // 🔥 TENTAR UPSERT COMO FALLBACK
-                            const { data: upsertData, error: upsertError } = await supabase
-                                .from('clientes_novos')
-                                .upsert({
-                                    telefone: telefoneLimpo,
-                                    data_contato: new Date().toISOString(),
-                                    status: 'novo',
-                                    onboarding_completo: false,
-                                    updated_at: new Date().toISOString()
-                                }, { onConflict: 'telefone' })
-                                .select()
-                                .single();
-                            
-                            if (upsertError) {
-                                console.error('❌ Erro no UPSERT:', upsertError);
-                                await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
-                                return;
-                            }
-                            
-                            novo = upsertData;
-                            console.log('✅ Cliente criado via UPSERT');
-                        } else {
-                            novo = novoCliente;
-                            console.log('✅ Cliente criado com sucesso');
-                        }
-                    }
-                } catch (err) {
-                    console.error('❌ Erro crítico:', err);
-                    await sendReply(cleanPhone, '❌ Desculpe, estamos com problemas técnicos. Tente novamente em alguns minutos.');
+                if (upsertError) {
+                    console.error('❌ Erro ao upsert cliente:', upsertError);
+                    // 🔥 ENVIAR MENSAGEM AMIGÁVEL E SAIR
+                    await sendReply(cleanPhone, 
+                        '❌ Desculpe, estamos com problemas técnicos. ' +
+                        'Nossa equipe foi notificada e entrará em contato em breve.\n\n' +
+                        '📱 Você também pode falar conosco diretamente:\n' +
+                        'https://wa.me/5521974601812'
+                    );
                     return;
                 }
+                
+                novo = upsertData;
+                console.log('✅ Cliente criado via UPSERT:', novo);
+            } else {
+                novo = novoCliente;
+                console.log('✅ Cliente criado com sucesso:', novo);
             }
-
+        }
+    } catch (err) {
+        console.error('❌ Erro crítico ao criar cliente:', err);
+        await sendReply(cleanPhone, 
+            '❌ Desculpe, estamos com problemas técnicos. ' +
+            'Nossa equipe foi notificada.\n\n' +
+            '📱 Fale conosco: https://wa.me/5521974601812'
+        );
+        return;
+    }
+}
             // Se encontrou/ criou um cliente NOVO
             if (novo) {
                 console.log('👤 Cliente:', novo.nome || 'Sem nome');
