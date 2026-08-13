@@ -1816,642 +1816,748 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
 // FUNÇÃO GERAR PDF - DS160 COMPLETA
 // ============================================================
 
+// ============================================================
+// FUNÇÃO GERAR PDF - DS160 COMPLETA (COM TODOS OS CAMPOS)
+// ============================================================
+
 async function gerarPDF_DS160(data) {
     return new Promise(function(resolve, reject) {
-        var doc = new PDFDocument({ margin: 50 });
+        var doc = new PDFDocument({ margin: 50, size: 'A4' });
         var buffers = [];
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', function() { resolve(Buffer.concat(buffers)); });
         doc.on('error', reject);
 
-        var nomeCliente = getFormData(data, 'nome', 'nome_completo', 'Cliente_Sem_Nome');
+        var nomeCliente = data.full_name || data.nome || 'Cliente_Sem_Nome';
 
-        // ============================================================
         // CABEÇALHO
-        // ============================================================
         doc.fillColor('#003366').fontSize(22).text('SOLICITACAO DE VISTO DS-160', { align: 'center' });
         doc.fontSize(12).fillColor('#666666').text('Assessoria GetVisa - Documentacao Consular', { align: 'center' });
         doc.moveDown(2);
         doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown(1);
 
-        var currentSection = null;
-        var hasContentInSection = false;
+        // ============================================================
+        // FUNÇÃO PARA FORMATAR VALORES
+        // ============================================================
+        function formatFieldValue(fieldName, value) {
+            if (value === undefined || value === null || value === '') return null;
+            
+            // Traduzir one/two
+            if (value === 'one') return 'Sim';
+            if (value === 'two') return 'Não';
+            
+            // Traduzir campos específicos
+            if (RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][value]) {
+                return RADIO_MAPPING[fieldName][value];
+            }
+            
+            // Se for array, processar cada item
+            if (Array.isArray(value)) {
+                if (value.length === 0) return null;
+                var mapped = value.map(function(v) {
+                    if (v === 'one') return 'Sim';
+                    if (v === 'two') return 'Não';
+                    if (RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][v]) {
+                        return RADIO_MAPPING[fieldName][v];
+                    }
+                    return v;
+                });
+                // Filtrar valores vazios
+                mapped = mapped.filter(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+                if (mapped.length === 0) return null;
+                return mapped.join(', ');
+            }
+            
+            return value;
+        }
 
-        function renderField(fieldName, label) {
+        // ============================================================
+        // FUNÇÃO PARA RENDERIZAR CAMPO
+        // ============================================================
+        function renderCampo(label, fieldName, fallback) {
             var value = data[fieldName];
-            if (value !== undefined && value !== null && value !== '') {
-                var formatted = formatValue(fieldName, value);
-                if (formatted && formatted !== '(nao informado)') {
-                    doc.font('Helvetica-Bold').fontSize(10).text(label + ': ', { continued: true });
-                    doc.font('Helvetica').text(formatted);
-                    doc.moveDown(0.6);
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function startSection(sectionTitle) {
-            if (currentSection !== null && hasContentInSection) {
-                doc.moveDown(0.8);
-            }
-            drawSectionTitle(doc, sectionTitle);
-            currentSection = sectionTitle;
-            hasContentInSection = false;
-        }
-
-        // ============================================================
-        // SEÇÃO 1: INFORMACOES INICIAIS
-        // ============================================================
-        startSection('INFORMACOES INICIAIS');
-        renderField('consulado_cidade', 'Cidade do Consulado');
-        if (renderField('radio-26', 'Indicado por agencia/agente?') && data['radio-26'] === 'one') {
-            renderField('text-1', 'Nome da agencia/agente');
-        }
-        renderField('text-64', 'Idioma usado para preencher');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 2: INFORMACOES PESSOAIS
-        // ============================================================
-        startSection('INFORMACOES PESSOAIS');
-        renderField('full_name', 'Nome completo');
-        if (renderField('radio-2', 'Ja teve outro nome?') && data['radio-2'] === 'one') {
-            renderField('text-87', 'Nome anterior');
-        }
-        renderField('radio-3', 'Sexo');
-        renderField('select-4', 'Estado civil');
-        renderField('text-5', 'Data de nascimento');
-        renderField('text-7', 'Cidade de nascimento');
-        renderField('text-6', 'Estado/Provincia');
-        renderField('text-95', 'Pais de nacionalidade');
-        if (renderField('radio-outra-nac', 'Possui outra nacionalidade?') && data['radio-outra-nac'] === 'one') {
-            renderField('outra_nacionalidade_text', 'Qual outra nacionalidade?');
-        }
-        renderField('radio-residente', 'Residente permanente de outro pais?');
-        renderField('text-86', 'CPF');
-        renderField('text-17', 'Numero do Seguro Social (SSN)');
-        renderField('text-18', 'Numero do contribuinte dos EUA (TIN)');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 3: INFORMACOES DA VIAGEM
-        // ============================================================
-        startSection('INFORMACOES DA VIAGEM');
-        renderField('radio-28', 'Proposito da viagem');
-        renderField('radio-planos', 'Planos especificos?');
-        renderField('text-21', 'Data de chegada prevista');
-        renderField('text-34', 'Duracao da estadia (dias)');
-        renderField('text-41', 'Endereco nos EUA');
-        renderField('text-42', 'Cidade (EUA)');
-        renderField('text-43', 'Estado (EUA)');
-        renderField('email-4', 'CEP (EUA)');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 4: PAGADOR DA VIAGEM
-        // ============================================================
-        startSection('PAGADOR DA VIAGEM');
-        renderField('radio-6', 'Quem vai pagar?');
-        renderField('text-22', 'Nome do pagador');
-        renderField('text-25', 'Relacionamento com pagador');
-        renderField('phone-1', 'Telefone do pagador');
-        renderField('text-24', 'E-mail do pagador');
-        renderField('text-26', 'Endereco do pagador');
-        renderField('text-27', 'Cidade do pagador');
-        renderField('text-96', 'UF do pagador');
-        renderField('text-29', 'CEP do pagador');
-        renderField('text-30', 'Pais do pagador');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 5: ACOMPANHANTES
-        // ============================================================
-        if (data['radio-7'] === 'one') {
-            startSection('ACOMPANHANTES');
-            renderField('radio-7', 'Ha acompanhantes?');
-            var acompanhantes = groupParallelArrays(data, 'acompanhante_nome[]', 'acompanhante_rel[]');
-            if (acompanhantes.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
-                acompanhantes.forEach(function(acc) { doc.font('Helvetica').text('  - ' + acc); });
-                doc.moveDown(0.6);
-            }
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 6: HISTORICO DE VIAGENS AOS EUA
-        // ============================================================
-        if (data['radio-8'] === 'one') {
-            startSection('HISTORICO DE VIAGENS AOS EUA');
-            renderField('radio-8', 'Ja esteve nos EUA?');
-            var viagens = groupTravels(data);
-            if (viagens.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
-                viagens.forEach(function(viagem) { doc.font('Helvetica').text('  - ' + viagem); });
-                doc.moveDown(0.6);
-            }
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 7: INFORMACOES DO VISTO
-        // ============================================================
-        if (data['radio-23'] === 'one') {
-            startSection('INFORMACOES DO VISTO');
-            renderField('radio-23', 'Ja teve visto americano?');
-            renderField('text-35', 'Data de emissao do visto');
-            renderField('text-68', 'Numero do visto');
-            renderField('text-69', 'Data de expiracao');
-            renderField('radio-33', 'Impressoes digitais coletadas?');
-            renderField('radio-29', 'Mesmo tipo de visto?');
-            renderField('radio-30', 'Mesmo pais de emissao?');
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 8: HISTORICO DE NEGATIVAS
-        // ============================================================
-        startSection('HISTORICO DE NEGATIVAS');
-        doc.fillColor('#666666').fontSize(9).font('Helvetica').text('Estas perguntas sao obrigatorias no formulario DS-160 oficial. Responder falsamente constitui fraude.', { align: 'center' });
-        doc.moveDown(0.5);
-        doc.fillColor('#000000').fontSize(10);
-
-        var vistoNegado = data['radio-visto-negado'];
-        if (vistoNegado === 'one') vistoNegado = 'Sim';
-        else if (vistoNegado === 'two') vistoNegado = 'Nao';
-        doc.font('Helvetica-Bold').text('1. Ja teve visto americano NEGADO anteriormente?: ', { continued: true });
-        doc.font('Helvetica').text(vistoNegado || 'Nao informado');
-        doc.moveDown(0.3);
-
-        if (data['radio-visto-negado'] === 'one') {
-            doc.font('Helvetica').text('   - Ano da negativa: ' + (data['text-visto-negado-ano'] || 'Nao informado'));
-            doc.font('Helvetica').text('   - Consulado: ' + (data['text-visto-negado-consulado'] || 'Nao informado'));
-            doc.font('Helvetica').text('   - Tipo de visto: ' + (data['select-visto-negado-tipo'] || 'Nao informado'));
-            doc.moveDown(0.3);
-        }
-
-        var entradaNegada = data['radio-entrada-negada'];
-        if (entradaNegada === 'one') entradaNegada = 'Sim';
-        else if (entradaNegada === 'two') entradaNegada = 'Nao';
-        doc.font('Helvetica-Bold').text('2. Ja teve a entrada NEGADA nos EUA pelo oficial de imigracao?: ', { continued: true });
-        doc.font('Helvetica').text(entradaNegada || 'Nao informado');
-        doc.moveDown(0.3);
-
-        if (data['radio-entrada-negada'] === 'one') {
-            doc.font('Helvetica').text('   - Ano da negativa: ' + (data['text-entrada-negada-ano'] || 'Nao informado'));
-            doc.font('Helvetica').text('   - Porto de entrada: ' + (data['text-entrada-negada-local'] || 'Nao informado'));
-            doc.font('Helvetica').text('   - Motivo: ' + (data['textarea-entrada-negada-motivo'] || 'Nao informado'));
-            doc.moveDown(0.3);
-        }
-
-        var deportado = data['radio-deportado'];
-        if (deportado === 'one') deportado = 'Sim';
-        else if (deportado === 'two') deportado = 'Nao';
-        doc.font('Helvetica-Bold').text('3. Ja foi deportado ou removido dos Estados Unidos?: ', { continued: true });
-        doc.font('Helvetica').text(deportado || 'Nao informado');
-        doc.moveDown(0.3);
-
-        if (data['radio-deportado'] === 'one') {
-            doc.font('Helvetica').text('   - Ano da deportacao: ' + (data['text-deportado-ano'] || 'Nao informado'));
-            var duracao = data['select-deportado-duracao'] || '';
-            if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
-            else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
-            else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
-            else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
-            doc.font('Helvetica').text('   - Duracao: ' + (duracao || 'Nao informado'));
-            doc.moveDown(0.3);
-        }
-
-        if (data['textarea-detalhes-negativa']) {
-            doc.font('Helvetica-Bold').text('Detalhes adicionais sobre negativas:');
-            doc.font('Helvetica').text(data['textarea-detalhes-negativa']);
-            doc.moveDown(0.3);
-        }
-        hasContentInSection = true;
-
-        doc.moveDown(0.5);
-        doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-        doc.moveDown(0.5);
-
-        // ============================================================
-        // SEÇÃO 9: ENDERECO RESIDENCIAL
-        // ============================================================
-        startSection('ENDERECO RESIDENCIAL');
-        renderField('text-71', 'Logradouro');
-        renderField('text-72', 'Complemento');
-        renderField('text-73', 'CEP');
-        renderField('text-74', 'Cidade');
-        renderField('text-75', 'Estado');
-        renderField('text-76', 'Pais');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 10: ENDERECO DE CORRESPONDENCIA
-        // ============================================================
-        startSection('ENDERECO DE CORRESPONDENCIA');
-        renderField('radio-9', 'Endereco de correspondencia e o mesmo?');
-        if (data['radio-9'] === 'Nao, e diferente') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Endereco de correspondencia (diferente):');
-            doc.moveDown(0.3);
-            renderField('text-80', '  Logradouro');
-            renderField('text-81', '  Complemento');
-            renderField('text-82', '  CEP');
-            renderField('text-83', '  Cidade');
-            renderField('text-84', '  Estado');
-            renderField('text-85', '  Pais');
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 11: TELEFONES
-        // ============================================================
-        startSection('TELEFONES');
-        renderField('text-77', 'Telefone principal');
-        renderField('text-78', 'Telefone comercial');
-        if (renderField('radio-10', 'Usou outros numeros?') && data['radio-10'] === 'one') {
-            var telefones = data['telefones_anteriores[]'] || [];
-            if (telefones.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Telefones anteriores: ', { continued: true });
-                doc.font('Helvetica').text(telefones.join(', '));
-                doc.moveDown(0.6);
-            }
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 12: E-MAILS
-        // ============================================================
-        startSection('E-MAILS');
-        renderField('email-1', 'E-mail principal');
-        if (renderField('radio-11', 'Usou outros e-mails?') && data['radio-11'] === 'one') {
-            var emails = data['emails_anteriores[]'] || [];
-            if (emails.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('E-mails anteriores: ', { continued: true });
-                doc.font('Helvetica').text(emails.join(', '));
-                doc.moveDown(0.6);
-            }
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 13: MIDIAS SOCIAIS
-        // ============================================================
-        startSection('MIDIAS SOCIAIS');
-        if (renderField('radio-12', 'Presenca em midias sociais?') && data['radio-12'] === 'one') {
-            var plataformas = data['midia_plataforma[]'] || [];
-            var identificadores = data['midia_identificador[]'] || [];
-            var midias = [];
-            for (var i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
-                if (plataformas[i] || identificadores[i]) {
-                    midias.push((plataformas[i] || '') + (plataformas[i] && identificadores[i] ? ': ' : '') + (identificadores[i] || ''));
-                }
-            }
-            if (midias.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Midias sociais: ', { continued: true });
-                doc.font('Helvetica').text(midias.join('; '));
-                doc.moveDown(0.6);
-            }
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 14: PASSAPORTE
-        // ============================================================
-        startSection('PASSAPORTE');
-        renderField('text-38', 'Numero do passaporte');
-        renderField('text-40', 'Pais que emitiu');
-        renderField('text-39', 'Cidade de emissao');
-        renderField('text-88', 'Estado de emissao');
-        renderField('text-66', 'Data de emissao');
-        renderField('text-67', 'Data de validade');
-        renderField('radio-13', 'Passaporte perdido/roubado?');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 15: CONTATO NOS EUA
-        // ============================================================
-        startSection('CONTATO NOS EUA');
-        renderField('name-2', 'Contato nos EUA (nome)');
-        renderField('text-41_contato', 'Endereco (EUA)');
-        renderField('text-42_contato', 'Cidade (EUA)');
-        renderField('text-43_contato', 'Estado (EUA)');
-        renderField('email-4_contato', 'CEP (EUA)');
-        renderField('checkbox-15[]', 'Relacionamento com contato');
-        renderField('email-5', 'Telefone do contato (EUA)');
-        renderField('email-3', 'E-mail do contato (EUA)');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 16: FAMILIARES
-        // ============================================================
-        startSection('FAMILIARES');
-        renderField('nome_pai', 'Nome do pai');
-        renderField('text-44', 'Data de nascimento do pai');
-        if (renderField('radio-14', 'Pai nos EUA?') && data['radio-14'] === 'one') {
-            renderField('checkbox-16[]', 'Status do pai');
-        }
-        renderField('nome_mae', 'Nome da mae');
-        renderField('text-45', 'Data de nascimento da mae');
-        if (renderField('radio-15', 'Mae nos EUA?') && data['radio-15'] === 'one') {
-            renderField('checkbox-17[]', 'Status da mae');
-        }
-        if (renderField('radio-16', 'Parentes imediatos nos EUA?') && data['radio-16'] === 'one') {
-            var parentes = groupParallelArrays(data, 'parente_nome[]', 'parente_relacao[]');
-            if (parentes.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Parentes nos EUA:');
-                parentes.forEach(function(p) { doc.font('Helvetica').text('  - ' + p); });
-                doc.moveDown(0.6);
-            }
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 17: CONJUGE
-        // ============================================================
-        if (data['spouse_fullname']) {
-            startSection('CONJUGE');
-            renderField('spouse_fullname', 'Nome do conjuge');
-            renderField('spouse-dob', 'Data de nascimento do conjuge');
-            renderField('spouse-nationality', 'Nacionalidade do conjuge');
-            renderField('spouse-city', 'Cidade de nascimento do conjuge');
-            renderField('spouse-country', 'Pais de nascimento do conjuge');
-            if (renderField('spouse-address-same', 'Endereco do conjuge') && data['spouse-address-same'] === 'Diferente') {
-                renderField('spouse_endereco', 'Endereco (diferente)');
-                renderField('spouse_cidade', 'Cidade');
-                renderField('spouse_estado', 'Estado');
-                renderField('spouse_cep', 'CEP');
-                renderField('spouse_pais', 'Pais');
-            }
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 18: EX-CONJUGE
-        // ============================================================
-        if (data['ex_fullname']) {
-            startSection('EX-CONJUGE');
-            renderField('ex_fullname', 'Nome do ex-conjuge');
-            renderField('ex_dob', 'Data de nascimento');
-            renderField('ex_nationality', 'Nacionalidade');
-            renderField('ex_city', 'Cidade de nascimento');
-            renderField('ex_country', 'Pais de nascimento');
-            renderField('data_casamento_div', 'Data do Casamento');
-            renderField('data_divorcio', 'Data do Divorcio');
-            renderField('cidade_divorcio', 'Cidade do Divorcio');
-            renderField('como_divorcio', 'Como se deu o Divorcio');
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 19: CONJUGE FALECIDO
-        // ============================================================
-        if (data['falecido_fullname']) {
-            startSection('CONJUGE FALECIDO');
-            renderField('falecido_fullname', 'Nome do conjuge falecido');
-            renderField('falecido_dob', 'Data de nascimento');
-            renderField('falecido_nationality', 'Nacionalidade');
-            renderField('falecido_city', 'Cidade de nascimento');
-            renderField('falecido_country', 'Pais de nascimento');
-            renderField('data_falecimento', 'Data do Falecimento');
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 20: OCUPACAO ATUAL
-        // ============================================================
-        startSection('OCUPACAO ATUAL');
-        renderField('radio-27', 'Ocupacao principal');
-        renderField('text-49', 'Empregador / escola');
-        renderField('text-101', 'Endereco');
-        renderField('text-102', 'Cidade');
-        renderField('text-104', 'Estado');
-        renderField('text-103', 'CEP');
-        renderField('phone-8', 'Telefone');
-        renderField('text-50', 'Data inicio');
-        renderField('text-51', 'Renda mensal (R$)');
-        renderField('text-52', 'Descricao das funcoes');
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 21: OUTRAS OCUPACOES
-        // ============================================================
-        var extra_descricoes = data['extra_descricao[]'] || [];
-        if (extra_descricoes.length > 0) {
-            startSection('OUTRAS OCUPACOES / FONTES DE RENDA');
-            var extra_rendas = data['extra_renda[]'] || [];
-            var extra_empregadores = data['extra_empregador[]'] || [];
-            var extra_inicios = data['extra_data_inicio[]'] || [];
-            var extra_enderecos = data['extra_endereco[]'] || [];
-            var extra_cidades = data['extra_cidade[]'] || [];
-            var extra_estados = data['extra_estado[]'] || [];
-            var extra_telefones = data['extra_telefone[]'] || [];
-            var extra_ceps = data['extra_cep[]'] || [];
-
-            for (var i = 0; i < extra_descricoes.length; i++) {
-                doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text('Ocupacao adicional ' + (i+1) + ': ' + (extra_descricoes[i] || '(nao informado)'));
-                if (extra_empregadores[i]) doc.font('Helvetica').text('  Empregador: ' + extra_empregadores[i]);
-                if (extra_rendas[i]) doc.font('Helvetica').text('  Renda mensal: ' + extra_rendas[i]);
-                if (extra_inicios[i]) {
-                    var dataInicioFormatada = formatDateToBrazilian(extra_inicios[i]);
-                    doc.font('Helvetica').text('  Data inicio: ' + dataInicioFormatada);
-                }
-                if (extra_enderecos[i]) doc.font('Helvetica').text('  Endereco: ' + extra_enderecos[i]);
-                if (extra_cidades[i] && extra_estados[i]) doc.font('Helvetica').text('  Cidade/UF: ' + extra_cidades[i] + ' / ' + extra_estados[i]);
-                if (extra_ceps[i]) doc.font('Helvetica').text('  CEP: ' + extra_ceps[i]);
-                if (extra_telefones[i]) doc.font('Helvetica').text('  Telefone: ' + extra_telefones[i]);
-                doc.moveDown(0.6);
-            }
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 22: EMPREGOS ANTERIORES
-        // ============================================================
-        if (data['radio-17'] === 'one') {
-            var empNomes = data['emprego_anterior_nome[]'] || [];
-            if (empNomes.length > 0) {
-                startSection('EMPREGOS ANTERIORES');
-                var empCargos = data['emprego_anterior_cargo[]'] || [];
-                var empInicios = data['emprego_anterior_inicio[]'] || [];
-                var empFins = data['emprego_anterior_fim[]'] || [];
-                var maxEmp = Math.max(empNomes.length, empCargos.length, empInicios.length, empFins.length);
-                for (var i = 0; i < maxEmp; i++) {
-                    if (empNomes[i] || empCargos[i]) {
-                        var inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : '?';
-                        var fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : '?';
-                        doc.font('Helvetica-Bold').fontSize(10).text('Emprego anterior ' + (i+1) + ':');
-                        if (empNomes[i]) doc.font('Helvetica').text('  Empregador: ' + empNomes[i]);
-                        if (empCargos[i]) doc.font('Helvetica').text('  Cargo: ' + empCargos[i]);
-                        if (empInicios[i] || empFins[i]) doc.font('Helvetica').text('  Periodo: ' + inicio + ' a ' + fim);
-                        doc.moveDown(0.4);
+            if (value === undefined || value === null || value === '') {
+                // Tentar buscar com nome diferente
+                var alternativos = [fieldName, fieldName.replace('[]', ''), fieldName + '[]'];
+                for (var i = 0; i < alternativos.length; i++) {
+                    if (data[alternativos[i]] !== undefined && data[alternativos[i]] !== null && data[alternativos[i]] !== '') {
+                        value = data[alternativos[i]];
+                        break;
                     }
                 }
-                hasContentInSection = true;
+                if (value === undefined || value === null || value === '') {
+                    if (fallback) {
+                        doc.font('Helvetica').fontSize(10).text(label + ': ' + fallback);
+                        doc.moveDown(0.3);
+                    }
+                    return;
+                }
+            }
+            
+            var formatted = formatFieldValue(fieldName, value);
+            if (formatted && formatted !== '' && formatted !== 'undefined' && formatted !== 'null') {
+                doc.font('Helvetica-Bold').fontSize(10).text(label + ': ', { continued: true });
+                doc.font('Helvetica').text(formatted);
+                doc.moveDown(0.3);
             }
         }
 
-        // ============================================================
-        // SEÇÃO 23: ESCOLARIDADE
-        // ============================================================
-        if (data['radio-18'] === 'one') {
-            startSection('ESCOLARIDADE');
-            renderField('text-59', 'Instituicao de ensino');
-            renderField('text-60', 'Curso');
-            renderField('text-111', 'Endereco da instituicao');
-            renderField('text-112', 'Cidade');
-            renderField('text-114', 'Estado');
-            renderField('text-113', 'CEP');
-            renderField('text-61', 'Data inicio');
-            renderField('text-62', 'Data conclusao');
-            hasContentInSection = true;
-        }
-
-        // ============================================================
-        // SEÇÃO 24: SERVICO MILITAR
-        // ============================================================
-        startSection('SERVICO MILITAR');
-        if (data['servico_militar'] === 'Sim') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
-            doc.font('Helvetica').text('Sim');
-            doc.moveDown(0.6);
-            renderField('military_country', 'Pais');
-            renderField('military_branch', 'Ramo das Forcas Armadas');
-            renderField('military_rank', 'Patente / Posicao');
-            renderField('military_specialty', 'Especialidade Militar');
-            renderField('military_date_from', 'Data de inicio');
-            renderField('military_date_to', 'Data de termino');
-        } else {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce ja serviu nas forcas armadas?: ', { continued: true });
-            doc.font('Helvetica').text('Nao');
-            doc.moveDown(0.6);
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 25: TREINAMENTO ESPECIALIZADO
-        // ============================================================
-        startSection('TREINAMENTO ESPECIALIZADO');
-        if (data['treinamento_especializado'] === 'Sim') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
-            doc.font('Helvetica').text('Sim');
-            doc.moveDown(0.6);
-            renderField('treinamento_descricao', 'Descricao do treinamento');
-        } else {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce tem alguma habilidade ou treinamento especializado? (armas de fogo, explosivos, nuclear, biologica ou quimica): ', { continued: true });
-            doc.font('Helvetica').text('Nao');
-            doc.moveDown(0.6);
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 26: SEGURANCA
-        // ============================================================
-        startSection('SEGURANCA');
-        if (data['antecedentes_criminais'] === 'Sim') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
-            doc.font('Helvetica').text('Sim');
-            doc.moveDown(0.6);
-            renderField('antecedentes_descricao', 'Descricao dos antecedentes');
-            renderField('antecedentes_data', 'Data do ocorrido');
-            renderField('antecedentes_local', 'Local');
-            renderField('antecedentes_resolucao', 'Resolucao do caso');
-        } else {
-            doc.font('Helvetica-Bold').fontSize(10).text('Voce ja foi preso ou condenado por qualquer crime, mesmo que tenha sido perdoado ou anistiado?: ', { continued: true });
-            doc.font('Helvetica').text('Nao');
-            doc.moveDown(0.6);
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 27: IDIOMAS
-        // ============================================================
-        startSection('IDIOMAS');
-
-        var falaOutrosIdiomas = data['radio-19'] || '';
-        if (falaOutrosIdiomas === 'one' || falaOutrosIdiomas === 'Sim') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
-            doc.font('Helvetica').text('Sim');
+        function renderArrayField(label, fieldName, itemLabel) {
+            var values = data[fieldName] || [];
+            if (!Array.isArray(values)) {
+                values = [values];
+            }
+            // Filtrar valores vazios
+            values = values.filter(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+            if (values.length === 0) return;
+            
+            doc.font('Helvetica-Bold').fontSize(10).text(label + ':');
+            for (var i = 0; i < values.length; i++) {
+                if (values[i] && values[i] !== '' && values[i] !== 'undefined' && values[i] !== 'null') {
+                    var formatted = formatFieldValue(fieldName, values[i]);
+                    if (formatted && formatted !== '' && formatted !== 'undefined' && formatted !== 'null') {
+                        doc.font('Helvetica').fontSize(10).text('  • ' + (itemLabel ? itemLabel + ': ' : '') + formatted);
+                        doc.moveDown(0.2);
+                    }
+                }
+            }
             doc.moveDown(0.3);
+        }
+
+        function renderSection(title) {
+            doc.moveDown(0.8);
+            doc.fillColor('#003366').fontSize(13).font('Helvetica-Bold').text(title);
+            doc.moveDown(0.2);
+            doc.strokeColor('#003366').lineWidth(1).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+            doc.lineWidth(0.5);
+            doc.moveDown(0.3);
+            doc.fillColor('#000000').fontSize(10).font('Helvetica');
+        }
+
+        // ============================================================
+        // DADOS DO CLIENTE (RESUMO)
+        // ============================================================
+        renderSection('DADOS DO CLIENTE');
+        renderCampo('Nome completo', 'full_name');
+        renderCampo('Telefone', 'text-77');
+        renderCampo('E-mail', 'email-1');
+        renderCampo('CPF', 'text-86');
+        doc.moveDown(0.5);
+
+        // ============================================================
+        // 1. INFORMAÇÕES INICIAIS
+        // ============================================================
+        renderSection('1. INFORMACOES INICIAIS');
+        renderCampo('Cidade do Consulado', 'consulado_cidade');
+        renderCampo('Indicado por agência/agente?', 'radio-26');
+        if (data['radio-26'] === 'one') {
+            renderCampo('  Nome da agência/agente', 'text-1');
+        }
+        renderCampo('Idioma usado para preencher', 'text-64');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 2. INFORMAÇÕES PESSOAIS
+        // ============================================================
+        renderSection('2. INFORMACOES PESSOAIS');
+        renderCampo('Nome completo', 'full_name');
+        renderCampo('Já teve outro nome?', 'radio-2');
+        if (data['radio-2'] === 'one') {
+            renderCampo('  Nome anterior', 'text-87');
+        }
+        renderCampo('Sexo', 'radio-3');
+        renderCampo('Estado civil', 'select-4');
+        renderCampo('Data de nascimento', 'text-5');
+        renderCampo('Cidade de nascimento', 'text-7');
+        renderCampo('Estado/Província', 'text-6');
+        renderCampo('País de nacionalidade', 'text-95');
+        renderCampo('Possui outra nacionalidade?', 'radio-outra-nac');
+        if (data['radio-outra-nac'] === 'one') {
+            renderCampo('  Qual outra nacionalidade?', 'outra_nacionalidade_text');
+        }
+        renderCampo('Residente permanente de outro país?', 'radio-residente');
+        renderCampo('CPF', 'text-86');
+        renderCampo('Número do Seguro Social (SSN)', 'text-17');
+        renderCampo('Número do contribuinte dos EUA (TIN)', 'text-18');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 3. INFORMAÇÕES DA VIAGEM
+        // ============================================================
+        renderSection('3. INFORMACOES DA VIAGEM');
+        renderCampo('Propósito da viagem', 'radio-28');
+        renderCampo('Planos específicos?', 'radio-planos');
+        renderCampo('Data de chegada prevista', 'text-21');
+        renderCampo('Duração da estadia (dias)', 'text-34');
+        renderCampo('Endereço nos EUA', 'text-41');
+        renderCampo('Cidade (EUA)', 'text-42');
+        renderCampo('Estado (EUA)', 'text-43');
+        renderCampo('CEP (EUA)', 'email-4');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 4. PAGADOR DA VIAGEM
+        // ============================================================
+        renderSection('4. PAGADOR DA VIAGEM');
+        renderCampo('Quem vai pagar?', 'radio-6');
+        renderCampo('Nome do pagador', 'text-22');
+        renderCampo('Relacionamento com pagador', 'text-25');
+        renderCampo('Telefone do pagador', 'phone-1');
+        renderCampo('E-mail do pagador', 'text-24');
+        renderCampo('Endereço do pagador', 'text-26');
+        renderCampo('Cidade do pagador', 'text-27');
+        renderCampo('UF do pagador', 'text-96');
+        renderCampo('CEP do pagador', 'text-29');
+        renderCampo('País do pagador', 'text-30');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 5. ACOMPANHANTES
+        // ============================================================
+        if (data['radio-7'] === 'one') {
+            renderSection('5. ACOMPANHANTES');
+            renderCampo('Há acompanhantes?', 'radio-7');
             
-            var idiomas = data['idiomas[]'] || data['idiomas'] || [];
-            if (!Array.isArray(idiomas)) {
-                idiomas = [idiomas];
-            }
+            var acompanhantesNomes = data['acompanhante_nome[]'] || [];
+            var acompanhantesRels = data['acompanhante_rel[]'] || [];
             
-            if (idiomas.length > 0 && idiomas[0] !== '') {
-                doc.font('Helvetica-Bold').fontSize(10).text('Idiomas:');
-                doc.moveDown(0.2);
-                
-                for (var i = 0; i < idiomas.length; i++) {
-                    if (idiomas[i] && idiomas[i].trim() !== '') {
-                        doc.font('Helvetica').fontSize(10).text('  • ' + idiomas[i].trim());
+            if (acompanhantesNomes.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Acompanhantes:');
+                for (var i = 0; i < acompanhantesNomes.length; i++) {
+                    if (acompanhantesNomes[i] && acompanhantesNomes[i] !== '' && acompanhantesNomes[i] !== 'undefined') {
+                        var nome = acompanhantesNomes[i];
+                        var rel = acompanhantesRels[i] || '';
+                        doc.font('Helvetica').fontSize(10).text('  • ' + nome + (rel ? ' (' + rel + ')' : ''));
                         doc.moveDown(0.2);
                     }
                 }
                 doc.moveDown(0.3);
             }
+        }
+
+        // ============================================================
+        // 6. HISTÓRICO DE VIAGENS AOS EUA
+        // ============================================================
+        if (data['radio-8'] === 'one') {
+            renderSection('6. HISTORICO DE VIAGENS AOS EUA');
+            renderCampo('Já esteve nos EUA?', 'radio-8');
             
-        } else if (falaOutrosIdiomas === 'two' || falaOutrosIdiomas === 'Não') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
-            doc.font('Helvetica').text('Não');
-            doc.moveDown(0.6);
-        } else {
-            doc.font('Helvetica-Bold').fontSize(10).text('Fala outros idiomas?: ', { continued: true });
-            doc.font('Helvetica').text('Não informado');
-            doc.moveDown(0.6);
-        }
-        hasContentInSection = true;
-
-        // ============================================================
-        // SEÇÃO 28: VIAGENS INTERNACIONAIS
-        // ============================================================
-        startSection('VIAGENS INTERNACIONAIS');
-
-        var viajouInternacional = data['radio-20'] || '';
-        var paisesVisitados = data['paises_visitados[]'] || data['paises_visitados'] || [];
-
-        if (!Array.isArray(paisesVisitados)) {
-            paisesVisitados = [paisesVisitados];
+            var viagemDatas = data['viagem_data[]'] || [];
+            var viagemDuracao = data['viagem_duracao[]'] || [];
+            
+            if (viagemDatas.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Viagens anteriores aos EUA:');
+                for (var i = 0; i < viagemDatas.length; i++) {
+                    if (viagemDatas[i] && viagemDatas[i] !== '' && viagemDatas[i] !== 'undefined') {
+                        var dataFormatada = formatDateToBrazilian(viagemDatas[i]);
+                        var duracao = viagemDuracao[i] || 'N/A';
+                        doc.font('Helvetica').fontSize(10).text('  • ' + dataFormatada + ' (' + duracao + ' dias)');
+                        doc.moveDown(0.2);
+                    }
+                }
+                doc.moveDown(0.3);
+            }
         }
 
-        if (viajouInternacional === 'one' || viajouInternacional === 'Sim') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
+        // ============================================================
+        // 7. INFORMAÇÕES DO VISTO
+        // ============================================================
+        if (data['radio-23'] === 'one') {
+            renderSection('7. INFORMACOES DO VISTO');
+            renderCampo('Já teve visto americano?', 'radio-23');
+            renderCampo('Data de emissão do visto', 'text-35');
+            renderCampo('Número do visto', 'text-68');
+            renderCampo('Data de expiração', 'text-69');
+            renderCampo('Impressões digitais coletadas?', 'radio-33');
+            renderCampo('Mesmo tipo de visto?', 'radio-29');
+            renderCampo('Mesmo país de emissão?', 'radio-30');
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 8. HISTÓRICO DE NEGATIVAS
+        // ============================================================
+        renderSection('8. HISTORICO DE NEGATIVAS');
+        
+        var vistoNegado = data['radio-visto-negado'] || 'two';
+        var vistoNegadoText = vistoNegado === 'one' ? 'Sim' : 'Não';
+        doc.font('Helvetica-Bold').fontSize(10).text('1. Já teve visto americano NEGADO anteriormente?: ', { continued: true });
+        doc.font('Helvetica').text(vistoNegadoText);
+        doc.moveDown(0.3);
+        
+        if (vistoNegado === 'one') {
+            renderCampo('  • Ano da negativa', 'text-visto-negado-ano');
+            renderCampo('  • Consulado', 'text-visto-negado-consulado');
+            var tipoVisto = data['select-visto-negado-tipo'] || '';
+            if (tipoVisto === 'B1/B2') tipoVisto = 'B1/B2 - Turismo/Negócios';
+            doc.font('Helvetica').fontSize(10).text('  • Tipo de visto: ' + tipoVisto);
+            doc.moveDown(0.3);
+        }
+        
+        var entradaNegada = data['radio-entrada-negada'] || 'two';
+        var entradaNegadaText = entradaNegada === 'one' ? 'Sim' : 'Não';
+        doc.font('Helvetica-Bold').fontSize(10).text('2. Já teve a entrada NEGADA nos EUA?: ', { continued: true });
+        doc.font('Helvetica').text(entradaNegadaText);
+        doc.moveDown(0.3);
+        
+        if (entradaNegada === 'one') {
+            renderCampo('  • Ano da negativa', 'text-entrada-negada-ano');
+            renderCampo('  • Porto de entrada', 'text-entrada-negada-local');
+            renderCampo('  • Motivo', 'textarea-entrada-negada-motivo');
+            doc.moveDown(0.3);
+        }
+        
+        var deportado = data['radio-deportado'] || 'two';
+        var deportadoText = deportado === 'one' ? 'Sim' : 'Não';
+        doc.font('Helvetica-Bold').fontSize(10).text('3. Já foi deportado ou removido dos EUA?: ', { continued: true });
+        doc.font('Helvetica').text(deportadoText);
+        doc.moveDown(0.3);
+        
+        if (deportado === 'one') {
+            renderCampo('  • Ano da deportação', 'text-deportado-ano');
+            var duracao = data['select-deportado-duracao'] || '';
+            if (duracao === 'menos_5_anos') duracao = 'Menos de 5 anos';
+            else if (duracao === '5_a_10_anos') duracao = 'Entre 5 e 10 anos';
+            else if (duracao === 'mais_10_anos') duracao = 'Mais de 10 anos';
+            else if (duracao === 'banimento_permanente') duracao = 'Banimento permanente';
+            doc.font('Helvetica').fontSize(10).text('  • Duração: ' + (duracao || 'N/A'));
+            doc.moveDown(0.3);
+        }
+        
+        if (data['textarea-detalhes-negativa']) {
+            doc.font('Helvetica-Bold').fontSize(10).text('Detalhes adicionais sobre negativas:');
+            doc.font('Helvetica').fontSize(10).text(data['textarea-detalhes-negativa']);
+            doc.moveDown(0.3);
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 9. ENDEREÇO RESIDENCIAL
+        // ============================================================
+        renderSection('9. ENDERECO RESIDENCIAL');
+        renderCampo('Logradouro', 'text-71');
+        renderCampo('Complemento', 'text-72');
+        renderCampo('CEP', 'text-73');
+        renderCampo('Cidade', 'text-74');
+        renderCampo('Estado', 'text-75');
+        renderCampo('País', 'text-76');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 10. ENDEREÇO DE CORRESPONDÊNCIA
+        // ============================================================
+        renderSection('10. ENDERECO DE CORRESPONDENCIA');
+        renderCampo('Endereço de correspondência é o mesmo?', 'radio-9');
+        if (data['radio-9'] === 'Nao, e diferente' || data['radio-9'] === 'two') {
+            renderCampo('  Logradouro', 'text-80');
+            renderCampo('  Complemento', 'text-81');
+            renderCampo('  CEP', 'text-82');
+            renderCampo('  Cidade', 'text-83');
+            renderCampo('  Estado', 'text-84');
+            renderCampo('  País', 'text-85');
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 11. TELEFONES
+        // ============================================================
+        renderSection('11. TELEFONES');
+        renderCampo('Telefone principal', 'text-77');
+        renderCampo('Telefone comercial', 'text-78');
+        renderCampo('Usou outros números?', 'radio-10');
+        if (data['radio-10'] === 'one') {
+            var telefones = data['telefones_anteriores[]'] || [];
+            if (telefones.length > 0 && telefones[0] !== '' && telefones[0] !== 'undefined') {
+                doc.font('Helvetica-Bold').fontSize(10).text('Telefones anteriores: ', { continued: true });
+                doc.font('Helvetica').text(telefones.join(', '));
+                doc.moveDown(0.3);
+            }
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 12. E-MAILS
+        // ============================================================
+        renderSection('12. E-MAILS');
+        renderCampo('E-mail principal', 'email-1');
+        renderCampo('Usou outros e-mails?', 'radio-11');
+        if (data['radio-11'] === 'one') {
+            var emails = data['emails_anteriores[]'] || [];
+            if (emails.length > 0 && emails[0] !== '' && emails[0] !== 'undefined') {
+                doc.font('Helvetica-Bold').fontSize(10).text('E-mails anteriores: ', { continued: true });
+                doc.font('Helvetica').text(emails.join(', '));
+                doc.moveDown(0.3);
+            }
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 13. MÍDIAS SOCIAIS
+        // ============================================================
+        renderSection('13. MIDIAS SOCIAIS');
+        renderCampo('Presença em mídias sociais?', 'radio-12');
+        if (data['radio-12'] === 'one') {
+            var plataformas = data['midia_plataforma[]'] || [];
+            var identificadores = data['midia_identificador[]'] || [];
+            var midias = [];
+            for (var i = 0; i < Math.max(plataformas.length, identificadores.length); i++) {
+                if ((plataformas[i] && plataformas[i] !== '' && plataformas[i] !== 'undefined') || 
+                    (identificadores[i] && identificadores[i] !== '' && identificadores[i] !== 'undefined')) {
+                    midias.push((plataformas[i] || '') + (plataformas[i] && identificadores[i] ? ': ' : '') + (identificadores[i] || ''));
+                }
+            }
+            if (midias.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Mídias sociais: ', { continued: true });
+                doc.font('Helvetica').text(midias.join('; '));
+                doc.moveDown(0.3);
+            }
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 14. PASSAPORTE
+        // ============================================================
+        renderSection('14. PASSAPORTE');
+        renderCampo('Número do passaporte', 'text-38');
+        renderCampo('País que emitiu', 'text-40');
+        renderCampo('Cidade de emissão', 'text-39');
+        renderCampo('Estado de emissão', 'text-88');
+        renderCampo('Data de emissão', 'text-66');
+        renderCampo('Data de validade', 'text-67');
+        renderCampo('Passaporte perdido/roubado?', 'radio-13');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 15. CONTATO NOS EUA
+        // ============================================================
+        renderSection('15. CONTATO NOS EUA');
+        renderCampo('Contato nos EUA (nome)', 'name-2');
+        renderCampo('Endereço (EUA)', 'text-41_contato');
+        renderCampo('Cidade (EUA)', 'text-42_contato');
+        renderCampo('Estado (EUA)', 'text-43_contato');
+        renderCampo('CEP (EUA)', 'email-4_contato');
+        renderCampo('Relacionamento com contato', 'checkbox-15[]');
+        renderCampo('Telefone do contato (EUA)', 'email-5');
+        renderCampo('E-mail do contato (EUA)', 'email-3');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 16. FAMILIARES
+        // ============================================================
+        renderSection('16. FAMILIARES');
+        renderCampo('Nome do pai', 'nome_pai');
+        renderCampo('Data de nascimento do pai', 'text-44');
+        renderCampo('Pai nos EUA?', 'radio-14');
+        if (data['radio-14'] === 'one') {
+            renderCampo('  Status do pai', 'checkbox-16[]');
+        }
+        renderCampo('Nome da mãe', 'nome_mae');
+        renderCampo('Data de nascimento da mãe', 'text-45');
+        renderCampo('Mãe nos EUA?', 'radio-15');
+        if (data['radio-15'] === 'one') {
+            renderCampo('  Status da mãe', 'checkbox-17[]');
+        }
+        renderCampo('Parentes imediatos nos EUA?', 'radio-16');
+        if (data['radio-16'] === 'one') {
+            var parentesNomes = data['parente_nome[]'] || [];
+            var parentesRels = data['parente_relacao[]'] || [];
+            if (parentesNomes.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Parentes nos EUA:');
+                for (var i = 0; i < parentesNomes.length; i++) {
+                    if (parentesNomes[i] && parentesNomes[i] !== '' && parentesNomes[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • ' + parentesNomes[i] + (parentesRels[i] ? ' (' + parentesRels[i] + ')' : ''));
+                        doc.moveDown(0.2);
+                    }
+                }
+                doc.moveDown(0.3);
+            }
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 17. CONJUGE
+        // ============================================================
+        if (data['spouse_fullname']) {
+            renderSection('17. CONJUGE');
+            renderCampo('Nome do cônjuge', 'spouse_fullname');
+            renderCampo('Data de nascimento', 'spouse-dob');
+            renderCampo('Nacionalidade', 'spouse-nationality');
+            renderCampo('Cidade de nascimento', 'spouse-city');
+            renderCampo('País de nascimento', 'spouse-country');
+            renderCampo('Endereço do cônjuge', 'spouse-address-same');
+            if (data['spouse-address-same'] === 'Diferente') {
+                renderCampo('  Endereço (diferente)', 'spouse_endereco');
+                renderCampo('  Cidade', 'spouse_cidade');
+                renderCampo('  Estado', 'spouse_estado');
+                renderCampo('  CEP', 'spouse_cep');
+                renderCampo('  País', 'spouse_pais');
+            }
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 18. EX-CONJUGE
+        // ============================================================
+        if (data['ex_fullname']) {
+            renderSection('18. EX-CONJUGE');
+            renderCampo('Nome do ex-cônjuge', 'ex_fullname');
+            renderCampo('Data de nascimento', 'ex_dob');
+            renderCampo('Nacionalidade', 'ex_nationality');
+            renderCampo('Cidade de nascimento', 'ex_city');
+            renderCampo('País de nascimento', 'ex_country');
+            renderCampo('Data do Casamento', 'data_casamento_div');
+            renderCampo('Data do Divórcio', 'data_divorcio');
+            renderCampo('Cidade do Divórcio', 'cidade_divorcio');
+            renderCampo('Como se deu o Divórcio', 'como_divorcio');
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 19. CONJUGE FALECIDO
+        // ============================================================
+        if (data['falecido_fullname']) {
+            renderSection('19. CONJUGE FALECIDO');
+            renderCampo('Nome do cônjuge falecido', 'falecido_fullname');
+            renderCampo('Data de nascimento', 'falecido_dob');
+            renderCampo('Nacionalidade', 'falecido_nationality');
+            renderCampo('Cidade de nascimento', 'falecido_city');
+            renderCampo('País de nascimento', 'falecido_country');
+            renderCampo('Data do Falecimento', 'data_falecimento');
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 20. OCUPAÇÃO ATUAL
+        // ============================================================
+        renderSection('20. OCUPACAO ATUAL');
+        renderCampo('Ocupação principal', 'radio-27');
+        renderCampo('Empregador / escola', 'text-49');
+        renderCampo('Endereço', 'text-101');
+        renderCampo('Cidade', 'text-102');
+        renderCampo('Estado', 'text-104');
+        renderCampo('CEP', 'text-103');
+        renderCampo('Telefone', 'phone-8');
+        renderCampo('Data início', 'text-50');
+        renderCampo('Renda mensal', 'text-51');
+        renderCampo('Descrição das funções', 'text-52');
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 21. OUTRAS OCUPAÇÕES
+        // ============================================================
+        var extraDesc = data['extra_descricao[]'] || [];
+        var extraValido = extraDesc.some(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+        
+        if (extraValido) {
+            renderSection('21. OUTRAS OCUPACOES / FONTES DE RENDA');
+            
+            var extraRendas = data['extra_renda[]'] || [];
+            var extraEmpregadores = data['extra_empregador[]'] || [];
+            var extraInicios = data['extra_data_inicio[]'] || [];
+            var extraEnderecos = data['extra_endereco[]'] || [];
+            var extraCidades = data['extra_cidade[]'] || [];
+            var extraEstados = data['extra_estado[]'] || [];
+            var extraTelefones = data['extra_telefone[]'] || [];
+            var extraCeps = data['extra_cep[]'] || [];
+
+            for (var i = 0; i < extraDesc.length; i++) {
+                if (extraDesc[i] && extraDesc[i] !== '' && extraDesc[i] !== 'undefined' && extraDesc[i] !== 'null') {
+                    doc.font('Helvetica-Bold').fontSize(10).text('Ocupação adicional ' + (i+1) + ':');
+                    doc.font('Helvetica').fontSize(10).text('  • Descrição: ' + extraDesc[i]);
+                    if (extraEmpregadores[i] && extraEmpregadores[i] !== '' && extraEmpregadores[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • Empregador: ' + extraEmpregadores[i]);
+                    }
+                    if (extraRendas[i] && extraRendas[i] !== '' && extraRendas[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • Renda mensal: R$ ' + extraRendas[i]);
+                    }
+                    if (extraInicios[i] && extraInicios[i] !== '' && extraInicios[i] !== 'undefined') {
+                        var dataInicio = formatDateToBrazilian(extraInicios[i]);
+                        doc.font('Helvetica').fontSize(10).text('  • Data início: ' + dataInicio);
+                    }
+                    if (extraEnderecos[i] && extraEnderecos[i] !== '' && extraEnderecos[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • Endereço: ' + extraEnderecos[i]);
+                    }
+                    if (extraCidades[i] && extraCidades[i] !== '' && extraCidades[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • Cidade/UF: ' + extraCidades[i] + (extraEstados[i] ? ' / ' + extraEstados[i] : ''));
+                    }
+                    if (extraCeps[i] && extraCeps[i] !== '' && extraCeps[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • CEP: ' + extraCeps[i]);
+                    }
+                    if (extraTelefones[i] && extraTelefones[i] !== '' && extraTelefones[i] !== 'undefined') {
+                        doc.font('Helvetica').fontSize(10).text('  • Telefone: ' + extraTelefones[i]);
+                    }
+                    doc.moveDown(0.4);
+                }
+            }
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 22. EMPREGOS ANTERIORES
+        // ============================================================
+        if (data['radio-17'] === 'one') {
+            var empNomes = data['emprego_anterior_nome[]'] || [];
+            var empValido = empNomes.some(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+            
+            if (empValido) {
+                renderSection('22. EMPREGOS ANTERIORES');
+                renderCampo('Teve empregos anteriores?', 'radio-17');
+                
+                var empCargos = data['emprego_anterior_cargo[]'] || [];
+                var empInicios = data['emprego_anterior_inicio[]'] || [];
+                var empFins = data['emprego_anterior_fim[]'] || [];
+                
+                for (var i = 0; i < empNomes.length; i++) {
+                    if (empNomes[i] && empNomes[i] !== '' && empNomes[i] !== 'undefined' && empNomes[i] !== 'null') {
+                        doc.font('Helvetica-Bold').fontSize(10).text('Emprego anterior ' + (i+1) + ':');
+                        doc.font('Helvetica').fontSize(10).text('  • Empregador: ' + empNomes[i]);
+                        if (empCargos[i] && empCargos[i] !== '' && empCargos[i] !== 'undefined') {
+                            doc.font('Helvetica').fontSize(10).text('  • Cargo: ' + empCargos[i]);
+                        }
+                        var inicio = empInicios[i] ? formatDateToBrazilian(empInicios[i]) : 'N/A';
+                        var fim = empFins[i] ? formatDateToBrazilian(empFins[i]) : 'N/A';
+                        doc.font('Helvetica').fontSize(10).text('  • Período: ' + inicio + ' a ' + fim);
+                        doc.moveDown(0.3);
+                    }
+                }
+                doc.moveDown(0.3);
+            }
+        }
+
+        // ============================================================
+        // 23. ESCOLARIDADE
+        // ============================================================
+        if (data['radio-18'] === 'one') {
+            renderSection('23. ESCOLARIDADE');
+            renderCampo('Instituição de ensino', 'text-59');
+            renderCampo('Curso', 'text-60');
+            renderCampo('Endereço da instituição', 'text-111');
+            renderCampo('Cidade', 'text-112');
+            renderCampo('Estado', 'text-114');
+            renderCampo('CEP', 'text-113');
+            renderCampo('Data início', 'text-61');
+            renderCampo('Data conclusão', 'text-62');
+            doc.moveDown(0.3);
+        }
+
+        // ============================================================
+        // 24. SERVIÇO MILITAR
+        // ============================================================
+        renderSection('24. SERVICO MILITAR');
+        if (data['servico_militar'] === 'Sim') {
+            doc.font('Helvetica-Bold').fontSize(10).text('Serviu nas forças armadas?: ', { continued: true });
             doc.font('Helvetica').text('Sim');
             doc.moveDown(0.3);
-            
-            var paisesFiltrados = paisesVisitados.filter(function(p) {
-                return p && p.trim() !== '';
+            renderCampo('  País', 'military_country');
+            renderCampo('  Ramo das Forças Armadas', 'military_branch');
+            renderCampo('  Patente / Posição', 'military_rank');
+            renderCampo('  Especialidade Militar', 'military_specialty');
+            renderCampo('  Data de início', 'military_date_from');
+            renderCampo('  Data de término', 'military_date_to');
+        } else {
+            doc.font('Helvetica-Bold').fontSize(10).text('Serviu nas forças armadas?: ', { continued: true });
+            doc.font('Helvetica').text('Não');
+            doc.moveDown(0.3);
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 25. TREINAMENTO ESPECIALIZADO
+        // ============================================================
+        renderSection('25. TREINAMENTO ESPECIALIZADO');
+        if (data['treinamento_especializado'] === 'Sim') {
+            doc.font('Helvetica-Bold').fontSize(10).text('Tem treinamento especializado? (armas de fogo, explosivos, nuclear, biológica ou química): ', { continued: true });
+            doc.font('Helvetica').text('Sim');
+            doc.moveDown(0.3);
+            renderCampo('  Descrição do treinamento', 'treinamento_descricao');
+        } else {
+            doc.font('Helvetica-Bold').fontSize(10).text('Tem treinamento especializado? (armas de fogo, explosivos, nuclear, biológica ou química): ', { continued: true });
+            doc.font('Helvetica').text('Não');
+            doc.moveDown(0.3);
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 26. SEGURANÇA
+        // ============================================================
+        renderSection('26. SEGURANCA');
+        if (data['antecedentes_criminais'] === 'Sim') {
+            doc.font('Helvetica-Bold').fontSize(10).text('Já foi preso ou condenado por crime?: ', { continued: true });
+            doc.font('Helvetica').text('Sim');
+            doc.moveDown(0.3);
+            renderCampo('  Descrição', 'antecedentes_descricao');
+            renderCampo('  Data do ocorrido', 'antecedentes_data');
+            renderCampo('  Local', 'antecedentes_local');
+            renderCampo('  Resolução do caso', 'antecedentes_resolucao');
+        } else {
+            doc.font('Helvetica-Bold').fontSize(10).text('Já foi preso ou condenado por crime?: ', { continued: true });
+            doc.font('Helvetica').text('Não');
+            doc.moveDown(0.3);
+        }
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 27. IDIOMAS
+        // ============================================================
+        renderSection('27. IDIOMAS');
+        renderCampo('Fala outros idiomas?', 'radio-19');
+        
+        if (data['radio-19'] === 'one' || data['radio-19'] === 'Sim') {
+            var idiomas = data['idiomas[]'] || data['idiomas'] || [];
+            if (!Array.isArray(idiomas)) {
+                idiomas = [idiomas];
+            }
+            // Filtrar valores vazios
+            idiomas = idiomas.filter(function(v) { 
+                return v && v !== '' && v !== 'undefined' && v !== 'null'; 
             });
-            
-            if (paisesFiltrados.length > 0) {
-                doc.font('Helvetica-Bold').fontSize(10).text('Países visitados:');
-                doc.moveDown(0.2);
-                
-                for (var i = 0; i < paisesFiltrados.length; i++) {
-                    doc.font('Helvetica').fontSize(10).text('  • ' + paisesFiltrados[i].trim());
+            if (idiomas.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Idiomas:');
+                for (var i = 0; i < idiomas.length; i++) {
+                    doc.font('Helvetica').fontSize(10).text('  • ' + idiomas[i].trim());
                     doc.moveDown(0.2);
                 }
                 doc.moveDown(0.3);
             }
-            
-        } else if (viajouInternacional === 'two' || viajouInternacional === 'Não') {
-            doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
-            doc.font('Helvetica').text('Não');
-            doc.moveDown(0.6);
-        } else {
-            doc.font('Helvetica-Bold').fontSize(10).text('Viajou para outros países nos últimos 5 anos?: ', { continued: true });
-            doc.font('Helvetica').text('Não informado');
-            doc.moveDown(0.6);
         }
-        hasContentInSection = true;
+        doc.moveDown(0.3);
+
+        // ============================================================
+        // 28. VIAGENS INTERNACIONAIS
+        // ============================================================
+        renderSection('28. VIAGENS INTERNACIONAIS');
+        renderCampo('Viajou para outros países nos últimos 5 anos?', 'radio-20');
+        
+        if (data['radio-20'] === 'one' || data['radio-20'] === 'Sim') {
+            var paises = data['paises_visitados[]'] || data['paises_visitados'] || [];
+            if (!Array.isArray(paises)) {
+                paises = [paises];
+            }
+            // Filtrar valores vazios e remover duplicatas
+            paises = paises.filter(function(v) { 
+                return v && v !== '' && v !== 'undefined' && v !== 'null'; 
+            });
+            var paisesUnicos = [...new Set(paises)];
+            
+            if (paisesUnicos.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Países visitados:');
+                for (var i = 0; i < paisesUnicos.length; i++) {
+                    doc.font('Helvetica').fontSize(10).text('  • ' + paisesUnicos[i].trim());
+                    doc.moveDown(0.2);
+                }
+                doc.moveDown(0.3);
+            }
+        }
+        doc.moveDown(0.3);
 
         // ============================================================
         // RODAPÉ
         // ============================================================
         doc.moveDown(2);
         doc.fontSize(8).fillColor('#999999').text('Documento gerado automaticamente pelo sistema GetVisa.', { align: 'center' });
+        doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+        doc.text(`Cliente: ${nomeCliente}`, { align: 'center' });
         doc.end();
     });
 }
