@@ -1820,6 +1820,10 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
 // FUNÇÃO GERAR PDF - DS160 COMPLETA (COM TODOS OS CAMPOS)
 // ============================================================
 
+// ============================================================
+// FUNÇÃO GERAR PDF - DS160 COMPLETA (COM TODOS OS CAMPOS)
+// ============================================================
+
 async function gerarPDF_DS160(data) {
     return new Promise(function(resolve, reject) {
         var doc = new PDFDocument({ margin: 50, size: 'A4' });
@@ -1848,7 +1852,7 @@ async function gerarPDF_DS160(data) {
             if (value === 'two') return 'Não';
             
             // Traduzir campos específicos
-            if (RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][value]) {
+            if (RADIO_MAPPING && RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][value]) {
                 return RADIO_MAPPING[fieldName][value];
             }
             
@@ -1858,7 +1862,7 @@ async function gerarPDF_DS160(data) {
                 var mapped = value.map(function(v) {
                     if (v === 'one') return 'Sim';
                     if (v === 'two') return 'Não';
-                    if (RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][v]) {
+                    if (RADIO_MAPPING && RADIO_MAPPING[fieldName] && RADIO_MAPPING[fieldName][v]) {
                         return RADIO_MAPPING[fieldName][v];
                     }
                     return v;
@@ -1872,13 +1876,10 @@ async function gerarPDF_DS160(data) {
             return value;
         }
 
-        // ============================================================
-        // FUNÇÃO PARA RENDERIZAR CAMPO
-        // ============================================================
         function renderCampo(label, fieldName, fallback) {
             var value = data[fieldName];
             if (value === undefined || value === null || value === '') {
-                // Tentar buscar com nome diferente
+                // Tentar buscar com nome alternativo
                 var alternativos = [fieldName, fieldName.replace('[]', ''), fieldName + '[]'];
                 for (var i = 0; i < alternativos.length; i++) {
                     if (data[alternativos[i]] !== undefined && data[alternativos[i]] !== null && data[alternativos[i]] !== '') {
@@ -1901,28 +1902,6 @@ async function gerarPDF_DS160(data) {
                 doc.font('Helvetica').text(formatted);
                 doc.moveDown(0.3);
             }
-        }
-
-        function renderArrayField(label, fieldName, itemLabel) {
-            var values = data[fieldName] || [];
-            if (!Array.isArray(values)) {
-                values = [values];
-            }
-            // Filtrar valores vazios
-            values = values.filter(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
-            if (values.length === 0) return;
-            
-            doc.font('Helvetica-Bold').fontSize(10).text(label + ':');
-            for (var i = 0; i < values.length; i++) {
-                if (values[i] && values[i] !== '' && values[i] !== 'undefined' && values[i] !== 'null') {
-                    var formatted = formatFieldValue(fieldName, values[i]);
-                    if (formatted && formatted !== '' && formatted !== 'undefined' && formatted !== 'null') {
-                        doc.font('Helvetica').fontSize(10).text('  • ' + (itemLabel ? itemLabel + ': ' : '') + formatted);
-                        doc.moveDown(0.2);
-                    }
-                }
-            }
-            doc.moveDown(0.3);
         }
 
         function renderSection(title) {
@@ -2034,6 +2013,10 @@ async function gerarPDF_DS160(data) {
                 }
                 doc.moveDown(0.3);
             }
+        } else {
+            renderSection('5. ACOMPANHANTES');
+            renderCampo('Há acompanhantes?', 'radio-7');
+            doc.moveDown(0.3);
         }
 
         // ============================================================
@@ -2058,6 +2041,10 @@ async function gerarPDF_DS160(data) {
                 }
                 doc.moveDown(0.3);
             }
+        } else {
+            renderSection('6. HISTORICO DE VIAGENS AOS EUA');
+            renderCampo('Já esteve nos EUA?', 'radio-8');
+            doc.moveDown(0.3);
         }
 
         // ============================================================
@@ -2072,6 +2059,10 @@ async function gerarPDF_DS160(data) {
             renderCampo('Impressões digitais coletadas?', 'radio-33');
             renderCampo('Mesmo tipo de visto?', 'radio-29');
             renderCampo('Mesmo país de emissão?', 'radio-30');
+            doc.moveDown(0.3);
+        } else {
+            renderSection('7. INFORMACOES DO VISTO');
+            renderCampo('Já teve visto americano?', 'radio-23');
             doc.moveDown(0.3);
         }
 
@@ -2347,7 +2338,13 @@ async function gerarPDF_DS160(data) {
         // 21. OUTRAS OCUPAÇÕES
         // ============================================================
         var extraDesc = data['extra_descricao[]'] || [];
-        var extraValido = extraDesc.some(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+        var extraValido = false;
+        for (var i = 0; i < extraDesc.length; i++) {
+            if (extraDesc[i] && extraDesc[i] !== '' && extraDesc[i] !== 'undefined' && extraDesc[i] !== 'null') {
+                extraValido = true;
+                break;
+            }
+        }
         
         if (extraValido) {
             renderSection('21. OUTRAS OCUPACOES / FONTES DE RENDA');
@@ -2398,7 +2395,13 @@ async function gerarPDF_DS160(data) {
         // ============================================================
         if (data['radio-17'] === 'one') {
             var empNomes = data['emprego_anterior_nome[]'] || [];
-            var empValido = empNomes.some(function(v) { return v && v !== '' && v !== 'undefined' && v !== 'null'; });
+            var empValido = false;
+            for (var i = 0; i < empNomes.length; i++) {
+                if (empNomes[i] && empNomes[i] !== '' && empNomes[i] !== 'undefined' && empNomes[i] !== 'null') {
+                    empValido = true;
+                    break;
+                }
+            }
             
             if (empValido) {
                 renderSection('22. EMPREGOS ANTERIORES');
