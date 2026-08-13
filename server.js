@@ -1824,6 +1824,10 @@ async function notificarClienteEtapa(telefone, novaEtapa) {
 // FUNÇÃO GERAR PDF - DS160 COMPLETA (COM TODOS OS CAMPOS)
 // ============================================================
 
+// ============================================================
+// FUNÇÃO GERAR PDF - DS160 COMPLETA (COM TODOS OS CAMPOS)
+// ============================================================
+
 async function gerarPDF_DS160(data) {
     return new Promise(function(resolve, reject) {
         var doc = new PDFDocument({ margin: 50, size: 'A4' });
@@ -1874,6 +1878,20 @@ async function gerarPDF_DS160(data) {
             }
             
             return value;
+        }
+
+        function formatDateToBrazilian(dateString) {
+            if (!dateString || dateString === '') return null;
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) return dateString;
+            var match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) return match[3] + '/' + match[2] + '/' + match[1];
+            var date = new Date(dateString);
+            if (!isNaN(date.getTime())) {
+                var day = String(date.getDate()).padStart(2, '0');
+                var month = String(date.getMonth() + 1).padStart(2, '0');
+                return day + '/' + month + '/' + date.getFullYear();
+            }
+            return dateString;
         }
 
         function renderCampo(label, fieldName, fallback) {
@@ -2431,18 +2449,48 @@ async function gerarPDF_DS160(data) {
         // ============================================================
         // 23. ESCOLARIDADE
         // ============================================================
-        if (data['radio-18'] === 'one') {
-            renderSection('23. ESCOLARIDADE');
-            renderCampo('Instituição de ensino', 'text-59');
-            renderCampo('Curso', 'text-60');
-            renderCampo('Endereço da instituição', 'text-111');
-            renderCampo('Cidade', 'text-112');
-            renderCampo('Estado', 'text-114');
-            renderCampo('CEP', 'text-113');
-            renderCampo('Data início', 'text-61');
-            renderCampo('Data conclusão', 'text-62');
+        renderSection('23. ESCOLARIDADE');
+        
+        // Verificar se tem dados de escolaridade
+        var temEscolaridade = data['radio-18'] === 'one' || 
+                              data['radio-18'] === 'Sim' ||
+                              (data['text-59'] && data['text-59'] !== '' && data['text-59'] !== 'undefined') ||
+                              (data['text-60'] && data['text-60'] !== '' && data['text-60'] !== 'undefined');
+
+        if (temEscolaridade) {
+            var frequenta = data['radio-18'] || '';
+            if (frequenta === 'one' || frequenta === 'Sim') {
+                doc.font('Helvetica-Bold').fontSize(10).text('Frequenta ou frequentou escola/faculdade?: ', { continued: true });
+                doc.font('Helvetica').text('Sim');
+                doc.moveDown(0.3);
+                
+                renderCampo('  Nome da instituição de ensino', 'text-59');
+                renderCampo('  Curso', 'text-60');
+                renderCampo('  Endereço da instituição', 'text-111');
+                renderCampo('  Cidade', 'text-112');
+                renderCampo('  Estado', 'text-114');
+                renderCampo('  CEP', 'text-113');
+                renderCampo('  Data de início', 'text-61');
+                renderCampo('  Data de conclusão', 'text-62');
+            } else {
+                doc.font('Helvetica-Bold').fontSize(10).text('Frequenta ou frequentou escola/faculdade?: ', { continued: true });
+                doc.font('Helvetica').text('Não');
+                doc.moveDown(0.3);
+                
+                // Mostrar dados mesmo assim (se houver)
+                renderCampo('  Nome da instituição', 'text-59');
+                renderCampo('  Curso', 'text-60');
+            }
+        } else {
+            doc.font('Helvetica-Bold').fontSize(10).text('Frequenta ou frequentou escola/faculdade?: ', { continued: true });
+            doc.font('Helvetica').text('Não informado');
             doc.moveDown(0.3);
+            
+            // Tentar buscar dados mesmo assim
+            renderCampo('  Nome da instituição', 'text-59');
+            renderCampo('  Curso', 'text-60');
         }
+        doc.moveDown(0.3);
 
         // ============================================================
         // 24. SERVIÇO MILITAR
